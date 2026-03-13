@@ -26,7 +26,7 @@ const steps = [
   },
   {
     title: "Initialize workspace",
-    description: "Prepare local storage and mark the instance ready for sign-in.",
+    description: "Prepare server-side state and mark the instance ready for sign-in.",
     icon: Database,
   },
 ];
@@ -73,7 +73,7 @@ export default function SetupPage() {
     return Object.keys(nextErrors).length === 0;
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
     setSuccessMessage(null);
@@ -85,23 +85,42 @@ export default function SetupPage() {
     setIsSubmitting(true);
 
     try {
-      window.localStorage.setItem(
-        "it-asset-tracker.setup",
-        JSON.stringify({
-          isCompleted: true,
-          siteName: form.siteName.trim(),
-          adminEmail: form.adminEmail.trim(),
-          initializedAt: new Date().toISOString(),
-        }),
-      );
+      const response = await fetch("/api/setup/initialize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(form),
+      });
 
-      setSuccessMessage("Workspace initialized. Redirecting to login...");
+      const payload = (await response.json()) as {
+        ok: boolean;
+        message?: string;
+        redirectTo?: string;
+        errors?: Record<string, string[]>;
+      };
+
+      if (!response.ok) {
+        if (payload.errors) {
+          setErrors({
+            siteName: payload.errors.siteName?.[0],
+            adminEmail: payload.errors.adminEmail?.[0],
+            password: payload.errors.password?.[0],
+            confirmPassword: payload.errors.confirmPassword?.[0],
+          });
+        }
+        setFormError(payload.message ?? "Initialization failed.");
+        return;
+      }
+
       setForm(initialState);
+      setSuccessMessage("Workspace initialized. Redirecting to login...");
       window.setTimeout(() => {
-        router.push("/login");
-      }, 500);
+        router.push(payload.redirectTo ?? "/login");
+        router.refresh();
+      }, 600);
     } catch {
-      setFormError("Initialization failed in the browser. Try again.");
+      setFormError("Initialization request failed. Check server logs and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -202,7 +221,7 @@ export default function SetupPage() {
               <div className="rounded-2xl border border-[#5eead4]/15 bg-white/5 p-4 text-sm text-slate-200">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-[#5eead4]" />
-                  <span>Temporary setup state is stored locally until backend persistence is wired in.</span>
+                  <span>Setup now writes server-side state under /data for the containerized install.</span>
                 </div>
               </div>
 
@@ -230,4 +249,3 @@ export default function SetupPage() {
     </main>
   );
 }
-
