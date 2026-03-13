@@ -5,6 +5,8 @@ node_modules/
 coverage/
 dist/
 *.log
+screenshots/
+Screenshots/
 /data/db/*.db
 /data/db/*.db-journal
 /data/uploads/*
