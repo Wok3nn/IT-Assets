@@ -1,0 +1,12 @@
+.next/
+node_modules/
+.env
+.env.local
+coverage/
+dist/
+*.log
+/data/db/*.db
+/data/db/*.db-journal
+/data/uploads/*
+!/data/uploads/.gitkeep
+!/data/db/.gitkeep
