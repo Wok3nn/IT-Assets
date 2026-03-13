@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { appConfig } from "@/services/config";
 import { createSession, SESSION_COOKIE_NAME } from "@/services/session-store";
 import { verifyPassword } from "@/services/password";
 import { readSetupState } from "@/services/setup-state";
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
     value: session.token,
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: appConfig.useSecureCookies,
     path: "/",
     expires: new Date(session.expiresAt),
   });
