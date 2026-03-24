@@ -8,3 +8,4 @@ export const SYSTEM_ROLES = {
 export function canManageSettings(roleKeys: string[]) {
   return roleKeys.includes(SYSTEM_ROLES.SUPER_ADMIN);
 }
+

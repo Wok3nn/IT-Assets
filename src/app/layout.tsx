@@ -7,14 +7,29 @@ export const metadata: Metadata = {
   description: "A modern self-hosted asset management platform.",
 };
 
+const themeScript = `
+(() => {
+  try {
+    const savedTheme = window.localStorage.getItem("theme");
+    const theme = savedTheme === "dark" ? "dark" : "light";
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.dataset.theme = theme;
+  } catch {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {children}
+      </body>
     </html>
   );
 }
+

@@ -8,3 +8,4 @@ export const appConfig = {
     ((process.env.SESSION_COOKIE_SECURE ?? "auto") === "auto" &&
       (process.env.APP_URL ?? "http://localhost:4050").startsWith("https://")),
 };
+

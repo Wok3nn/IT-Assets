@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -62,28 +62,28 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#eef6f6_0%,#e2e8f0_100%)] px-4">
-      <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/85 p-8 shadow-panel backdrop-blur">
-        <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Login</p>
-        <h1 className="mt-3 text-3xl font-semibold text-slate-950">
+    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.08),_transparent_22%),linear-gradient(180deg,#fcfcfd_0%,#f5f7fa_100%)] px-4 dark:bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.08),_transparent_24%),linear-gradient(180deg,#2f3437_0%,#2c3134_100%)]">
+      <div className="w-full max-w-md rounded-[32px] border border-[#ece7df] bg-white/92 p-8 shadow-panel backdrop-blur dark:border-[#464c4f] dark:bg-[#383d40]/94">
+        <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Login</p>
+        <h1 className="mt-3 text-3xl font-semibold text-slate-950 dark:text-slate-100">
           Access your workspace
         </h1>
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-100 dark:focus:border-[#F69629]/70"
             placeholder="Admin email"
             type="email"
             value={form.email}
             onChange={(event) => updateField("email", event.target.value)}
           />
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-100 dark:focus:border-[#F69629]/70"
             placeholder="Password"
             type="password"
             value={form.password}
             onChange={(event) => updateField("password", event.target.value)}
           />
-          {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+          {formError ? <p className="text-sm text-rose-600 dark:text-rose-300">{formError}</p> : null}
           <Button className="w-full" disabled={isSubmitting} type="submit">
             {isSubmitting ? (
               <span className="flex items-center justify-center gap-2">
@@ -95,9 +95,9 @@ export default function LoginPage() {
             )}
           </Button>
         </form>
-        <div className="mt-6 text-sm text-slate-600">
+        <div className="mt-6 text-sm text-slate-600 dark:text-slate-300">
           First run not completed?{" "}
-          <Link className="font-medium text-slate-900" href="/setup">
+          <Link className="font-medium text-[#c06d13] hover:text-[#F69629] dark:text-[#ffbf78] dark:hover:text-[#ffd5a7]" href="/setup">
             Launch setup
           </Link>
         </div>

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 import { findSessionByToken, SESSION_COOKIE_NAME } from "@/services/session-store";
-import { readUsers } from "@/services/user-store";
+import { db } from "@/services/database";
 
 export async function getCurrentSession() {
   const cookieStore = await cookies();
@@ -21,6 +21,10 @@ export async function getCurrentUser() {
     return null;
   }
 
-  const users = await readUsers();
-  return users.find((user) => user.id === session.userId) ?? null;
+  return db.user.findUnique({
+    where: {
+      id: session.userId,
+    },
+  });
 }
+

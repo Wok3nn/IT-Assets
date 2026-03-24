@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { db } from "@/services/database";
 import { appConfig } from "@/services/config";
 import { createSession, SESSION_COOKIE_NAME } from "@/services/session-store";
 import { verifyPassword } from "@/services/password";
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
 
   const user = await findUserByEmail(parsed.data.email.toLowerCase());
 
-  if (!user || !user.isActive || !verifyPassword(parsed.data.password, user.passwordHash)) {
+  if (!user || !user.isActive || !user.canLogin || !verifyPassword(parsed.data.password, user.passwordHash)) {
     return NextResponse.json(
       {
         ok: false,
@@ -49,6 +50,15 @@ export async function POST(request: Request) {
       { status: 401 },
     );
   }
+
+  await db.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      lastLoginAt: new Date(),
+    },
+  });
 
   const session = await createSession(user.id);
   const response = NextResponse.json({ ok: true, redirectTo: "/dashboard" });
@@ -65,3 +75,4 @@ export async function POST(request: Request) {
 
   return response;
 }
+

@@ -1,7 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-
-import { appDataPaths, ensureAppDataDirs } from "@/services/app-data";
+import { db } from "@/services/database";
 
 export type StoredUser = {
   id: string;
@@ -10,27 +7,77 @@ export type StoredUser = {
   passwordHash: string;
   roles: string[];
   scopes: string[];
+  canLogin: boolean;
   isActive: boolean;
   createdAt: string;
 };
 
-async function writeUsers(users: StoredUser[]) {
-  await ensureAppDataDirs();
-  await writeFile(appDataPaths.users, JSON.stringify(users, null, 2), "utf8");
+function mapUser(user: {
+  id: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+  canLogin: boolean;
+  isActive: boolean;
+  createdAt: Date;
+  userRoles: { role: { key: string } }[];
+  userScopes: { scope: { slug: string } }[];
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.name,
+    passwordHash: user.passwordHash,
+    roles: user.userRoles.map(({ role }) => role.key),
+    scopes: user.userScopes.map(({ scope }) => scope.slug),
+    canLogin: user.canLogin,
+    isActive: user.isActive,
+    createdAt: user.createdAt.toISOString(),
+  } satisfies StoredUser;
 }
 
 export async function readUsers() {
-  try {
-    const content = await readFile(appDataPaths.users, "utf8");
-    return JSON.parse(content) as StoredUser[];
-  } catch {
-    return [];
-  }
+  const users = await db.user.findMany({
+    include: {
+      userRoles: {
+        include: {
+          role: true,
+        },
+      },
+      userScopes: {
+        include: {
+          scope: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  return users.map(mapUser);
 }
 
 export async function findUserByEmail(email: string) {
-  const users = await readUsers();
-  return users.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
+  const user = await db.user.findUnique({
+    where: {
+      email: email.toLowerCase(),
+    },
+    include: {
+      userRoles: {
+        include: {
+          role: true,
+        },
+      },
+      userScopes: {
+        include: {
+          scope: true,
+        },
+      },
+    },
+  });
+
+  return user ? mapUser(user) : null;
 }
 
 export async function createInitialAdmin(input: {
@@ -38,25 +85,54 @@ export async function createInitialAdmin(input: {
   displayName: string;
   passwordHash: string;
 }) {
-  const users = await readUsers();
+  const existingUsers = await db.user.count();
 
-  if (users.length > 0) {
+  if (existingUsers > 0) {
     throw new Error("Initial admin already exists.");
   }
 
-  const user: StoredUser = {
-    id: randomUUID(),
-    email: input.email,
-    displayName: input.displayName,
-    passwordHash: input.passwordHash,
-    roles: ["SUPER_ADMIN"],
-    scopes: [],
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  };
+  const user = await db.$transaction(async (tx) => {
+    const role = await tx.role.upsert({
+      where: {
+        key: "SUPER_ADMIN",
+      },
+      update: {
+        name: "Super Admin",
+      },
+      create: {
+        key: "SUPER_ADMIN",
+        name: "Super Admin",
+      },
+    });
 
-  users.push(user);
-  await writeUsers(users);
+    return tx.user.create({
+      data: {
+        name: input.displayName,
+        email: input.email.toLowerCase(),
+        passwordHash: input.passwordHash,
+        canLogin: true,
+        isActive: true,
+        userRoles: {
+          create: {
+            roleId: role.id,
+          },
+        },
+      },
+      include: {
+        userRoles: {
+          include: {
+            role: true,
+          },
+        },
+        userScopes: {
+          include: {
+            scope: true,
+          },
+        },
+      },
+    });
+  });
 
-  return user;
+  return mapUser(user);
 }
+

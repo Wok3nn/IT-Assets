@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        message: "Setup state is partially initialized. Remove the existing state files under /data/state and retry.",
+        message: "Setup could not be completed because database state already exists. Clear the local database and retry.",
       },
       { status: 409 },
     );
@@ -70,3 +70,4 @@ export async function POST(request: Request) {
     redirectTo: "/login",
   });
 }
+

@@ -37,7 +37,7 @@ const config: Config = {
         },
       },
       boxShadow: {
-        panel: "0 18px 45px rgba(15, 23, 42, 0.08)",
+        panel: "0 18px 45px rgba(15, 23, 42, 0.08), 0 12px 28px rgba(0, 0, 0, 0.14)",
       },
     },
   },
@@ -45,3 +45,4 @@ const config: Config = {
 };
 
 export default config;
+

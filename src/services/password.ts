@@ -25,3 +25,4 @@ export function verifyPassword(password: string, storedHash: string) {
 
   return timingSafeEqual(expected, actual);
 }
+

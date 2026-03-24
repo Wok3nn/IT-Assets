@@ -16,3 +16,4 @@ export async function ensureAppDataDirs() {
   await mkdir(appDataPaths.root, { recursive: true });
   await mkdir(stateDir, { recursive: true });
 }
+

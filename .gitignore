@@ -7,8 +7,16 @@ dist/
 *.log
 screenshots/
 Screenshots/
+progress.md
 /data/db/*.db
 /data/db/*.db-journal
 /data/uploads/*
+/prisma/data/
+tsconfig.tsbuildinfo
 !/data/uploads/.gitkeep
 !/data/db/.gitkeep
+
+# Local development / AI guidance files
+docs/architecture.md
+AGENTS.md
+
