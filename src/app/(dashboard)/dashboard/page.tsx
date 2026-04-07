@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 
+import { HeaderAssetSearch } from "@/components/layout/header-asset-search";
+import { PageHero } from "@/components/layout/page-hero";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AppShell } from "@/components/navigation/app-shell";
-import { getAssetSummary } from "@/modules/assets/asset.service";
 import { getCurrentUser } from "@/lib/session";
+import { getAssetSummary } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
 export default async function DashboardPage() {
@@ -43,13 +45,18 @@ export default async function DashboardPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <section className="rounded-[32px] border border-[#ece7df] bg-white/92 p-6 shadow-panel backdrop-blur dark:border-[#464c4f] dark:bg-[#383d40]/92 dark:shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Overview</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">{setupState.siteName}</h1>
-          <p className="mt-3 max-w-2xl text-slate-600 dark:text-slate-300">
-            Signed in as {currentUser.email}. The dashboard shell is live and backed by server-side setup and local authentication.
-          </p>
-        </section>
+        <PageHero>
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Overview</p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">{setupState.siteName}</h1>
+              <p className="mt-3 max-w-2xl text-slate-600 dark:text-slate-300">
+                Signed in as {currentUser.email}. The dashboard shell is live and backed by server-side setup and local authentication.
+              </p>
+            </div>
+            <HeaderAssetSearch className="w-full xl:w-auto xl:flex-none" compact />
+          </div>
+        </PageHero>
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => (
             <StatCard key={stat.title} {...stat} />

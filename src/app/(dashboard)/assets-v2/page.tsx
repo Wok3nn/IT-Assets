@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { buildAssetsUrl, parseAssetsSort } from "@/modules/assets/assets-routing";
+import { buildAssetsUrl, parseAssetsPage, parseAssetsPageSize, parseAssetsSort } from "@/modules/assets/assets-routing";
 
 type AssetsV2RedirectPageProps = {
   searchParams?: Promise<{
@@ -11,6 +11,8 @@ type AssetsV2RedirectPageProps = {
     locationId?: string;
     userId?: string;
     sort?: string;
+    page?: string;
+    pageSize?: string;
   }>;
 };
 
@@ -25,5 +27,7 @@ export default async function AssetsV2RedirectPage({ searchParams }: AssetsV2Red
     locationId: params.locationId?.trim() || null,
     userId: params.userId?.trim() || null,
     sort: parseAssetsSort(params.sort),
+    page: parseAssetsPage(params.page),
+    pageSize: parseAssetsPageSize(params.pageSize),
   }));
 }

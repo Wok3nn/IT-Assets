@@ -28,3 +28,19 @@ export async function getCurrentUser() {
   });
 }
 
+
+
+export async function getCurrentUserRoleKeys() {
+  const session = await getCurrentSession();
+
+  if (!session) {
+    return [];
+  }
+
+  const userRoles = await db.userRole.findMany({
+    where: { userId: session.userId },
+    select: { role: { select: { key: true } } },
+  });
+
+  return userRoles.map((userRole) => userRole.role.key);
+}

@@ -124,8 +124,20 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
                 <span className="rounded-full border border-[#f0d3b4] bg-[#fff4e8] px-3 py-1 text-xs font-medium text-[#b56613] dark:border-[#6f5530] dark:bg-[rgba(246,150,41,0.16)] dark:text-[#ffd7ab]">{asset.assetTag}</span>
                 {asset.status ? <AssetStatusPill color={asset.status.color} label={asset.status.name} /> : null}
               </div>
+              <div className="mt-4 space-y-1">
+                <p className="text-xl font-semibold text-slate-950 dark:text-slate-100">{asset.model?.trim() || asset.name}</p>
+                {asset.make?.trim() ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Make: {asset.make}</p>
+                ) : null}
+                {asset.model?.trim() && asset.name.trim() && asset.name.trim() !== asset.model.trim() ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Asset name: {asset.name}</p>
+                ) : null}
+              </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              <Link href={`/assets/${asset.id}/label`}>
+                <Button type="button">Print label</Button>
+              </Link>
               <Link href={buildAssetHref(asset.id, { section: "edit", returnTo })}>
                 <Button type="button" variant="secondary">Edit asset</Button>
               </Link>
@@ -188,7 +200,19 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
         </div>
 
         <section className={panelClass}>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className={subpanelClass}>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Make</p>
+              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.make?.trim() || "Not set"}</p>
+            </div>
+            <div className={subpanelClass}>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Model</p>
+              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.model?.trim() || "Not set"}</p>
+            </div>
+            <div className={subpanelClass}>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Asset name</p>
+              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.name}</p>
+            </div>
             <div className={subpanelClass}>
               <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Category</p>
               <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{buildTreeLabel(referenceData.categories, asset.categoryId) ?? "Unassigned"}</p>

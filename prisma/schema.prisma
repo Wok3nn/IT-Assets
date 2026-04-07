@@ -87,18 +87,20 @@ model UserScope {
 }
 
 model Category {
-  id         String      @id @default(cuid())
-  name       String
-  slug       String      @unique
-  parentId   String?
-  colorHex   String?
-  colorMode  String?
-  sortOrder  Int         @default(0)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  parent     Category?   @relation("CategoryTree", fields: [parentId], references: [id])
-  children   Category[]  @relation("CategoryTree")
-  assets     Asset[]
+  id                     String         @id @default(cuid())
+  name                   String
+  slug                   String         @unique
+  parentId               String?
+  colorHex               String?
+  colorMode              String?
+  sortOrder              Int            @default(0)
+  defaultLabelTemplateId String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  parent                 Category?      @relation("CategoryTree", fields: [parentId], references: [id])
+  children               Category[]     @relation("CategoryTree")
+  assets                 Asset[]
+  defaultLabelTemplate   LabelTemplate? @relation("CategoryDefaultLabelTemplate", fields: [defaultLabelTemplateId], references: [id])
 }
 
 model Location {
@@ -129,6 +131,8 @@ model AssetStatus {
 model Asset {
   id                 String          @id @default(cuid())
   name               String
+  make               String?
+  model              String?
   assetTag           String          @unique
   serialNumber       String?
   notes              String?
@@ -160,37 +164,49 @@ model AssetScope {
 }
 
 model LabelTemplate {
-  id              String               @id @default(cuid())
-  name            String
-  slug            String               @unique
-  widthMm         Float
-  heightMm        Float
-  marginTopMm     Float                @default(1)
-  marginRightMm   Float                @default(1)
-  marginBottomMm  Float                @default(1)
-  marginLeftMm    Float                @default(1)
-  defaultFontSize Int                  @default(10)
-  includeLogo     Boolean              @default(false)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  fields          LabelTemplateField[]
-  assets          Asset[]
+  id                String                 @id @default(cuid())
+  name              String
+  slug              String                 @unique
+  description       String?
+  width             Float                  @map("widthMm")
+  height            Float                  @map("heightMm")
+  unit              String                 @default("millimeters")
+  orientation       String                 @default("portrait")
+  marginTop         Float                  @default(1) @map("marginTopMm")
+  marginRight       Float                  @default(1) @map("marginRightMm")
+  marginBottom      Float                  @default(1) @map("marginBottomMm")
+  marginLeft        Float                  @default(1) @map("marginLeftMm")
+  isEnabled         Boolean                @default(true)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  elements          LabelTemplateElement[]
+  assets            Asset[]
+  defaultCategories Category[]             @relation("CategoryDefaultLabelTemplate")
+
+  @@map("LabelTemplate")
 }
 
-model LabelTemplateField {
-  id         String        @id @default(cuid())
-  templateId String
-  fieldKey   String
-  label      String
-  posX       Float
-  posY       Float
-  width      Float
-  height     Float
-  fontSize   Int?
-  alignment  String        @default("left")
-  isBold     Boolean       @default(false)
-  isHidden   Boolean       @default(false)
-  template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+model LabelTemplateElement {
+  id          String        @id @default(cuid())
+  templateId  String
+  type        String        @default("text")
+  fieldKey    String
+  displayName String?       @map("label")
+  isVisible   Boolean       @default(true)
+  x           Float         @map("posX")
+  y           Float         @map("posY")
+  width       Float
+  height      Float
+  fontSize    Int?
+  fontWeight  String        @default("normal")
+  italic      Boolean       @default(false)
+  textAlign   String        @default("left") @map("alignment")
+  rotation    Float         @default(0)
+  zIndex      Int           @default(0)
+  template    LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, zIndex])
+  @@map("LabelTemplateField")
 }
 
 model Setting {
@@ -232,3 +248,4 @@ model AuditLog {
   createdAt   DateTime @default(now())
   actor       User?    @relation(fields: [actorUserId], references: [id])
 }
+

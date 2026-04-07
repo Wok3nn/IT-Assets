@@ -20,3 +20,6 @@ tsconfig.tsbuildinfo
 docs/architecture.md
 AGENTS.md
 
+
+# Temporary local browser-inspection profile
+.codex-chrome-profile/

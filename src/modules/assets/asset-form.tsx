@@ -36,7 +36,9 @@ type LocationOption = {
 
 type AssetFormValue = {
   id?: string;
-  name: string;
+  name?: string | null;
+  make?: string | null;
+  model?: string | null;
   assetTag?: string;
   serialNumber?: string | null;
   notes?: string | null;
@@ -64,7 +66,6 @@ type AssetFormProps = {
 };
 
 const MAX_CATEGORY_LEVELS = 5;
-const defaultIncludedLevels = Array.from({ length: MAX_CATEGORY_LEVELS }, (_, index) => index === MAX_CATEGORY_LEVELS - 1);
 const scopeOptionClassName = "flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 transition hover:border-[#f0c48d] dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200 dark:hover:border-[#f0a853]";
 
 function buildLineage(categories: CategoryOption[], categoryId: string | null | undefined) {
@@ -118,63 +119,20 @@ export function AssetForm({
     () => buildLineage(categories, initialValue?.categoryId ?? null).map((category) => category.id),
     [categories, initialValue?.categoryId],
   );
-  const initialCategoryName = useMemo(
-    () => buildLineage(categories, initialValue?.categoryId ?? null).at(-1)?.name ?? "",
-    [categories, initialValue?.categoryId],
-  );
 
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(initialLineage);
-  const [useCategoryName, setUseCategoryName] = useState(
-    mode === "create" ? true : Boolean(initialValue?.categoryId && initialValue?.name === initialCategoryName),
-  );
-  const [customName, setCustomName] = useState(initialValue?.name ?? "");
-  const [includedLevels, setIncludedLevels] = useState<boolean[]>(defaultIncludedLevels);
 
   useEffect(() => {
     setSelectedCategoryIds(initialLineage);
   }, [initialLineage]);
-
-  useEffect(() => {
-    setCustomName(initialValue?.name ?? "");
-  }, [initialValue?.name]);
-
-  useEffect(() => {
-    if (mode === "edit") {
-      setUseCategoryName(Boolean(initialValue?.categoryId && initialValue?.name === initialCategoryName));
-    }
-  }, [initialCategoryName, initialValue?.categoryId, initialValue?.name, mode]);
 
   const selectedLineage = useMemo(
     () => buildLineage(categories, selectedCategoryIds[selectedCategoryIds.length - 1] ?? null),
     [categories, selectedCategoryIds],
   );
 
-  useEffect(() => {
-    setIncludedLevels((current) => {
-      const next = Array.from({ length: MAX_CATEGORY_LEVELS }, (_, index) => current[index] ?? false);
-      const deepestIndex = selectedLineage.length - 1;
-
-      if (deepestIndex >= 0 && !next.some((value, index) => value && index < selectedLineage.length)) {
-        next[deepestIndex] = true;
-      }
-
-      for (let index = selectedLineage.length; index < MAX_CATEGORY_LEVELS; index += 1) {
-        next[index] = false;
-      }
-
-      return next;
-    });
-  }, [selectedLineage]);
-
   const deepestCategory = selectedLineage.at(-1) ?? null;
-  const generatedName = useMemo(() => {
-    const parts = selectedLineage
-      .filter((_, index) => includedLevels[index])
-      .map((category) => category.name);
-
-    return parts.join(" ").trim();
-  }, [includedLevels, selectedLineage]);
-  const resolvedName = useCategoryName ? generatedName : customName;
+  const selectedCategoryPath = selectedLineage.map((category) => category.name).join(" > ");
   const createModeAssetTag = defaultAssetTag ?? "";
   const locationLabels = useMemo(
     () => new Map(locations.map((location) => [location.id, buildLocationLabel(locations, location)])),
@@ -203,27 +161,25 @@ export function AssetForm({
     return options;
   }, [categories, selectedCategoryIds]);
 
-  const visibleLevelIndexes = useMemo(
-    () => Array.from({ length: selectedLineage.length }, (_, index) => index),
-    [selectedLineage.length],
-  );
-
-  const isSubmitDisabled = !resolvedName || !deepestCategory || (mode === "create" && !createModeAssetTag);
-
   return (
     <form action={action} className="mt-5 space-y-4">
       {initialValue?.id ? <input name="assetId" type="hidden" value={initialValue.id} /> : null}
       {hiddenFields}
-      <input name="name" type="hidden" value={resolvedName} />
       <input name="categoryId" type="hidden" value={deepestCategory?.id ?? ""} />
 
       <div className={insetCardClassName}>
-        <div>
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Category path</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Select up to five category levels. The deepest selected category is saved on the asset.
-          </p>
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Category path</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Select up to five levels. The deepest selected category is saved on the asset.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-dashed border-[#ece7df] px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:text-slate-300 lg:min-w-[260px]">
+            {selectedCategoryPath || "No category selected"}
+          </div>
         </div>
+
         <div className="mt-4 grid gap-4">
           {levelOptions.map((options, index) => (
             <label key={index} className="block space-y-2">
@@ -254,76 +210,42 @@ export function AssetForm({
         </div>
       </div>
 
-      <div className={insetCardClassName}>
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <label className="flex items-start gap-3 xl:flex-1">
-            <input
-              checked={useCategoryName}
-              className="ui-switch mt-0.5"
-              onChange={(event) => setUseCategoryName(event.target.checked)}
-              type="checkbox"
-            />
-            <span>
-              <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                Use selected category as asset name
-              </span>
-              <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">
-                Choose which parts of the selected category path should appear in the generated asset name.
-              </span>
-            </span>
-          </label>
-
-          {useCategoryName && visibleLevelIndexes.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-start gap-3 xl:min-h-[44px] xl:justify-end xl:pl-8">
-              {visibleLevelIndexes.map((index) => (
-                <label
-                  key={index}
-                  className="inline-flex min-h-[3rem] items-center gap-5 whitespace-nowrap rounded-full border border-[#ece7df] bg-white px-5 py-3 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200"
-                >
-                  <input
-                    checked={includedLevels[index]}
-                    className="ui-check"
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setIncludedLevels((current) => {
-                        const next = [...current];
-                        next[index] = checked;
-
-                        if (!next.some((value, levelIndex) => value && levelIndex < selectedLineage.length)) {
-                          const fallbackIndex = Math.max(selectedLineage.length - 1, 0);
-                          next[fallbackIndex] = true;
-                        }
-
-                        return next;
-                      });
-                    }}
-                    type="checkbox"
-                  />
-                  <span>{getLevelLabel(index)}</span>
-                </label>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {useCategoryName ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-[#ece7df] px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:text-slate-300">
-            Asset name preview: {resolvedName || "Select a category path first"}
-          </div>
-        ) : (
-          <label className="mt-4 block space-y-2">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Custom asset name</span>
-            <input
-              className={textFieldClassName}
-              name="customName"
-              onChange={(event) => setCustomName(event.target.value)}
-              required={!useCategoryName}
-              type="text"
-              value={customName}
-            />
-          </label>
-        )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block space-y-2">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</span>
+          <input
+            className={textFieldClassName}
+            defaultValue={initialValue?.model ?? ""}
+            name="model"
+            placeholder="Latitude 5420"
+            type="text"
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">Primary device identity for create, edit, and import flows.</p>
+        </label>
+        <label className="block space-y-2">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Make</span>
+          <input
+            className={textFieldClassName}
+            defaultValue={initialValue?.make ?? ""}
+            name="make"
+            placeholder="Dell"
+            type="text"
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">Manufacturer or brand for the selected model.</p>
+        </label>
       </div>
+
+      <label className="block space-y-2">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Asset name</span>
+        <input
+          className={textFieldClassName}
+          defaultValue={initialValue?.name ?? ""}
+          name="name"
+          placeholder="Optional friendly name"
+          type="text"
+        />
+        <p className="text-xs text-slate-500 dark:text-slate-400">Optional compatibility field for a descriptive or legacy display name.</p>
+      </label>
 
       {mode === "create" ? (
         <label className="block space-y-2">
@@ -444,7 +366,7 @@ export function AssetForm({
         <textarea defaultValue={initialValue?.notes ?? ""} name="notes" rows={4} className={textFieldClassName} />
       </label>
 
-      <Button className="w-full" disabled={isSubmitDisabled} type="submit">
+      <Button className="w-full" type="submit">
         {submitLabel}
       </Button>
     </form>

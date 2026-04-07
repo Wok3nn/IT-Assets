@@ -5,9 +5,21 @@ import { getCurrentUser } from "@/lib/session";
 import { importUsersFromRows } from "@/modules/settings/import-export.service";
 import { readSetupState } from "@/services/setup-state";
 
+const resolutionEntrySchema = z.object({
+  sourceValue: z.string(),
+  action: z.enum(["create", "map", "skip"]),
+  targetValue: z.string().nullable().optional(),
+});
+
 const importSchema = z.object({
   columns: z.array(z.object({ header: z.string(), fieldId: z.string().nullable() })),
   rows: z.array(z.array(z.string())),
+  resolutions: z
+    .object({
+      roles: z.array(resolutionEntrySchema).optional(),
+      scopes: z.array(resolutionEntrySchema).optional(),
+    })
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -27,6 +39,7 @@ export async function POST(request: Request) {
       columns: parsed.columns,
       rows: parsed.rows,
       actorUserId: currentUser.id,
+      resolutions: parsed.resolutions,
     });
 
     return NextResponse.json({ summary });

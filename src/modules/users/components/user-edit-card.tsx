@@ -9,6 +9,7 @@ type ViewMode = "roles" | "users";
 type UserStatusFilter = "all" | "active" | "inactive";
 type LoginFilter = "all" | "enabled" | "disabled";
 type SortOption = "name-asc" | "name-desc" | "email-asc" | "last-login";
+type PageSizeOption = 25 | 50;
 
 type RoleOption = { id: string; key: string; name: string };
 type ScopeOption = { id: string; name: string; slug: string };
@@ -36,6 +37,8 @@ export function UserEditCard({
   status,
   login,
   sort,
+  page,
+  pageSize,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   closeHref: string;
@@ -50,12 +53,14 @@ export function UserEditCard({
   status: UserStatusFilter;
   login: LoginFilter;
   sort: SortOption;
+  page: number;
+  pageSize: PageSizeOption;
 }) {
   return (
     <PanelCard>
       <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">Edit user</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{editUser.email}</p></div><Link href={closeHref}><Button type="button" variant="ghost">Close</Button></Link></div>
       <form action={action} className="mt-5 space-y-4">
-        <input name="userId" type="hidden" value={editUser.id} /><input name="view" type="hidden" value={view} /><input name="selectedRoleKey" type="hidden" value={selectedRoleKey} /><input name="q" type="hidden" value={searchQuery} /><input name="filterRoleKey" type="hidden" value={filterRoleKey} /><input name="scopeId" type="hidden" value={scopeId} /><input name="status" type="hidden" value={status} /><input name="login" type="hidden" value={login} /><input name="sort" type="hidden" value={sort} />
+        <input name="userId" type="hidden" value={editUser.id} /><input name="view" type="hidden" value={view} /><input name="selectedRoleKey" type="hidden" value={selectedRoleKey} /><input name="q" type="hidden" value={searchQuery} /><input name="filterRoleKey" type="hidden" value={filterRoleKey} /><input name="scopeId" type="hidden" value={scopeId} /><input name="status" type="hidden" value={status} /><input name="login" type="hidden" value={login} /><input name="sort" type="hidden" value={sort} /><input name="page" type="hidden" value={page} /><input name="pageSize" type="hidden" value={pageSize} />
         <label className="block space-y-2"><span className="text-sm font-medium text-slate-700 dark:text-slate-200">Display name</span><input required minLength={2} maxLength={80} name="name" defaultValue={editUser.name} className={usersFieldClassName} type="text" /></label>
         <label className="block space-y-2"><span className="text-sm font-medium text-slate-700 dark:text-slate-200">Email</span><input required maxLength={160} name="email" defaultValue={editUser.email} className={usersFieldClassName} type="email" /></label>
         <label className="block space-y-2"><span className="text-sm font-medium text-slate-700 dark:text-slate-200">Role</span><select defaultValue={editUser.userRoles[0]?.role.key ?? roleOptions[0]?.key ?? ""} name="roleKey" className={usersFieldClassName}>{roleOptions.map((role) => <option key={role.id} value={role.key}>{role.name}</option>)}</select></label>

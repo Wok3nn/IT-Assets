@@ -18,9 +18,33 @@ export type ImportFieldDefinition = {
   description?: string;
 };
 
+export type ImportResolutionAction = "create" | "map" | "skip";
+
+export type ImportResolutionEntry = {
+  sourceValue: string;
+  action: ImportResolutionAction;
+  targetValue?: string | null;
+};
+
+export type AssetImportResolutions = {
+  categories?: ImportResolutionEntry[];
+  statuses?: ImportResolutionEntry[];
+  scopes?: ImportResolutionEntry[];
+};
+
+export type UserImportResolutions = {
+  roles?: ImportResolutionEntry[];
+  scopes?: ImportResolutionEntry[];
+};
+
+export type ImportResolutionPayload = {
+  assets?: AssetImportResolutions;
+  users?: UserImportResolutions;
+};
+
 export type ImportExportReferenceData = {
   assets: {
-    categories: Array<{ id: string; label: string }>;
+    categories: Array<{ id: string; label: string; name: string; parentId: string | null }>;
     departments: Array<{ id: string; label: string }>;
     locations: Array<{ id: string; label: string }>;
     statuses: Array<{ id: string; label: string }>;
@@ -37,8 +61,10 @@ export type ImportExportReferenceData = {
 export const IGNORE_FIELD_ID = "__ignore__";
 
 export const ASSET_IMPORT_FIELDS: ImportFieldDefinition[] = [
-  { id: "assetTag", label: "Asset Tag", required: false, aliases: ["asset tag", "tag", "asset id"] },
-  { id: "name", label: "Asset Name", required: true, aliases: ["asset name", "name", "device name"] },
+  { id: "assetTag", label: "Asset Tag", required: true, aliases: ["asset tag", "tag", "asset id"] },
+  { id: "name", label: "Asset Name", required: false, aliases: ["asset name", "name", "device name"] },
+  { id: "make", label: "Make", required: false, aliases: ["make", "manufacturer", "brand", "vendor"] },
+  { id: "model", label: "Model", required: false, aliases: ["model", "device model", "hardware model", "product model"] },
   { id: "status", label: "Status", required: false, aliases: ["status", "asset status"] },
   { id: "assignedUser", label: "Assignee", required: false, aliases: ["assigned to", "assigned user", "assignee", "user", "email", "user email", "assigned user email"] },
   { id: "location", label: "Location", required: false, aliases: ["location", "assigned location", "site", "office"] },

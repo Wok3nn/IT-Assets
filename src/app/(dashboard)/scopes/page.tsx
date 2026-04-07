@@ -3,100 +3,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { AdminEmptyState } from "@/components/admin/admin-empty-state";
-import { AdminTextField, AdminTextareaField } from "@/components/admin/admin-fields";
-import { AdminPageColumns } from "@/components/admin/admin-page-columns";
 import { AdminSectionHeader } from "@/components/admin/admin-section-header";
 import { buildColorCardStyle } from "@/components/admin/card-style";
-import { ColorStyleFields } from "@/components/admin/color-style-fields";
-import { FieldLabel, FieldLabelText } from "@/components/forms/field-label";
+import { HeaderAssetSearch } from "@/components/layout/header-asset-search";
 import { PageHero } from "@/components/layout/page-hero";
 import { PanelCard } from "@/components/layout/panel-card";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/session";
-import { createScope, deleteScope, getScopeById, listScopes, updateScope } from "@/modules/scopes/scope.service";
+import { deleteScope, listScopes } from "@/modules/scopes/scope.service";
 import { readSetupState } from "@/services/setup-state";
 
 type ScopesPageProps = {
-  searchParams?: Promise<{
-    editId?: string;
-    showDescription?: string;
-    showSubtitle?: string;
-  }>;
+  searchParams?: Promise<Record<string, never>>;
 };
 
-function buildGroupsUrl(options?: {
-  editId?: string | null;
-  showDescription?: boolean;
-  showSubtitle?: boolean;
-}) {
-  const params = new URLSearchParams();
-
-  if (options?.editId) {
-    params.set("editId", options.editId);
-  }
-
-  if (options?.showDescription === false) {
-    params.set("showDescription", "false");
-  }
-
-  if (options?.showSubtitle === false) {
-    params.set("showSubtitle", "false");
-  }
-
-  const query = params.toString();
-  return query ? `/scopes?${query}` : "/scopes";
-}
-
-async function createGroupAction(formData: FormData) {
-  "use server";
-
-  const currentUser = await getCurrentUser();
-
-  if (!currentUser) {
-    redirect("/login");
-  }
-
-  const name = String(formData.get("name") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const colorHex = String(formData.get("colorHex") ?? "").trim();
-  const colorModeValue = String(formData.get("colorMode") ?? "none").trim();
-  const colorMode = colorModeValue === "border" || colorModeValue === "fill" ? colorModeValue : "none";
-
-  if (name.length < 2) {
-    return;
-  }
-
-  await createScope({ name, description, colorHex, colorMode });
-  revalidatePath("/scopes");
-}
-
-async function updateGroupAction(formData: FormData) {
-  "use server";
-
-  const currentUser = await getCurrentUser();
-
-  if (!currentUser) {
-    redirect("/login");
-  }
-
-  const scopeId = String(formData.get("scopeId") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const colorHex = String(formData.get("colorHex") ?? "").trim();
-  const colorModeValue = String(formData.get("colorMode") ?? "none").trim();
-  const colorMode = colorModeValue === "border" || colorModeValue === "fill" ? colorModeValue : "none";
-  const showDescription = String(formData.get("showDescription") ?? "true") !== "false";
-  const showSubtitle = String(formData.get("showSubtitle") ?? "true") !== "false";
-
-  if (!scopeId || name.length < 2) {
-    return;
-  }
-
-  await updateScope({ scopeId, name, description, colorHex, colorMode });
-  revalidatePath("/scopes");
-  redirect(buildGroupsUrl({ showDescription, showSubtitle }));
-}
+const GROUPS_HREF = "/scopes";
+const NEW_SCOPE_HREF = "/scopes/new";
 
 async function deleteGroupAction(formData: FormData) {
   "use server";
@@ -118,16 +41,14 @@ async function deleteGroupAction(formData: FormData) {
 }
 
 export default async function ScopesPage({ searchParams }: ScopesPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const editGroupId = resolvedSearchParams?.editId?.trim() || null;
-  const showDescription = resolvedSearchParams?.showDescription !== "false";
-  const showSubtitle = resolvedSearchParams?.showSubtitle !== "false";
+  if (searchParams) {
+    await searchParams;
+  }
 
-  const [setupState, currentUser, groups, editGroup] = await Promise.all([
+  const [setupState, currentUser, groups] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
     listScopes(),
-    editGroupId ? getScopeById(editGroupId) : Promise.resolve(null),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -138,144 +59,34 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
     redirect("/login");
   }
 
-  if (editGroupId && !editGroup) {
-    redirect(buildGroupsUrl({ showDescription, showSubtitle }));
-  }
-
   const summary =
     groups.length === 0
       ? "No groups exist yet. Add the first one to control who can see tagged assets."
       : `${groups.length} group${groups.length === 1 ? "" : "s"} available for users and assets.`;
 
-  const toggleDescriptionHref = buildGroupsUrl({
-    editId: editGroupId,
-    showDescription: !showDescription,
-    showSubtitle,
-  });
-
-  const toggleSubtitleHref = buildGroupsUrl({
-    editId: editGroupId,
-    showDescription,
-    showSubtitle: !showSubtitle,
-  });
-
   return (
     <AppShell>
       <div className="space-y-6">
         <PageHero>
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Departments</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">Asset permissions</h1>
-          <p className="mt-3 max-w-2xl text-slate-600 dark:text-slate-300">
-            Assign users to groups. Assets tagged to a group stay visible to the right people.
-          </p>
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Departments</p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">Asset permissions</h1>
+              <p className="mt-3 max-w-2xl text-slate-600 dark:text-slate-300">
+                Browse department records and manage existing visibility groups without mixing creation or editing into the listing flow.
+              </p>
+            </div>
+            <HeaderAssetSearch className="w-full xl:w-auto xl:flex-none" compact />
+          </div>
         </PageHero>
 
-        <AdminPageColumns>
-          <div className="space-y-6">
-            <PanelCard>
-              <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">New group</h2>
-              <form action={createGroupAction} className="mt-5 space-y-4">
-                <FieldLabel>
-                  <FieldLabelText>Name</FieldLabelText>
-                  <AdminTextField maxLength={80} minLength={2} name="name" placeholder="IT" required type="text" />
-                </FieldLabel>
-
-                <FieldLabel>
-                  <FieldLabelText>Description</FieldLabelText>
-                  <AdminTextareaField
-                    maxLength={240}
-                    name="description"
-                    placeholder="Assets for the internal IT team."
-                    rows={4}
-                  />
-                </FieldLabel>
-
-                <ColorStyleFields defaultColorMode="border" defaultColorHex="#2563EB" helperText="Border or soft fill." />
-
-                <Button className="w-full" type="submit">
-                  Create group
-                </Button>
-              </form>
-            </PanelCard>
-
-            {editGroup ? (
-              <PanelCard>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">Edit group</h2>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{editGroup.name}</p>
-                  </div>
-                  <Link href={buildGroupsUrl({ showDescription, showSubtitle })}>
-                    <Button type="button" variant="ghost">
-                      Close
-                    </Button>
-                  </Link>
-                </div>
-
-                <form action={updateGroupAction} className="mt-5 space-y-4">
-                  <input name="scopeId" type="hidden" value={editGroup.id} />
-                  <input name="showDescription" type="hidden" value={showDescription ? "true" : "false"} />
-                  <input name="showSubtitle" type="hidden" value={showSubtitle ? "true" : "false"} />
-
-                  <FieldLabel>
-                    <FieldLabelText>Name</FieldLabelText>
-                    <AdminTextField
-                      defaultValue={editGroup.name}
-                      disabled={editGroup.isSystem}
-                      maxLength={80}
-                      minLength={2}
-                      name="name"
-                      required
-                      type="text"
-                    />
-                  </FieldLabel>
-
-                  <FieldLabel>
-                    <FieldLabelText>Description</FieldLabelText>
-                    <AdminTextareaField
-                      defaultValue={editGroup.description ?? ""}
-                      disabled={editGroup.isSystem}
-                      maxLength={240}
-                      name="description"
-                      rows={4}
-                    />
-                  </FieldLabel>
-
-                  <ColorStyleFields
-                    defaultColorHex={editGroup.colorHex}
-                    defaultColorMode={editGroup.colorMode ?? "none"}
-                    disabled={editGroup.isSystem}
-                    helperText="Update the visual cue for this group."
-                    title="Color"
-                  />
-
-                  {editGroup.isSystem ? (
-                    <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-500/10 dark:text-emerald-300">
-                      System groups are visible here but locked from editing.
-                    </p>
-                  ) : null}
-
-                  <Button className="w-full" disabled={editGroup.isSystem} type="submit">
-                    Save group
-                  </Button>
-                </form>
-              </PanelCard>
-            ) : null}
-          </div>
-
+        <section className="space-y-6">
           <PanelCard>
             <AdminSectionHeader
               actions={
                 <>
-                  <Link href={toggleSubtitleHref}>
-                    <Button type="button" variant={showSubtitle ? "secondary" : "ghost"}>
-                      {showSubtitle ? "Hide subtitle" : "Show subtitle"}
-                    </Button>
-                  </Link>
-                  <Link href={toggleDescriptionHref}>
-                    <Button type="button" variant={showDescription ? "secondary" : "ghost"}>
-                      {showDescription ? "Hide description" : "Show description"}
-                    </Button>
+                  <Link href={NEW_SCOPE_HREF}>
+                    <Button type="button">New department</Button>
                   </Link>
                 </>
               }
@@ -290,7 +101,7 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4 2xl:grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
                   {groups.map((group) => {
                     const canDelete = !group.isSystem && group._count.userScopes === 0 && group._count.assetScopes === 0;
-                    const editHref = buildGroupsUrl({ editId: group.id, showDescription, showSubtitle });
+                    const editHref = `/scopes/${group.id}/edit?returnTo=${encodeURIComponent(GROUPS_HREF)}`;
 
                     return (
                       <article
@@ -310,7 +121,7 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
                                   </span>
                                 ) : null}
                               </div>
-                              {showSubtitle ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{group.slug}</p> : null}
+                              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{group.slug}</p>
                             </div>
                             {group.colorHex && group.colorMode ? (
                               <span
@@ -320,11 +131,9 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
                             ) : null}
                           </div>
 
-                          {showDescription ? (
-                            <p className="min-h-[72px] text-sm leading-6 text-slate-600 dark:text-slate-300">
-                              {group.description || "No description yet. Add context so assignments stay predictable."}
-                            </p>
-                          ) : null}
+                          <p className="min-h-[72px] text-sm leading-6 text-slate-600 dark:text-slate-300">
+                            {group.description || "No description yet. Add context so assignments stay predictable."}
+                          </p>
 
                           <div className="space-y-1 text-sm text-slate-500 dark:text-slate-400">
                             <p>
@@ -365,7 +174,7 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
               )}
             </div>
           </PanelCard>
-        </AdminPageColumns>
+        </section>
       </div>
     </AppShell>
   );

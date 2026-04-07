@@ -72,6 +72,17 @@ function parseAppearance(input: { colorHex?: string; colorMode?: "border" | "fil
   return { colorHex, colorMode };
 }
 
+export async function listAllLocations() {
+  return db.location.findMany({
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+}
+
 export async function listTopLevelLocations() {
   return db.location.findMany({
     where: { parentId: null },
@@ -256,4 +267,3 @@ export async function deleteLocation(locationId: string) {
     where: { id: location.id },
   });
 }
-

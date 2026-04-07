@@ -1,11 +1,20 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ImportCardShell } from "@/modules/settings/components/import-card-shell";
 import { ImportSummaryCard } from "@/modules/settings/components/import-summary-card";
-import type { ImportSummary, ParsedImportState, ValidationState } from "@/modules/settings/components/import-export.types";
+import { MissingResolutionSection } from "@/modules/settings/components/missing-resolution-section";
+import type {
+  ImportSummary,
+  MissingResolutionGroup,
+  ParsedImportState,
+  ResolutionSelection,
+  ResolutionSelections,
+  ValidationState,
+} from "@/modules/settings/components/import-export.types";
 import { MappingSection } from "@/modules/settings/components/mapping-section";
 import { ValidationSummary } from "@/modules/settings/components/validation-summary";
 import {
@@ -16,11 +25,21 @@ import {
   parseCsv,
   splitMultiValue,
   suggestFieldId,
+  type AssetImportResolutions,
   type ImportColumnMapping,
   type ImportExportReferenceData,
   type ImportFieldDefinition,
   type ImportKind,
+  type ImportResolutionEntry,
+  type UserImportResolutions,
 } from "@/modules/settings/import-export.shared";
+import { cardClass, fieldClass } from "@/modules/settings/components/import-export.styles";
+import {
+  buildCategoryDecisionMapFromSelections,
+  collectMissingCategoryPaths,
+  previewResolvedCategoryPath,
+  sortCategoryPathLabels,
+} from "@/modules/settings/category-import-paths";
 
 type ImportExportPanelProps = {
   references: ImportExportReferenceData;
@@ -83,29 +102,245 @@ function getMappedValues(columns: ImportColumnMapping[], row: string[]) {
   return mapped;
 }
 
-function buildAssetValidation(state: ParsedImportState, references: ImportExportReferenceData): ValidationState {
+
+function getResolutionSelectionKey(groupKey: string, sourceValue: string) {
+  return groupKey + ":" + normalizeValue(sourceValue);
+}
+
+function getResolutionSelection(selections: ResolutionSelections, groupKey: string, sourceValue: string) {
+  return selections[getResolutionSelectionKey(groupKey, sourceValue)] ?? { action: "", targetValue: "" };
+}
+
+function uniqueSorted(values: Iterable<string>) {
+  return Array.from(new Set(Array.from(values).map((value) => value.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
+}
+
+function buildResolutionSummary(groups: MissingResolutionGroup[], selections: ResolutionSelections) {
+  let createCount = 0;
+  let mapCount = 0;
+  let skipCount = 0;
+  let unresolvedCount = 0;
+
+  for (const group of groups) {
+    for (const value of group.values) {
+      const selection = getResolutionSelection(selections, group.key, value);
+
+      if (!selection.action) {
+        unresolvedCount += 1;
+      } else if (selection.action === "create") {
+        createCount += 1;
+      } else if (selection.action === "map") {
+        if (selection.targetValue) {
+          mapCount += 1;
+        } else {
+          unresolvedCount += 1;
+        }
+      } else if (selection.action === "skip") {
+        skipCount += 1;
+      }
+    }
+  }
+
+  return { createCount, mapCount, skipCount, unresolvedCount };
+}
+
+function areResolutionSelectionsEqual(left: ResolutionSelections, right: ResolutionSelections) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => {
+    const leftSelection = left[key];
+    const rightSelection = right[key];
+
+    return Boolean(rightSelection) && leftSelection.action === rightSelection.action && leftSelection.targetValue === rightSelection.targetValue;
+  });
+}
+
+function reconcileResolutionSelections(current: ResolutionSelections, groups: MissingResolutionGroup[]) {
+  const next: ResolutionSelections = {};
+
+  for (const group of groups) {
+    const optionValues = new Set(group.options.map((option) => option.value));
+
+    for (const value of group.values) {
+      const selection = current[getResolutionSelectionKey(group.key, value)];
+      if (!selection || !selection.action) {
+        continue;
+      }
+
+      if (selection.action === "create") {
+        if (group.allowCreate) {
+          next[getResolutionSelectionKey(group.key, value)] = selection;
+        }
+        continue;
+      }
+
+      if (selection.action === "skip") {
+        if (group.allowSkip) {
+          next[getResolutionSelectionKey(group.key, value)] = selection;
+        }
+        continue;
+      }
+
+      if (selection.action === "map" && group.options.length > 0) {
+        next[getResolutionSelectionKey(group.key, value)] = {
+          action: "map",
+          targetValue: selection.targetValue && optionValues.has(selection.targetValue) ? selection.targetValue : "",
+        };
+      }
+    }
+  }
+
+  return next;
+}
+
+function buildAssetResolutionGroups(state: ParsedImportState, references: ImportExportReferenceData): MissingResolutionGroup[] {
+  const statusLabels = new Set(references.assets.statuses.map((item) => normalizeValue(item.label)));
+  const departmentLabels = new Set(references.assets.departments.map((item) => normalizeValue(item.label)));
+  const missingCategories = new Set<string>();
+  const missingStatuses = new Set<string>();
+  const missingDepartments = new Set<string>();
+
+  nonBlankRows(state.rows).forEach((row) => {
+    const mapped = getMappedValues(state.columns, row);
+    const category = mapped.get("category") ?? "";
+    const status = (mapped.get("status") ?? "").trim();
+
+    for (const missingPath of collectMissingCategoryPaths(category, references.assets.categories)) {
+      missingCategories.add(missingPath);
+    }
+
+    if (status && !statusLabels.has(normalizeValue(status))) {
+      missingStatuses.add(status);
+    }
+
+    for (const department of splitMultiValue(mapped.get("scopes") ?? "")) {
+      if (!departmentLabels.has(normalizeValue(department))) {
+        missingDepartments.add(department);
+      }
+    }
+  });
+
+  const groups: MissingResolutionGroup[] = [];
+
+  if (missingCategories.size > 0) {
+    groups.push({
+      key: "categories",
+      label: "Categories",
+      allowCreate: true,
+      allowSkip: true,
+      options: references.assets.categories.map((item) => ({ value: item.id, label: item.label })),
+      values: sortCategoryPathLabels(missingCategories),
+    });
+  }
+
+  if (missingStatuses.size > 0) {
+    groups.push({
+      key: "statuses",
+      label: "Statuses",
+      allowCreate: true,
+      allowSkip: true,
+      options: references.assets.statuses.map((item) => ({ value: item.id, label: item.label })),
+      values: uniqueSorted(missingStatuses),
+    });
+  }
+
+  if (missingDepartments.size > 0) {
+    groups.push({
+      key: "scopes",
+      label: "Departments",
+      allowCreate: true,
+      allowSkip: true,
+      options: references.assets.departments.map((item) => ({ value: item.id, label: item.label })),
+      values: uniqueSorted(missingDepartments),
+    });
+  }
+
+  return groups;
+}
+
+function buildUserResolutionGroups(state: ParsedImportState, references: ImportExportReferenceData): MissingResolutionGroup[] {
+  const roleNames = new Set(references.users.roles.map((item) => normalizeValue(item.name)));
+  const roleKeys = new Set(references.users.roles.map((item) => normalizeValue(item.key)));
+  const departmentLabels = new Set(references.users.departments.map((item) => normalizeValue(item.label)));
+  const missingRoles = new Set<string>();
+  const missingDepartments = new Set<string>();
+
+  nonBlankRows(state.rows).forEach((row) => {
+    const mapped = getMappedValues(state.columns, row);
+    const role = (mapped.get("role") ?? "").trim();
+
+    if (role && !roleNames.has(normalizeValue(role)) && !roleKeys.has(normalizeValue(role))) {
+      missingRoles.add(role);
+    }
+
+    for (const department of splitMultiValue(mapped.get("scopes") ?? "")) {
+      if (!departmentLabels.has(normalizeValue(department))) {
+        missingDepartments.add(department);
+      }
+    }
+  });
+
+  const groups: MissingResolutionGroup[] = [];
+
+  if (missingRoles.size > 0) {
+    groups.push({
+      key: "roles",
+      label: "Roles",
+      allowCreate: true,
+      allowSkip: false,
+      options: references.users.roles.map((item) => ({ value: item.key, label: item.name + " (" + item.key + ")" })),
+      values: uniqueSorted(missingRoles),
+    });
+  }
+
+  if (missingDepartments.size > 0) {
+    groups.push({
+      key: "scopes",
+      label: "Departments",
+      allowCreate: true,
+      allowSkip: true,
+      options: references.users.departments.map((item) => ({ value: item.id, label: item.label })),
+      values: uniqueSorted(missingDepartments),
+    });
+  }
+
+  return groups;
+}
+
+function buildAssetValidation(state: ParsedImportState, references: ImportExportReferenceData, resolutionGroups: MissingResolutionGroup[], resolutionSelections: ResolutionSelections): ValidationState {
   const globalErrors: string[] = [];
   const rowErrors: Array<{ rowNumber: number; messages: string[] }> = [];
   const rowWarnings: Array<{ rowNumber: number; messages: string[] }> = [];
   const fieldIds = state.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string);
   const duplicates = fieldIds.filter((fieldId, index) => fieldIds.indexOf(fieldId) !== index);
+  const resolutionGroupKeys = new Set(resolutionGroups.map((group) => group.key));
 
   if (duplicates.length > 0) {
     globalErrors.push("Each app field can only be mapped once.");
   }
 
-  if (!fieldIds.includes("name")) {
-    globalErrors.push("Asset Name must be mapped before import can continue.");
+  if (!fieldIds.includes("assetTag")) {
+    globalErrors.push("Asset Tag must be mapped before import can continue.");
+  }
+
+  const resolutionSummary = buildResolutionSummary(resolutionGroups, resolutionSelections);
+  if (resolutionSummary.unresolvedCount > 0) {
+    globalErrors.push("Resolve all missing related values before import can continue.");
   }
 
   const existingAssetTags = new Set(references.assets.existingAssetTags.map((value) => value.toUpperCase()));
   const seenAssetTags = new Set<string>();
-  const categoryLabels = new Set(references.assets.categories.map((item) => normalizeValue(item.label)));
   const locationLabels = new Set(references.assets.locations.map((item) => normalizeValue(item.label)));
   const statusLabels = new Set(references.assets.statuses.map((item) => normalizeValue(item.label)));
   const departmentLabels = new Set(references.assets.departments.map((item) => normalizeValue(item.label)));
   const userEmails = new Set(references.assets.users.map((item) => normalizeValue(item.email)));
   const userNames = new Set(references.assets.users.map((item) => normalizeValue(item.name)));
+  const categoryDecisionMap = buildCategoryDecisionMapFromSelections(resolutionSelections);
 
   let validRows = 0;
 
@@ -115,50 +350,62 @@ function buildAssetValidation(state: ParsedImportState, references: ImportExport
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    const name = mapped.get("name") ?? "";
-    if (!name.trim()) {
-      errors.push("Asset Name is required.");
+    const assetTag = (mapped.get("assetTag") ?? "").trim().toUpperCase();
+    if (!assetTag) {
+      errors.push("Asset Tag is required.");
     }
 
-    const assetTag = (mapped.get("assetTag") ?? "").trim().toUpperCase();
     if (assetTag) {
       if (existingAssetTags.has(assetTag)) {
-        errors.push(`Asset Tag already exists: ${assetTag}`);
+        errors.push("Asset Tag already exists: " + assetTag);
       }
       if (seenAssetTags.has(assetTag)) {
-        errors.push(`Asset Tag is duplicated in this file: ${assetTag}`);
+        errors.push("Asset Tag is duplicated in this file: " + assetTag);
       }
       seenAssetTags.add(assetTag);
     }
 
     const purchaseDate = normalizeDate(mapped.get("purchaseDate") ?? "");
     if (!purchaseDate.ok) {
-      errors.push(`Purchase Date is invalid: ${purchaseDate.value}`);
+      errors.push("Purchase Date is invalid: " + purchaseDate.value);
     }
 
     const warrantyExpiry = normalizeDate(mapped.get("warrantyExpiry") ?? "");
     if (!warrantyExpiry.ok) {
-      errors.push(`Warranty Expiry is invalid: ${warrantyExpiry.value}`);
+      errors.push("Warranty Expiry is invalid: " + warrantyExpiry.value);
     }
 
-    const category = normalizeValue(mapped.get("category") ?? "");
-    if (category && !categoryLabels.has(category)) {
-      errors.push(`Category not found: ${mapped.get("category")}`);
+    const category = mapped.get("category") ?? "";
+    const categoryPreview = previewResolvedCategoryPath(category, references.assets.categories, categoryDecisionMap);
+    if (category && categoryPreview.status === "skipped") {
+      warnings.push("Category will be left blank: " + categoryPreview.skippedPath);
+    } else if (category && categoryPreview.status === "unresolved") {
+      errors.push("Category requires resolution: " + categoryPreview.missingPath);
     }
 
     const location = normalizeValue(mapped.get("location") ?? "");
     if (location && !locationLabels.has(location)) {
-      errors.push(`Location not found: ${mapped.get("location")}`);
+      errors.push("Location not found: " + (mapped.get("location") ?? ""));
     }
 
-    const status = normalizeValue(mapped.get("status") ?? "");
-    if (status && !statusLabels.has(status)) {
-      errors.push(`Status not found: ${mapped.get("status")}`);
+    const status = (mapped.get("status") ?? "").trim();
+    if (status && !statusLabels.has(normalizeValue(status))) {
+      const selection = getResolutionSelection(resolutionSelections, "statuses", status);
+      if (selection.action === "skip") {
+        warnings.push("Status will be left blank: " + status);
+      } else if (!resolutionGroupKeys.has("statuses") || !selection.action || (selection.action === "map" && !selection.targetValue)) {
+        errors.push("Status requires resolution: " + status);
+      }
     }
 
     for (const department of splitMultiValue(mapped.get("scopes") ?? "")) {
       if (!departmentLabels.has(normalizeValue(department))) {
-        errors.push(`Department not found: ${department}`);
+        const selection = getResolutionSelection(resolutionSelections, "scopes", department);
+        if (selection.action === "skip") {
+          warnings.push("Department will be skipped: " + department);
+        } else if (!resolutionGroupKeys.has("scopes") || !selection.action || (selection.action === "map" && !selection.targetValue)) {
+          errors.push("Department requires resolution: " + department);
+        }
       }
     }
 
@@ -166,7 +413,7 @@ function buildAssetValidation(state: ParsedImportState, references: ImportExport
     if (assignedUser) {
       const normalizedAssignedUser = normalizeValue(assignedUser);
       if (!userEmails.has(normalizedAssignedUser) && !userNames.has(normalizedAssignedUser)) {
-        warnings.push(`User not found for assignment: ${assignedUser}. Asset will import as unassigned.`);
+        warnings.push("User not found for assignment: " + assignedUser + ". Asset will import as unassigned.");
       }
     }
 
@@ -181,15 +428,15 @@ function buildAssetValidation(state: ParsedImportState, references: ImportExport
     }
   });
 
-  return { globalErrors, rowErrors, rowWarnings, validRows };
+  return { globalErrors, rowErrors, rowWarnings, validRows, resolutionGroups, resolutionSummary };
 }
-
-function buildUserValidation(state: ParsedImportState, references: ImportExportReferenceData): ValidationState {
+function buildUserValidation(state: ParsedImportState, references: ImportExportReferenceData, resolutionGroups: MissingResolutionGroup[], resolutionSelections: ResolutionSelections): ValidationState {
   const globalErrors: string[] = [];
   const rowErrors: Array<{ rowNumber: number; messages: string[] }> = [];
   const rowWarnings: Array<{ rowNumber: number; messages: string[] }> = [];
   const fieldIds = state.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string);
   const duplicates = fieldIds.filter((fieldId, index) => fieldIds.indexOf(fieldId) !== index);
+  const resolutionGroupKeys = new Set(resolutionGroups.map((group) => group.key));
 
   if (duplicates.length > 0) {
     globalErrors.push("Each app field can only be mapped once.");
@@ -201,6 +448,11 @@ function buildUserValidation(state: ParsedImportState, references: ImportExportR
 
   if (!fieldIds.includes("email")) {
     globalErrors.push("Email must be mapped before import can continue.");
+  }
+
+  const resolutionSummary = buildResolutionSummary(resolutionGroups, resolutionSelections);
+  if (resolutionSummary.unresolvedCount > 0) {
+    globalErrors.push("Resolve all missing related values before import can continue.");
   }
 
   const existingEmails = new Set(references.users.existingEmails.map((value) => value.toLowerCase()));
@@ -215,6 +467,7 @@ function buildUserValidation(state: ParsedImportState, references: ImportExportR
     const rowNumber = index + 2;
     const mapped = getMappedValues(state.columns, row);
     const errors: string[] = [];
+    const warnings: string[] = [];
 
     const name = mapped.get("name") ?? "";
     const email = (mapped.get("email") ?? "").trim().toLowerCase();
@@ -228,29 +481,37 @@ function buildUserValidation(state: ParsedImportState, references: ImportExportR
     if (!email) {
       errors.push("Email is required.");
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push(`Email is invalid: ${email}`);
+      errors.push("Email is invalid: " + email);
     } else {
       if (existingEmails.has(email)) {
-        errors.push(`Email already exists: ${email}`);
+        errors.push("Email already exists: " + email);
       }
       if (seenEmails.has(email)) {
-        errors.push(`Email is duplicated in this file: ${email}`);
+        errors.push("Email is duplicated in this file: " + email);
       }
       seenEmails.add(email);
     }
 
     if (role && !roleNames.has(normalizeValue(role)) && !roleKeys.has(normalizeValue(role))) {
-      errors.push(`Role not found: ${role}`);
+      const selection = getResolutionSelection(resolutionSelections, "roles", role);
+      if (!resolutionGroupKeys.has("roles") || !selection.action || (selection.action === "map" && !selection.targetValue)) {
+        errors.push("Role requires resolution: " + role);
+      }
     }
 
     for (const department of splitMultiValue(mapped.get("scopes") ?? "")) {
       if (!departmentLabels.has(normalizeValue(department))) {
-        errors.push(`Department not found: ${department}`);
+        const selection = getResolutionSelection(resolutionSelections, "scopes", department);
+        if (selection.action === "skip") {
+          warnings.push("Department will be skipped: " + department);
+        } else if (!resolutionGroupKeys.has("scopes") || !selection.action || (selection.action === "map" && !selection.targetValue)) {
+          errors.push("Department requires resolution: " + department);
+        }
       }
     }
 
     if (isActive && parseBooleanish(isActive) === null) {
-      errors.push(`Active value is invalid: ${isActive}`);
+      errors.push("Active value is invalid: " + isActive);
     }
 
     if (errors.length > 0) {
@@ -258,11 +519,14 @@ function buildUserValidation(state: ParsedImportState, references: ImportExportR
     } else {
       validRows += 1;
     }
+
+    if (warnings.length > 0) {
+      rowWarnings.push({ rowNumber, messages: warnings });
+    }
   });
 
-  return { globalErrors, rowErrors, rowWarnings, validRows };
+  return { globalErrors, rowErrors, rowWarnings, validRows, resolutionGroups, resolutionSummary };
 }
-
 function ImportCard({
   kind,
   title,
@@ -286,14 +550,29 @@ function ImportCard({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddMapping, setShowAddMapping] = useState(false);
   const [selectedHeaderToAdd, setSelectedHeaderToAdd] = useState("");
+  const [resolutionSelections, setResolutionSelections] = useState<ResolutionSelections>({});
 
   const requiredFields = useMemo(() => fields.filter((field) => field.required), [fields]);
   const optionalFields = useMemo(() => fields.filter((field) => !field.required), [fields]);
 
+  const resolutionGroups = useMemo(() => {
+    if (!state) return [];
+    return kind === "assets" ? buildAssetResolutionGroups(state, references) : buildUserResolutionGroups(state, references);
+  }, [kind, references, state]);
+
+  useEffect(() => {
+    setResolutionSelections((current) => {
+      const next = reconcileResolutionSelections(current, resolutionGroups);
+      return areResolutionSelectionsEqual(current, next) ? current : next;
+    });
+  }, [resolutionGroups]);
+
   const validation = useMemo(() => {
     if (!state) return null;
-    return kind === "assets" ? buildAssetValidation(state, references) : buildUserValidation(state, references);
-  }, [kind, references, state]);
+    return kind === "assets"
+      ? buildAssetValidation(state, references, resolutionGroups, resolutionSelections)
+      : buildUserValidation(state, references, resolutionGroups, resolutionSelections);
+  }, [kind, references, resolutionGroups, resolutionSelections, state]);
 
   const requiredMappingRows = useMemo(() => {
     if (!state) return [];
@@ -367,6 +646,7 @@ function ImportCard({
     });
     setImportSummary(null);
     setSubmitError(null);
+    setResolutionSelections({});
     setShowAddMapping(false);
     setSelectedHeaderToAdd("");
   }
@@ -392,6 +672,7 @@ function ImportCard({
     });
     setImportSummary(null);
     setSubmitError(null);
+
   }
 
   function updateOptionalField(columnIndex: number, nextFieldId: string) {
@@ -412,6 +693,7 @@ function ImportCard({
     });
     setImportSummary(null);
     setSubmitError(null);
+
   }
 
   function removeOptionalMapping(columnIndex: number) {
@@ -427,6 +709,7 @@ function ImportCard({
     });
     setImportSummary(null);
     setSubmitError(null);
+
   }
 
   function resetMappings() {
@@ -440,6 +723,7 @@ function ImportCard({
     });
     setImportSummary(null);
     setSubmitError(null);
+    setResolutionSelections({});
     setShowAddMapping(false);
     setSelectedHeaderToAdd("");
   }
@@ -471,6 +755,7 @@ function ImportCard({
     });
     setImportSummary(null);
     setSubmitError(null);
+
     setShowAddMapping(false);
     setSelectedHeaderToAdd("");
   }
@@ -487,6 +772,99 @@ function ImportCard({
     return optionalFields.filter((field) => !usedFieldIds.has(field.id) || state.columns[columnIndex]?.fieldId === field.id);
   }
 
+  function updateResolutionSelection(groupKey: string, sourceValue: string, next: Partial<ResolutionSelection>) {
+    setResolutionSelections((current) => {
+      const currentSelection = getResolutionSelection(current, groupKey, sourceValue);
+
+      return {
+        ...current,
+        [getResolutionSelectionKey(groupKey, sourceValue)]: {
+          action: next.action ?? currentSelection.action,
+          targetValue: next.targetValue ?? currentSelection.targetValue,
+        },
+      };
+    });
+    setImportSummary(null);
+    setSubmitError(null);
+  }
+
+  function selectAllCategoryCreates(values: string[]) {
+    setResolutionSelections((current) => {
+      const next = { ...current };
+
+      for (const value of values) {
+        const existingSelection = getResolutionSelection(current, "categories", value);
+        if (existingSelection.action === "map" || existingSelection.action === "skip") {
+          continue;
+        }
+
+        next[getResolutionSelectionKey("categories", value)] = {
+          action: "create",
+          targetValue: "",
+        };
+      }
+
+      return next;
+    });
+    setImportSummary(null);
+    setSubmitError(null);
+  }
+
+  function buildResolutionPayload() {
+    if (kind === "assets") {
+      const payload: AssetImportResolutions = {};
+
+      for (const group of resolutionGroups) {
+        const entries = group.values.reduce<ImportResolutionEntry[]>((accumulator, value) => {
+          const selection = getResolutionSelection(resolutionSelections, group.key, value);
+
+          if (!selection.action) {
+            return accumulator;
+          }
+
+          accumulator.push({
+            sourceValue: value,
+            action: selection.action,
+            targetValue: selection.targetValue || undefined,
+          });
+
+          return accumulator;
+        }, []);
+
+        if (entries.length > 0 && (group.key === "categories" || group.key === "statuses" || group.key === "scopes")) {
+          payload[group.key] = entries;
+        }
+      }
+
+      return payload;
+    }
+
+    const payload: UserImportResolutions = {};
+
+    for (const group of resolutionGroups) {
+      const entries = group.values.reduce<ImportResolutionEntry[]>((accumulator, value) => {
+        const selection = getResolutionSelection(resolutionSelections, group.key, value);
+
+        if (!selection.action) {
+          return accumulator;
+        }
+
+        accumulator.push({
+          sourceValue: value,
+          action: selection.action,
+          targetValue: selection.targetValue || undefined,
+        });
+
+        return accumulator;
+      }, []);
+
+      if (entries.length > 0 && (group.key === "roles" || group.key === "scopes")) {
+        payload[group.key] = entries;
+      }
+    }
+
+    return payload;
+  }
   async function handleImport() {
     if (!state || !validation) return;
     setIsSubmitting(true);
@@ -497,7 +875,7 @@ function ImportCard({
       const response = await fetch(`/api/settings/import/${kind}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ columns: state.columns, rows: nonBlankRows(state.rows) }),
+        body: JSON.stringify({ columns: state.columns, rows: nonBlankRows(state.rows), resolutions: buildResolutionPayload() }),
       });
 
       const data = await response.json();
@@ -523,7 +901,7 @@ function ImportCard({
               <p className="text-xs text-slate-500 dark:text-slate-400">{state.columns.length} column(s) detected, {nonBlankRows(state.rows).length} data row(s).</p>
             </div>
             <div className="flex flex-wrap items-center gap-3 justify-start lg:justify-end">
-              <Button onClick={() => { setState(null); setImportSummary(null); setSubmitError(null); setShowAddMapping(false); setSelectedHeaderToAdd(""); }} type="button" variant="ghost">Choose another file</Button>
+              <Button onClick={() => { setState(null); setImportSummary(null); setSubmitError(null); setShowAddMapping(false); setSelectedHeaderToAdd(""); setResolutionSelections({}); }} type="button" variant="ghost">Choose another file</Button>
             </div>
           </div>
 
@@ -545,15 +923,25 @@ function ImportCard({
             visibleOptionalRows={visibleOptionalRows}
           />
 
+          {validation && validation.resolutionGroups.length > 0 ? (
+            <MissingResolutionSection
+              groups={validation.resolutionGroups}
+              onSelectAllCategoryCreates={selectAllCategoryCreates}
+              onUpdateSelection={updateResolutionSelection}
+              selections={resolutionSelections}
+              summary={validation.resolutionSummary}
+            />
+          ) : null}
+
           {validation ? (
             <ValidationSummary
               actionBar={
-                <div className="sticky bottom-4 z-10 rounded-2xl border border-[#ece7df] bg-white/95 p-4 shadow-panel backdrop-blur dark:border-[#4b5255] dark:bg-[#2f3437]/95">
+                <div className="sticky bottom-0 z-10 rounded-2xl border border-[#ece7df] bg-white/95 p-4 shadow-panel backdrop-blur dark:border-[#4b5255] dark:bg-[#2f3437]/95">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <p className="text-sm text-slate-500 dark:text-slate-400">Import only creates new records. Rows with blocking issues are skipped.</p>
                     <div className="flex flex-wrap items-center gap-3">
                       <Button className="min-w-36" onClick={resetMappings} type="button" variant="secondary">Reset mapping</Button>
-                      <Button disabled={isSubmitting || validation.globalErrors.length > 0 || validation.rowErrors.length > 0 || validation.validRows === 0} onClick={handleImport} type="button">{isSubmitting ? "Importing..." : `Confirm import ${validation.validRows} row${validation.validRows === 1 ? "" : "s"}`}</Button>
+                      <Button disabled={isSubmitting || validation.globalErrors.length > 0 || validation.rowErrors.length > 0 || validation.validRows === 0 || validation.resolutionSummary.unresolvedCount > 0} onClick={handleImport} type="button">{isSubmitting ? "Importing..." : `Confirm import ${validation.validRows} row${validation.validRows === 1 ? "" : "s"}`}</Button>
                     </div>
                   </div>
                 </div>
@@ -573,13 +961,258 @@ function ImportCard({
   );
 }
 
-export function ImportExportPanel({ references }: ImportExportPanelProps) {
+type ClearActionKind = "assets" | "users";
+
+type ClearResult = {
+  tone: "success" | "error";
+  message: string;
+};
+
+function ClearActionCard({
+  actionLabel,
+  description,
+  onOpen,
+  phrase,
+  recordCount,
+}: {
+  actionLabel: string;
+  description: string;
+  onOpen: () => void;
+  phrase: string;
+  recordCount: number;
+}) {
   return (
-    <div className="space-y-6">
-      <ImportCard description="Export assets to CSV or import new assets through a header-mapping workflow with validation, preview, and confirmation." exportHref="/api/settings/export/assets" fields={ASSET_IMPORT_FIELDS} importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically." kind="assets" references={references} title="Assets CSV" />
-      <ImportCard description="Export users to CSV or import new users with role and department mapping before confirmation." exportHref="/api/settings/export/users" fields={USER_IMPORT_FIELDS} kind="users" references={references} title="Users CSV" />
+    <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 dark:border-rose-900/60 dark:bg-rose-950/20">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-rose-900 dark:text-rose-100">{actionLabel}</h3>
+          <p className="mt-2 text-sm text-rose-800/90 dark:text-rose-200">{description}</p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-300">Current records: {recordCount} | Type {phrase} to confirm</p>
+        </div>
+        <Button
+          className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-600 dark:text-white dark:hover:bg-rose-500"
+          onClick={onOpen}
+          type="button"
+        >
+          {actionLabel}
+        </Button>
+      </div>
     </div>
   );
 }
+
+function ClearDataDialog({
+  confirmationPhrase,
+  error,
+  isSubmitting,
+  onClose,
+  onConfirm,
+  onTypedValueChange,
+  title,
+  typedValue,
+  warning,
+}: {
+  confirmationPhrase: string;
+  error: string | null;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  onTypedValueChange: (value: string) => void;
+  title: string;
+  typedValue: string;
+  warning: string;
+}) {
+  const canConfirm = typedValue.trim() === confirmationPhrase && !isSubmitting;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <button
+        aria-label="Close confirmation dialog"
+        className="absolute inset-0 bg-slate-950/60"
+        disabled={isSubmitting}
+        onClick={onClose}
+        type="button"
+      />
+      <div className="relative z-10 w-full max-w-lg rounded-[28px] border border-[#4b5255] bg-[#2f3437] p-6 shadow-[0_24px_48px_rgba(0,0,0,0.38)]">
+        <p className="text-sm uppercase tracking-[0.24em] text-rose-300">Destructive action</p>
+        <h2 className="mt-3 text-2xl font-semibold text-slate-100">{title}</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{warning}</p>
+        <div className="mt-4 rounded-2xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">
+          Type <span className="font-semibold">{confirmationPhrase}</span> to continue.
+        </div>
+        <label className="mt-4 block space-y-2">
+          <span className="text-sm font-medium text-slate-200">Confirmation phrase</span>
+          <input
+            className={fieldClass}
+            disabled={isSubmitting}
+            onChange={(event) => onTypedValueChange(event.target.value)}
+            spellCheck={false}
+            type="text"
+            value={typedValue}
+          />
+        </label>
+        {error ? <div className="mt-4 rounded-2xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">{error}</div> : null}
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+          <Button disabled={isSubmitting} onClick={onClose} type="button" variant="ghost">Cancel</Button>
+          <Button
+            className="bg-rose-600 text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-rose-900/50 dark:bg-rose-600 dark:text-white dark:hover:bg-rose-500"
+            disabled={!canConfirm}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isSubmitting ? "Clearing..." : title}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+export function ImportExportPanel({ references }: ImportExportPanelProps) {
+  const router = useRouter();
+  const [pendingClearKind, setPendingClearKind] = useState<ClearActionKind | null>(null);
+  const [confirmationValue, setConfirmationValue] = useState("");
+  const [clearError, setClearError] = useState<string | null>(null);
+  const [clearResult, setClearResult] = useState<ClearResult | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const clearActions = useMemo(() => ([
+    {
+      kind: "assets" as const,
+      actionLabel: "Clear Assets",
+      confirmationPhrase: "CLEAR ASSETS",
+      warning: "This permanently removes every asset record from the app. Related asset-to-department links are removed first so the database stays consistent.",
+    },
+    {
+      kind: "users" as const,
+      actionLabel: "Clear Users",
+      confirmationPhrase: "CLEAR USERS",
+      warning: "This permanently removes every user record from the app. User sessions, role links, and department links are deleted, assigned assets are unassigned, and audit log actor references are detached before users are removed.",
+    },
+  ]), []);
+
+  const pendingAction = clearActions.find((action) => action.kind === pendingClearKind) ?? null;
+
+  async function handleConfirmClear() {
+    if (!pendingAction) {
+      return;
+    }
+
+    setIsClearing(true);
+    setClearError(null);
+    setClearResult(null);
+
+    try {
+      const response = await fetch("/api/settings/clear/" + pendingAction.kind, { method: "POST" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? ("Failed to clear " + pendingAction.kind + "."));
+      }
+
+      if (pendingAction.kind === "assets") {
+        const assetCount = data.summary.assetCount as number;
+        const detachedAssetScopeCount = data.summary.detachedAssetScopeCount as number;
+        setClearResult({
+          tone: "success",
+          message: "Cleared " + assetCount + " asset record" + (assetCount === 1 ? "" : "s") + ". Removed " + detachedAssetScopeCount + " related asset-to-department link" + (detachedAssetScopeCount === 1 ? "" : "s") + ".",
+        });
+        setPendingClearKind(null);
+        setConfirmationValue("");
+        window.setTimeout(() => {
+          router.refresh();
+        }, 1200);
+      } else {
+        const userCount = data.summary.userCount as number;
+        const clearedAssetAssignmentCount = data.summary.clearedAssetAssignmentCount as number;
+        const detachedAuditEntryCount = data.summary.detachedAuditEntryCount as number;
+        setClearResult({
+          tone: "success",
+          message: "Cleared " + userCount + " user record" + (userCount === 1 ? "" : "s") + ". Cleared " + clearedAssetAssignmentCount + " asset assignment" + (clearedAssetAssignmentCount === 1 ? "" : "s") + " and detached " + detachedAuditEntryCount + " audit actor reference" + (detachedAuditEntryCount === 1 ? "" : "s") + ". Redirecting to login...",
+        });
+        setPendingClearKind(null);
+        setConfirmationValue("");
+        window.setTimeout(() => {
+          window.location.href = "/login";
+        }, 1400);
+      }
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : ("Failed to clear " + pendingAction.kind + "."));
+    } finally {
+      setIsClearing(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="min-w-0 space-y-6">
+        <ImportCard description="Export assets to CSV or import new assets through a header-mapping workflow with validation, preview, and confirmation." exportHref="/api/settings/export/assets" fields={ASSET_IMPORT_FIELDS} importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically." kind="assets" references={references} title="Assets CSV" />
+        <ImportCard description="Export users to CSV or import new users with role and department mapping before confirmation." exportHref="/api/settings/export/users" fields={USER_IMPORT_FIELDS} kind="users" references={references} title="Users CSV" />
+
+        <section className={cardClass}>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-100">Administrative clear data</h3>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">These actions permanently remove records from the app and are intentionally separated from the normal import/export workflow.</p>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            {clearResult ? (
+              <div className={clearResult.tone === "success"
+                ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+                : "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"}
+              >
+                {clearResult.message}
+              </div>
+            ) : null}
+
+            <ClearActionCard
+              actionLabel="Clear Assets"
+              description="Delete asset records only. Categories, locations, statuses, departments, settings, templates, and other setup data remain intact."
+              onOpen={() => {
+                setPendingClearKind("assets");
+                setConfirmationValue("");
+                setClearError(null);
+              }}
+              phrase="CLEAR ASSETS"
+              recordCount={references.assets.existingAssetTags.length}
+            />
+            <ClearActionCard
+              actionLabel="Clear Users"
+              description="Delete user records only. Assets remain, but any user assignment is cleared first and audit history keeps detached actor references instead of being deleted."
+              onOpen={() => {
+                setPendingClearKind("users");
+                setConfirmationValue("");
+                setClearError(null);
+              }}
+              phrase="CLEAR USERS"
+              recordCount={references.users.existingEmails.length}
+            />
+          </div>
+        </section>
+      </div>
+
+      {pendingAction ? (
+        <ClearDataDialog
+          confirmationPhrase={pendingAction.confirmationPhrase}
+          error={clearError}
+          isSubmitting={isClearing}
+          onClose={() => {
+            if (isClearing) {
+              return;
+            }
+            setPendingClearKind(null);
+            setConfirmationValue("");
+            setClearError(null);
+          }}
+          onConfirm={handleConfirmClear}
+          onTypedValueChange={setConfirmationValue}
+          title={pendingAction.actionLabel}
+          typedValue={confirmationValue}
+          warning={pendingAction.warning}
+        />
+      ) : null}
+    </>
+  );
+}
+
 
 

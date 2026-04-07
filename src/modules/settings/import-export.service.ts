@@ -1,16 +1,28 @@
 import { createAsset } from "@/modules/assets/asset.service";
-import { createUser } from "@/modules/users/user.service";
-import { ensureDefaultAssetStatuses } from "@/modules/settings/settings.service";
+import { createCategory } from "@/modules/categories/category.service";
+import { createScope } from "@/modules/scopes/scope.service";
+import {
+  buildCategoryDecisionMap,
+  buildCategoryReferenceLabel,
+  resolveCategoryPathForImport,
+} from "@/modules/settings/category-import-paths";
+import { ensureDefaultAssetStatuses, upsertAssetStatus } from "@/modules/settings/settings.service";
 import {
   formatDateForCsv,
   isBlankRow,
   parseBooleanish,
   splitMultiValue,
   stringifyCsv,
+  type AssetImportResolutions,
   type ImportColumnMapping,
   type ImportExportReferenceData,
+  type ImportResolutionEntry,
+  type UserImportResolutions,
 } from "@/modules/settings/import-export.shared";
+import { createUser } from "@/modules/users/user.service";
 import { db } from "@/services/database";
+
+export { clearAssetsData, clearUsersData } from "@/modules/settings/reset-management.service";
 
 type RowOutcome = {
   rowNumber: number;
@@ -113,6 +125,48 @@ function validateUniqueMappings(columns: ImportColumnMapping[]) {
   }
 }
 
+function buildResolutionMap(entries?: ImportResolutionEntry[]) {
+  const map = new Map<string, ImportResolutionEntry>();
+
+  for (const entry of entries ?? []) {
+    map.set(normalizeValue(entry.sourceValue), entry);
+  }
+
+  return map;
+}
+
+function slugifyRoleKey(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_") || "IMPORTED_ROLE";
+}
+
+async function createImportedRole(name: string) {
+  const trimmedName = name.trim();
+  const baseKey = slugifyRoleKey(trimmedName);
+  let key = baseKey;
+  let suffix = 2;
+
+  while (await db.role.findUnique({ where: { key }, select: { id: true } })) {
+    key = `${baseKey}_${suffix}`;
+    suffix += 1;
+  }
+
+  return db.role.create({
+    data: {
+      key,
+      name: trimmedName,
+    },
+    select: {
+      key: true,
+      name: true,
+    },
+  });
+}
+
 export async function getImportExportReferenceData(): Promise<ImportExportReferenceData> {
   await ensureDefaultAssetStatuses();
 
@@ -128,7 +182,12 @@ export async function getImportExportReferenceData(): Promise<ImportExportRefere
 
   return {
     assets: {
-      categories: categories.map((item) => ({ id: item.id, label: buildTreeLabel(categories, item.id) ?? item.name })),
+      categories: categories.map((item) => ({
+        id: item.id,
+        label: buildCategoryReferenceLabel(categories, item.id) ?? item.name,
+        name: item.name,
+        parentId: item.parentId,
+      })),
       departments: scopes.map((item) => ({ id: item.id, label: item.name })),
       locations: locations.map((item) => ({ id: item.id, label: buildTreeLabel(locations, item.id) ?? item.name })),
       statuses: statuses.map((item) => ({ id: item.id, label: item.name })),
@@ -150,6 +209,8 @@ export async function exportAssetsCsv() {
     select: {
       assetTag: true,
       name: true,
+      make: true,
+      model: true,
       serialNumber: true,
       notes: true,
       purchaseDate: true,
@@ -171,6 +232,8 @@ export async function exportAssetsCsv() {
   const headers = [
     "Asset Tag",
     "Asset Name",
+    "Make",
+    "Model",
     "Status",
     "Assigned User",
     "Assigned User Email",
@@ -186,6 +249,8 @@ export async function exportAssetsCsv() {
   const rows = assets.map((asset) => [
     asset.assetTag,
     asset.name,
+    asset.make ?? "",
+    asset.model ?? "",
     asset.status?.name ?? "",
     asset.assignedUser?.name ?? "",
     asset.assignedUser?.email ?? "",
@@ -245,11 +310,36 @@ export async function importAssetsFromRows(input: {
   columns: ImportColumnMapping[];
   rows: string[][];
   actorUserId: string;
+  resolutions?: AssetImportResolutions;
 }) {
   validateUniqueMappings(input.columns);
 
+  const mappedFieldIds = new Set(input.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string));
+  if (!mappedFieldIds.has("assetTag")) {
+    throw new Error("Missing required asset import mapping: assetTag");
+  }
+
   const references = await getImportExportReferenceData();
-  const categoryLookup = buildLookupByLabel(references.assets.categories);
+  const categoryResolutionMap = buildCategoryDecisionMap(input.resolutions?.categories);
+  const statusResolutionMap = buildResolutionMap(input.resolutions?.statuses);
+  const scopeResolutionMap = buildResolutionMap(input.resolutions?.scopes);
+
+  for (const entry of input.resolutions?.statuses ?? []) {
+    const normalized = normalizeValue(entry.sourceValue);
+    if (entry.action !== "create" || !normalized) continue;
+    if (references.assets.statuses.some((item) => normalizeValue(item.label) === normalized)) continue;
+    const created = await upsertAssetStatus({ name: entry.sourceValue.trim(), color: "#94A3B8" });
+    references.assets.statuses.push({ id: created.id, label: created.name });
+  }
+
+  for (const entry of input.resolutions?.scopes ?? []) {
+    const normalized = normalizeValue(entry.sourceValue);
+    if (entry.action !== "create" || !normalized) continue;
+    if (references.assets.departments.some((item) => normalizeValue(item.label) === normalized)) continue;
+    const created = await createScope({ name: entry.sourceValue.trim() });
+    references.assets.departments.push({ id: created.id, label: created.name });
+  }
+
   const locationLookup = buildLookupByLabel(references.assets.locations);
   const statusLookup = buildLookupByLabel(references.assets.statuses);
   const departmentLookup = buildLookupByLabel(references.assets.departments);
@@ -262,14 +352,6 @@ export async function importAssetsFromRows(input: {
 
   const existingAssetTags = new Set(references.assets.existingAssetTags.map((tag) => tag.toUpperCase()));
   const seenAssetTags = new Set<string>();
-  const requiredMappings = new Set(["name"]);
-  const mappedFieldIds = new Set(input.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string));
-  for (const requiredField of requiredMappings) {
-    if (!mappedFieldIds.has(requiredField)) {
-      throw new Error(`Missing required asset import mapping: ${requiredField}`);
-    }
-  }
-
   const nonBlankRows = input.rows.filter((row) => !isBlankRow(row));
   const summary: ImportSummary = {
     totalRowsRead: nonBlankRows.length,
@@ -289,14 +371,16 @@ export async function importAssetsFromRows(input: {
     const messages: string[] = [];
 
     const name = mapped.get("name") ?? "";
+    const make = mapped.get("make") ?? "";
+    const model = mapped.get("model") ?? "";
     const assetTag = (mapped.get("assetTag") ?? "").trim().toUpperCase();
     const serialNumber = mapped.get("serialNumber") ?? "";
     const notes = mapped.get("notes") ?? "";
     const purchaseDate = normalizeDateInput(mapped.get("purchaseDate") ?? "");
     const warrantyExpiry = normalizeDateInput(mapped.get("warrantyExpiry") ?? "");
 
-    if (!name.trim()) {
-      messages.push("Asset Name is required.");
+    if (!assetTag) {
+      messages.push("Asset Tag is required.");
     }
 
     if ((mapped.get("purchaseDate") ?? "").trim() && purchaseDate === null) {
@@ -317,14 +401,28 @@ export async function importAssetsFromRows(input: {
     }
 
     const categoryValue = mapped.get("category") ?? "";
-    const category = categoryValue ? resolveLookup(categoryValue, categoryLookup) : null;
-    if (categoryValue && !category) {
-      messages.push(`Category not found: ${categoryValue}`);
+    const categoryResult = await resolveCategoryPathForImport(
+      categoryValue,
+      references.assets.categories,
+      categoryResolutionMap,
+      async ({ name, parentId }) => createCategory({ name, parentId: parentId ?? undefined }),
+    );
+    const category = categoryResult.status === "resolved" ? categoryResult.category : null;
+    if (categoryValue && categoryResult.status === "skipped") {
+      messages.push(`Warning: category skipped (${categoryResult.skippedPath}).`);
+    } else if (categoryValue && categoryResult.status === "unresolved") {
+      messages.push(`Category not found: ${categoryResult.missingPath}`);
     }
 
     const statusValue = mapped.get("status") ?? "";
-    const status = statusValue ? resolveLookup(statusValue, statusLookup) : null;
-    if (statusValue && !status) {
+    const statusResolution = statusResolutionMap.get(normalizeValue(statusValue));
+    let status = statusValue ? resolveLookup(statusValue, statusLookup) : null;
+    if (!status && statusResolution?.action === "map" && statusResolution.targetValue) {
+      status = references.assets.statuses.find((item) => item.id === statusResolution.targetValue) ?? null;
+    }
+    if (statusValue && !status && statusResolution?.action === "skip") {
+      messages.push(`Warning: status skipped (${statusValue}).`);
+    } else if (statusValue && !status) {
       messages.push(`Status not found: ${statusValue}`);
     }
 
@@ -337,11 +435,16 @@ export async function importAssetsFromRows(input: {
     const scopeValues = splitMultiValue(mapped.get("scopes") ?? "");
     const scopeIds: string[] = [];
     for (const value of scopeValues) {
+      const scopeResolution = scopeResolutionMap.get(normalizeValue(value));
       const scope = resolveLookup(value, departmentLookup);
-      if (!scope) {
-        messages.push(`Department not found: ${value}`);
-      } else {
+      if (scope) {
         scopeIds.push(scope.id);
+      } else if (scopeResolution?.action === "map" && scopeResolution.targetValue) {
+        scopeIds.push(scopeResolution.targetValue);
+      } else if (scopeResolution?.action === "skip") {
+        messages.push(`Warning: department skipped (${value}).`);
+      } else {
+        messages.push(`Department not found: ${value}`);
       }
     }
 
@@ -370,6 +473,8 @@ export async function importAssetsFromRows(input: {
     try {
       await createAsset({
         name,
+        make,
+        model,
         assetTag: assetTag || undefined,
         serialNumber,
         notes,
@@ -379,7 +484,7 @@ export async function importAssetsFromRows(input: {
         statusId: status?.id,
         assignedUserId,
         assignedLocationId: location?.id,
-        scopeIds,
+        scopeIds: Array.from(new Set(scopeIds)),
         actorUserId: input.actorUserId,
       });
 
@@ -411,10 +516,30 @@ export async function importUsersFromRows(input: {
   columns: ImportColumnMapping[];
   rows: string[][];
   actorUserId: string;
+  resolutions?: UserImportResolutions;
 }) {
   validateUniqueMappings(input.columns);
 
   const references = await getImportExportReferenceData();
+  const roleResolutionMap = buildResolutionMap(input.resolutions?.roles);
+  const scopeResolutionMap = buildResolutionMap(input.resolutions?.scopes);
+
+  for (const entry of input.resolutions?.roles ?? []) {
+    const normalized = normalizeValue(entry.sourceValue);
+    if (entry.action !== "create" || !normalized) continue;
+    if (references.users.roles.some((role) => normalizeValue(role.name) === normalized || normalizeValue(role.key) === normalized)) continue;
+    const created = await createImportedRole(entry.sourceValue);
+    references.users.roles.push(created);
+  }
+
+  for (const entry of input.resolutions?.scopes ?? []) {
+    const normalized = normalizeValue(entry.sourceValue);
+    if (entry.action !== "create" || !normalized) continue;
+    if (references.users.departments.some((item) => normalizeValue(item.label) === normalized)) continue;
+    const created = await createScope({ name: entry.sourceValue.trim() });
+    references.users.departments.push({ id: created.id, label: created.name });
+  }
+
   const roleByKey = new Map(references.users.roles.map((role) => [role.key.toLowerCase(), role]));
   const roleByName = new Map(references.users.roles.map((role) => [role.name.toLowerCase(), role]));
   const departmentLookup = buildLookupByLabel(references.users.departments);
@@ -466,7 +591,11 @@ export async function importUsersFromRows(input: {
       }
     }
 
-    const resolvedRole = roleValue ? roleByKey.get(roleValue.toLowerCase()) ?? roleByName.get(roleValue.toLowerCase()) : roleByKey.get("viewer");
+    const roleResolution = roleResolutionMap.get(normalizeValue(roleValue));
+    let resolvedRole = roleValue ? roleByKey.get(roleValue.toLowerCase()) ?? roleByName.get(roleValue.toLowerCase()) : roleByKey.get("viewer");
+    if (!resolvedRole && roleResolution?.action === "map" && roleResolution.targetValue) {
+      resolvedRole = roleByKey.get(roleResolution.targetValue.toLowerCase());
+    }
     if (roleValue && !resolvedRole) {
       messages.push(`Role not found: ${roleValue}`);
     }
@@ -474,11 +603,16 @@ export async function importUsersFromRows(input: {
     const scopeValues = splitMultiValue(mapped.get("scopes") ?? "");
     const scopeIds: string[] = [];
     for (const value of scopeValues) {
+      const scopeResolution = scopeResolutionMap.get(normalizeValue(value));
       const scope = resolveLookup(value, departmentLookup);
-      if (!scope) {
-        messages.push(`Department not found: ${value}`);
-      } else {
+      if (scope) {
         scopeIds.push(scope.id);
+      } else if (scopeResolution?.action === "map" && scopeResolution.targetValue) {
+        scopeIds.push(scopeResolution.targetValue);
+      } else if (scopeResolution?.action === "skip") {
+        messages.push(`Warning: department skipped (${value}).`);
+      } else {
+        messages.push(`Department not found: ${value}`);
       }
     }
 
@@ -487,7 +621,8 @@ export async function importUsersFromRows(input: {
       messages.push(`Active value is invalid: ${isActiveValue}`);
     }
 
-    if (messages.length > 0) {
+    const blockingMessages = messages.filter((message) => !message.startsWith("Warning:"));
+    if (blockingMessages.length > 0) {
       summary.rowsSkipped += 1;
       summary.rowResults.push({ rowNumber, status: "skipped", messages });
       continue;
@@ -501,20 +636,21 @@ export async function importUsersFromRows(input: {
         email,
         allowLogin: false,
         roleKey: resolvedRole?.key ?? "VIEWER",
-        scopeIds,
+        scopeIds: Array.from(new Set(scopeIds)),
         isActive: Boolean(isActiveParsed),
       });
 
       existingEmails.add(email);
       seenEmails.add(email);
       summary.rowsImported += 1;
-      summary.rowResults.push({ rowNumber, status: "imported", messages: ["Imported successfully."] });
+      summary.rowResults.push({ rowNumber, status: "imported", messages: messages.length > 0 ? messages : ["Imported successfully."] });
     } catch (error) {
       summary.rowsFailed += 1;
       const message = error instanceof Error ? error.message : "Unexpected import error.";
-      summary.rowResults.push({ rowNumber, status: "failed", messages: [message] });
+      summary.rowResults.push({ rowNumber, status: "failed", messages: [message, ...messages] });
     }
   }
 
   return summary;
 }
+

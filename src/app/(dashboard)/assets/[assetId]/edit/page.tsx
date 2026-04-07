@@ -2,7 +2,6 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
-import { insetCardClassName } from "@/components/layout/inset-card";
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
@@ -52,6 +51,8 @@ async function updateAssetAction(formData: FormData) {
   await updateAsset({
     assetId,
     name: formData.get("name")?.toString() ?? "",
+    make: formData.get("make")?.toString() ?? "",
+    model: formData.get("model")?.toString() ?? "",
     assetTag: formData.get("assetTag")?.toString() ?? "",
     serialNumber: formData.get("serialNumber")?.toString() ?? "",
     notes: formData.get("notes")?.toString() ?? "",
@@ -121,11 +122,12 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
           <AssetForm
             action={updateAssetAction}
             categories={referenceData.categories}
-            fieldClass={textFieldClassName}
             hiddenFields={<><input name="assetId" type="hidden" value={asset.id} /><input name="returnTo" type="hidden" value={returnTo} /></>}
             initialValue={{
               id: asset.id,
               name: asset.name,
+              make: asset.make,
+              model: asset.model,
               assetTag: asset.assetTag,
               serialNumber: asset.serialNumber,
               notes: asset.notes,
@@ -141,7 +143,6 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
             mode="edit"
             scopes={referenceData.scopes}
             statuses={referenceData.statuses}
-            subpanelClass={insetCardClassName}
             submitLabel="Save asset"
             users={referenceData.users}
           />

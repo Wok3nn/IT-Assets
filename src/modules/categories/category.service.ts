@@ -14,11 +14,14 @@ const categoryAppearanceSchema = z.object({
   colorMode: z.enum(["border", "fill", "none"]).default("none"),
 });
 
+const optionalLabelTemplateSchema = z.union([z.string().trim().cuid(), z.literal("")]).optional();
+
 const createCategorySchema = z.object({
   name: z.string().trim().min(2).max(80),
   parentId: z.string().trim().cuid().optional().nullable(),
   colorHex: z.union([colorHexSchema, z.literal("")]).optional(),
   colorMode: z.enum(["border", "fill", "none"]).default("none"),
+  defaultLabelTemplateId: optionalLabelTemplateSchema,
 });
 
 const updateCategorySettingsSchema = z.object({
@@ -26,6 +29,7 @@ const updateCategorySettingsSchema = z.object({
   name: z.string().trim().min(2).max(80),
   colorHex: z.union([colorHexSchema, z.literal("")]).optional(),
   colorMode: z.enum(["border", "fill", "none"]).default("none"),
+  defaultLabelTemplateId: optionalLabelTemplateSchema,
 });
 
 function slugify(value: string) {
@@ -72,6 +76,93 @@ function parseAppearance(input: { colorHex?: string; colorMode?: "border" | "fil
   return { colorHex, colorMode };
 }
 
+function normalizeDefaultLabelTemplateId(value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+async function validateDefaultLabelTemplateId(defaultLabelTemplateId: string | null) {
+  if (!defaultLabelTemplateId) {
+    return null;
+  }
+
+  const template = await db.labelTemplate.findUnique({
+    where: { id: defaultLabelTemplateId },
+    select: {
+      id: true,
+      isEnabled: true,
+    },
+  });
+
+  if (!template || !template.isEnabled) {
+    throw new Error("Selected default label template is not available.");
+  }
+
+  return template.id;
+}
+
+async function getBranchAssetCountMap(categoryIds: string[]) {
+  if (categoryIds.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const [categories, assetCounts] = await Promise.all([
+    db.category.findMany({
+      select: {
+        id: true,
+        parentId: true,
+      },
+    }),
+    db.asset.groupBy({
+      by: ["categoryId"],
+      where: {
+        categoryId: {
+          not: null,
+        },
+      },
+      _count: {
+        categoryId: true,
+      },
+    }),
+  ]);
+
+  const childIdsByParent = new Map<string | null, string[]>();
+  for (const category of categories) {
+    const next = childIdsByParent.get(category.parentId) ?? [];
+    next.push(category.id);
+    childIdsByParent.set(category.parentId, next);
+  }
+
+  const directAssetCounts = new Map(
+    assetCounts
+      .filter((entry) => entry.categoryId)
+      .map((entry) => [entry.categoryId as string, entry._count.categoryId]),
+  );
+
+  const branchAssetCounts = new Map<string, number>();
+
+  function countBranchAssets(categoryId: string): number {
+    const cached = branchAssetCounts.get(categoryId);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    let total = directAssetCounts.get(categoryId) ?? 0;
+    for (const childId of childIdsByParent.get(categoryId) ?? []) {
+      total += countBranchAssets(childId);
+    }
+
+    branchAssetCounts.set(categoryId, total);
+    return total;
+  }
+
+  for (const categoryId of categoryIds) {
+    countBranchAssets(categoryId);
+  }
+
+  return branchAssetCounts;
+}
+
 async function getCategoryDepth(categoryId: string) {
   const categories = await db.category.findMany({
     select: {
@@ -92,8 +183,19 @@ async function getCategoryDepth(categoryId: string) {
   return depth;
 }
 
-export async function listTopLevelCategories() {
+export async function listAllCategories() {
   return db.category.findMany({
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+}
+
+export async function listTopLevelCategories() {
+  const categories = await db.category.findMany({
     where: {
       parentId: null,
     },
@@ -103,6 +205,7 @@ export async function listTopLevelCategories() {
       slug: true,
       colorHex: true,
       colorMode: true,
+      defaultLabelTemplateId: true,
       createdAt: true,
       _count: {
         select: {
@@ -113,10 +216,17 @@ export async function listTopLevelCategories() {
     },
     orderBy: [{ name: "asc" }],
   });
+
+  const branchAssetCounts = await getBranchAssetCountMap(categories.map((category) => category.id));
+
+  return categories.map((category) => ({
+    ...category,
+    branchAssetCount: branchAssetCounts.get(category.id) ?? 0,
+  }));
 }
 
 export async function getCategoryById(categoryId: string) {
-  return db.category.findUnique({
+  const category = await db.category.findUnique({
     where: {
       id: categoryId,
     },
@@ -127,6 +237,7 @@ export async function getCategoryById(categoryId: string) {
       parentId: true,
       colorHex: true,
       colorMode: true,
+      defaultLabelTemplateId: true,
       _count: {
         select: {
           children: true,
@@ -141,10 +252,21 @@ export async function getCategoryById(categoryId: string) {
       },
     },
   });
+
+  if (!category) {
+    return null;
+  }
+
+  const branchAssetCounts = await getBranchAssetCountMap([category.id]);
+
+  return {
+    ...category,
+    branchAssetCount: branchAssetCounts.get(category.id) ?? 0,
+  };
 }
 
 export async function listChildCategories(parentId: string) {
-  return db.category.findMany({
+  const categories = await db.category.findMany({
     where: {
       parentId,
     },
@@ -155,6 +277,7 @@ export async function listChildCategories(parentId: string) {
       parentId: true,
       colorHex: true,
       colorMode: true,
+      defaultLabelTemplateId: true,
       createdAt: true,
       parent: {
         select: {
@@ -171,6 +294,13 @@ export async function listChildCategories(parentId: string) {
     },
     orderBy: [{ name: "asc" }],
   });
+
+  const branchAssetCounts = await getBranchAssetCountMap(categories.map((category) => category.id));
+
+  return categories.map((category) => ({
+    ...category,
+    branchAssetCount: branchAssetCounts.get(category.id) ?? 0,
+  }));
 }
 
 export async function createCategory(input: {
@@ -178,12 +308,14 @@ export async function createCategory(input: {
   parentId?: string | null;
   colorHex?: string;
   colorMode?: "border" | "fill" | "none";
+  defaultLabelTemplateId?: string | null;
 }) {
   const parsed = createCategorySchema.parse({
     name: input.name,
     parentId: input.parentId || null,
     colorHex: input.colorHex ?? "",
     colorMode: input.colorMode ?? "none",
+    defaultLabelTemplateId: input.defaultLabelTemplateId ?? "",
   });
 
   if (parsed.parentId) {
@@ -208,6 +340,7 @@ export async function createCategory(input: {
 
   const slug = await generateUniqueSlug(parsed.name);
   const appearance = parseAppearance(parsed);
+  const defaultLabelTemplateId = await validateDefaultLabelTemplateId(normalizeDefaultLabelTemplateId(parsed.defaultLabelTemplateId));
 
   return db.category.create({
     data: {
@@ -216,6 +349,7 @@ export async function createCategory(input: {
       parentId: parsed.parentId,
       colorHex: appearance.colorHex,
       colorMode: appearance.colorMode,
+      defaultLabelTemplateId,
     },
   });
 }
@@ -225,12 +359,14 @@ export async function updateCategorySettings(input: {
   name: string;
   colorHex?: string;
   colorMode?: "border" | "fill" | "none";
+  defaultLabelTemplateId?: string | null;
 }) {
   const parsed = updateCategorySettingsSchema.parse({
     categoryId: input.categoryId,
     name: input.name,
     colorHex: input.colorHex ?? "",
     colorMode: input.colorMode ?? "none",
+    defaultLabelTemplateId: input.defaultLabelTemplateId ?? "",
   });
 
   const existingCategory = await db.category.findUnique({
@@ -249,6 +385,7 @@ export async function updateCategorySettings(input: {
 
   const appearance = parseAppearance(parsed);
   const slug = await generateUniqueSlug(parsed.name, parsed.categoryId);
+  const defaultLabelTemplateId = await validateDefaultLabelTemplateId(normalizeDefaultLabelTemplateId(parsed.defaultLabelTemplateId));
 
   return db.category.update({
     where: {
@@ -259,6 +396,7 @@ export async function updateCategorySettings(input: {
       slug,
       colorHex: appearance.colorHex,
       colorMode: appearance.colorMode,
+      defaultLabelTemplateId,
     },
   });
 }

@@ -2,18 +2,13 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { insetCardClassName } from "@/components/layout/inset-card";
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/session";
 import { AssetForm } from "@/modules/assets/asset-form";
-import {
-  createAsset,
-  getAssetById,
-  listAssetReferenceData,
-  type AssetSortOption,
-} from "@/modules/assets/asset.service";
+import { buildAssetsUrl, parseAssetsPage, parseAssetsPageSize, parseAssetsSort } from "@/modules/assets/assets-routing";
+import { createAsset, getAssetById, listAssetReferenceData } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
 type NewAssetPageProps = {
@@ -26,27 +21,12 @@ type NewAssetPageProps = {
     locationId?: string;
     userId?: string;
     sort?: string;
+    page?: string;
+    pageSize?: string;
   }>;
 };
 
-function parseSort(value?: string): AssetSortOption {
-  return value === "name-asc" || value === "tag-asc" || value === "purchase-desc" ? value : "updated-desc";
-}
-
-function buildAssetsUrl(options?: { q?: string | null; statusId?: string | null; categoryId?: string | null; scopeId?: string | null; locationId?: string | null; userId?: string | null; sort?: AssetSortOption | null; }) {
-  const params = new URLSearchParams();
-  if (options?.q) params.set("q", options.q);
-  if (options?.statusId) params.set("statusId", options.statusId);
-  if (options?.categoryId) params.set("categoryId", options.categoryId);
-  if (options?.scopeId) params.set("scopeId", options.scopeId);
-  if (options?.locationId) params.set("locationId", options.locationId);
-  if (options?.userId) params.set("userId", options.userId);
-  if (options?.sort && options.sort !== "updated-desc") params.set("sort", options.sort);
-  const query = params.toString();
-  return query ? `/assets?${query}` : "/assets";
-}
-
-function hiddenFilterFields(input: { q: string; statusId: string | null; categoryId: string | null; scopeId: string | null; locationId: string | null; userId: string | null; sort: AssetSortOption; }) {
+function hiddenFilterFields(input: { q: string; statusId: string | null; categoryId: string | null; scopeId: string | null; locationId: string | null; userId: string | null; sort: ReturnType<typeof parseAssetsSort>; page: number; pageSize: number; }) {
   return (
     <>
       <input name="q" type="hidden" value={input.q} />
@@ -56,6 +36,8 @@ function hiddenFilterFields(input: { q: string; statusId: string | null; categor
       <input name="locationIdFilter" type="hidden" value={input.locationId ?? ""} />
       <input name="userIdFilter" type="hidden" value={input.userId ?? ""} />
       <input name="sort" type="hidden" value={input.sort} />
+      <input name="page" type="hidden" value={String(input.page)} />
+      <input name="pageSize" type="hidden" value={String(input.pageSize)} />
     </>
   );
 }
@@ -67,6 +49,9 @@ async function createAssetAction(formData: FormData) {
 
   await createAsset({
     name: formData.get("name")?.toString() ?? "",
+    make: formData.get("make")?.toString() ?? "",
+    model: formData.get("model")?.toString() ?? "",
+    assetTag: formData.get("assetTag")?.toString() ?? "",
     serialNumber: formData.get("serialNumber")?.toString() ?? "",
     notes: formData.get("notes")?.toString() ?? "",
     purchaseDate: formData.get("purchaseDate")?.toString() ?? "",
@@ -80,7 +65,17 @@ async function createAssetAction(formData: FormData) {
   });
   revalidatePath("/assets");
   revalidatePath("/assets/new");
-  redirect(buildAssetsUrl({ q: formData.get("q")?.toString() || null, statusId: formData.get("statusIdFilter")?.toString() || null, categoryId: formData.get("categoryIdFilter")?.toString() || null, scopeId: formData.get("scopeIdFilter")?.toString() || null, locationId: formData.get("locationIdFilter")?.toString() || null, userId: formData.get("userIdFilter")?.toString() || null, sort: parseSort(formData.get("sort")?.toString()) }));
+  redirect(buildAssetsUrl({
+    q: formData.get("q")?.toString() || null,
+    statusId: formData.get("statusIdFilter")?.toString() || null,
+    categoryId: formData.get("categoryIdFilter")?.toString() || null,
+    scopeId: formData.get("scopeIdFilter")?.toString() || null,
+    locationId: formData.get("locationIdFilter")?.toString() || null,
+    userId: formData.get("userIdFilter")?.toString() || null,
+    sort: parseAssetsSort(formData.get("sort")?.toString()),
+    page: parseAssetsPage(formData.get("page")?.toString()),
+    pageSize: parseAssetsPageSize(formData.get("pageSize")?.toString()),
+  }));
 }
 
 export default async function NewAssetPage({ searchParams }: NewAssetPageProps) {
@@ -91,7 +86,9 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
   const scopeId = params.scopeId?.trim() || null;
   const locationId = params.locationId?.trim() || null;
   const userId = params.userId?.trim() || null;
-  const sort = parseSort(params.sort);
+  const sort = parseAssetsSort(params.sort);
+  const page = parseAssetsPage(params.page);
+  const pageSize = parseAssetsPageSize(params.pageSize);
   const duplicateId = params.duplicateId?.trim() || null;
 
   const [setupState, currentUser] = await Promise.all([readSetupState(), getCurrentUser()]);
@@ -103,10 +100,12 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
     duplicateId ? getAssetById(duplicateId) : Promise.resolve(null),
   ]);
 
-  const backHref = buildAssetsUrl({ q: searchQuery || null, statusId, categoryId, scopeId, locationId, userId, sort });
+  const backHref = buildAssetsUrl({ q: searchQuery || null, statusId, categoryId, scopeId, locationId, userId, sort, page, pageSize });
   const initialValue = duplicateAsset
     ? {
         name: duplicateAsset.name,
+        make: duplicateAsset.make,
+        model: duplicateAsset.model,
         categoryId: duplicateAsset.categoryId,
       }
     : undefined;
@@ -121,8 +120,8 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
               <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">{duplicateAsset ? "Duplicate asset" : "New asset"}</h1>
               <p className="mt-3 max-w-3xl text-slate-600 dark:text-slate-300">
                 {duplicateAsset
-                  ? "The category path was copied from the selected asset. Finish the remaining details and a new asset tag will be assigned automatically."
-                  : "Create a new asset in a dedicated workflow. Category-driven naming and the next available asset tag are applied here."}
+                  ? "The category path and core identity fields were copied from the selected asset. Finish the remaining details and a new asset tag will be assigned automatically."
+                  : "Create a new asset with category, model, make, optional name, and the next available asset tag."}
               </p>
             </div>
             <Link href={backHref}>
@@ -144,14 +143,12 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
             action={createAssetAction}
             categories={referenceData.categories}
             defaultAssetTag={referenceData.suggestedAssetTag}
-            fieldClass={textFieldClassName}
-            hiddenFields={hiddenFilterFields({ q: searchQuery, statusId, categoryId, scopeId, locationId, userId, sort })}
+            hiddenFields={hiddenFilterFields({ q: searchQuery, statusId, categoryId, scopeId, locationId, userId, sort, page, pageSize })}
             initialValue={initialValue}
             locations={referenceData.locations}
             mode="create"
             scopes={referenceData.scopes}
             statuses={referenceData.statuses}
-            subpanelClass={insetCardClassName}
             submitLabel={duplicateAsset ? "Create duplicated asset" : "Create asset"}
             users={referenceData.users}
           />
@@ -160,7 +157,3 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
     </AppShell>
   );
 }
-
-
-
-

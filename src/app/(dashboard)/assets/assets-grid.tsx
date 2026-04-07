@@ -1,22 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowDown, ArrowUp, ArrowUpDown, Settings2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref } from "@/modules/assets/assets-routing";
+import type { AssetSortOption } from "@/modules/assets/asset.service";
 
 export type AssetGridRow = {
   id: string;
   assetTag: string;
   assetName: string;
+  make: string | null;
+  model: string | null;
   status: { label: string; color: string | null } | null;
   user: string;
   serialNumber: string;
+  category: string;
+  location: string;
+  purchaseDate: string;
+  warrantyExpiry: string;
   checkLabel: "Check out" | "Check in";
 };
 
-type ColumnId = "select" | "assetTag" | "assetName" | "status" | "user" | "serialNumber" | "actions";
+type ColumnId = "select" | "assetTag" | "assetModel" | "assetName" | "status" | "user" | "serialNumber" | "category" | "location" | "purchaseDate" | "warrantyExpiry" | "actions";
 
 type ColumnDefinition = {
   id: ColumnId;
@@ -26,6 +34,7 @@ type ColumnDefinition = {
   resizable: boolean;
   justify?: "start" | "center" | "end";
   cellPadding?: string;
+  fixed?: boolean;
 };
 
 type ResizeState = {
@@ -36,41 +45,68 @@ type ResizeState = {
   rightStartWidth: number;
 };
 
+type HeaderSortConfig = {
+  href: string;
+  label: string;
+  direction: "asc" | "desc" | null;
+};
+
+type StickyPlacement = {
+  className: string;
+  style?: React.CSSProperties;
+};
+
 type AssetsGridProps = {
   rows: AssetGridRow[];
   returnTo: string;
   deleteAction: (formData: FormData) => void | Promise<void>;
+  activeSort: AssetSortOption;
+  headerSorts: Partial<Record<"assetTag" | "assetModel", HeaderSortConfig>>;
 };
 
 const DEBUG_RESIZE = false;
 const STORAGE_KEY = "assets-v2-grid-widths";
+const VISIBILITY_STORAGE_KEY = "assets-v2-visible-columns";
 const separatorClass = DEBUG_RESIZE ? "border-slate-500/90 dark:border-slate-400/80" : "border-slate-300/90 dark:border-gray-600/50";
 const headerBaseClass = `relative flex min-w-0 items-center border-b border-r ${separatorClass} bg-[#eef2f6] py-3 text-[10px] font-semibold uppercase leading-none tracking-[0.14em] text-slate-500 dark:bg-[#2f3539] dark:text-slate-400`;
 const bodyBaseClass = `flex min-w-0 items-center border-b border-r ${separatorClass} bg-white py-3 dark:bg-[#353b3f]`;
 const selectedBodyBaseClass = `flex min-w-0 items-center border-b border-r ${separatorClass} bg-[rgba(246,150,41,0.12)] py-3 dark:bg-[#4a4034]`;
+const sortableHeaderButtonClassName = "group inline-flex min-w-0 items-center gap-2 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:bg-white/80 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200";
+const activeSortableHeaderButtonClassName = "bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.05)] dark:bg-white/8 dark:text-slate-100";
+const columnMenuButtonClassName = "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#F69629]/50 hover:text-slate-900 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-300 dark:hover:border-[#F69629]/60 dark:hover:text-slate-100";
+const columnMenuPanelClassName = "absolute right-0 top-full z-30 mt-2 w-[260px] rounded-[22px] border border-[#d7dde4] bg-white/95 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur dark:border-[#556068] dark:bg-[#2c3134]/95";
+const columnMenuItemClassName = "flex cursor-pointer items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm text-slate-600 transition hover:bg-[#f6f8fb] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-[#353b3f] dark:hover:text-slate-100";
 
 const PRIMARY_ACTION_STYLE = { width: "96px", height: "36px" } as const;
-const SECONDARY_ACTION_STYLE = { width: "68px", height: "36px" } as const;
-const DELETE_ACTION_STYLE = { width: "68px", height: "36px" } as const;
+const SECONDARY_ACTION_STYLE = { width: "64px", height: "36px" } as const;
+const DELETE_ACTION_STYLE = { width: "64px", height: "36px" } as const;
 const DISABLED_PILL_STYLE = { borderColor: "#cbd5e1", backgroundColor: "#f1f5f9", color: "#64748b" } as const;
 const VIEW_ACTIVE_STYLE = { borderColor: "#2f8f57", backgroundColor: "#3fb26d", color: "#ffffff" } as const;
 const CHECK_ACTIVE_STYLE = { borderColor: "#d9892c", backgroundColor: "#F69629", color: "#ffffff" } as const;
 const DELETE_ACTIVE_STYLE = { borderColor: "#c23b32", backgroundColor: "#dd4f45", color: "#ffffff" } as const;
 
 const columns: ColumnDefinition[] = [
-  { id: "select", label: DEBUG_RESIZE ? "Select (80)" : "Select", defaultWidth: 80, minWidth: 80, resizable: true, justify: "center", cellPadding: "px-3" },
-  { id: "assetTag", label: DEBUG_RESIZE ? "Asset tag (108)" : "Asset tag", defaultWidth: 108, minWidth: 96, resizable: true, justify: "start", cellPadding: "px-4" },
-  { id: "assetName", label: DEBUG_RESIZE ? "Asset name (360)" : "Asset name", defaultWidth: 360, minWidth: 48, resizable: true, justify: "start", cellPadding: "px-4" },
-  { id: "status", label: DEBUG_RESIZE ? "Status (140)" : "Status", defaultWidth: 140, minWidth: 110, resizable: true, justify: "start", cellPadding: "px-4" },
-  { id: "user", label: DEBUG_RESIZE ? "User (170)" : "User", defaultWidth: 170, minWidth: 120, resizable: true, justify: "start", cellPadding: "px-4" },
-  { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (172)" : "Serial Number", defaultWidth: 172, minWidth: 96, resizable: true, justify: "start", cellPadding: "px-4" },
-  { id: "actions", label: DEBUG_RESIZE ? "Actions (284 fixed)" : "Actions", defaultWidth: 284, minWidth: 284, resizable: false, justify: "end", cellPadding: "px-3" },
+  { id: "select", label: DEBUG_RESIZE ? "Select (80)" : "Select", defaultWidth: 80, minWidth: 80, resizable: true, justify: "center", cellPadding: "px-3", fixed: true },
+  { id: "assetTag", label: DEBUG_RESIZE ? "Asset tag (104)" : "Asset Tag", defaultWidth: 112, minWidth: 104, resizable: true, justify: "start", cellPadding: "px-3", fixed: true },
+  { id: "assetModel", label: DEBUG_RESIZE ? "Make / Model (244)" : "Make / Model", defaultWidth: 244, minWidth: 168, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "assetName", label: "Asset Name", defaultWidth: 156, minWidth: 128, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "status", label: DEBUG_RESIZE ? "Status (124)" : "Status", defaultWidth: 124, minWidth: 104, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "user", label: DEBUG_RESIZE ? "User (144)" : "User", defaultWidth: 144, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (144)" : "Serial Number", defaultWidth: 144, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "category", label: "Category", defaultWidth: 168, minWidth: 124, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "location", label: "Location", defaultWidth: 160, minWidth: 120, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "purchaseDate", label: "Purchase Date", defaultWidth: 128, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "warrantyExpiry", label: "Warranty Expiry", defaultWidth: 132, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "actions", label: DEBUG_RESIZE ? "Actions (272 fixed)" : "Actions", defaultWidth: 272, minWidth: 272, resizable: false, justify: "end", cellPadding: "px-3", fixed: true },
 ];
 
+const fixedColumnIds = columns.filter((column) => column.fixed).map((column) => column.id);
+const optionalColumns = columns.filter((column) => !column.fixed);
+const defaultVisibleColumnIds: ColumnId[] = ["select", "assetTag", "assetModel", "status", "user", "serialNumber", "actions"];
 const defaultWidths: Record<ColumnId, number> = Object.fromEntries(columns.map((column) => [column.id, column.defaultWidth])) as Record<ColumnId, number>;
 let cachedColumnWidths: Record<ColumnId, number> | null = null;
 let cachedContainerWidth = 0;
-
+let cachedVisibleColumnIds: ColumnId[] | null = null;
 
 function getJustifyClass(justify: ColumnDefinition["justify"]) {
   if (justify === "center") return "justify-center text-center";
@@ -82,8 +118,60 @@ function getColumn(columnId: ColumnId) {
   return columns.find((column) => column.id === columnId) ?? columns[0];
 }
 
+function getStickyPlacement(columnId: ColumnId, renderedWidths: Record<ColumnId, number>): StickyPlacement | null {
+  if (columnId === "select") {
+    return {
+      className: "sticky left-0 z-[4] shadow-[1px_0_0_rgba(148,163,184,0.28)] dark:shadow-[1px_0_0_rgba(86,96,104,0.7)]",
+      style: { left: 0 },
+    };
+  }
+
+  if (columnId === "assetTag") {
+    return {
+      className: "sticky z-[4] shadow-[1px_0_0_rgba(148,163,184,0.28)] dark:shadow-[1px_0_0_rgba(86,96,104,0.7)]",
+      style: { left: `${renderedWidths.select}px` },
+    };
+  }
+
+  if (columnId === "actions") {
+    return {
+      className: "sticky right-0 z-[4] shadow-[-1px_0_0_rgba(148,163,184,0.28)] dark:shadow-[-1px_0_0_rgba(86,96,104,0.7)]",
+      style: { right: 0 },
+    };
+  }
+
+  return null;
+}
 function buildDeleteMessage(row: AssetGridRow) {
-  return `Delete asset ${row.assetTag} - ${row.assetName}?`;
+  return `Delete asset ${row.assetTag} - ${row.model ?? row.assetName}?`;
+}
+
+function normalizeVisibleColumnIds(value: unknown): ColumnId[] {
+  const requested = Array.isArray(value) ? value.filter((entry): entry is ColumnId => columns.some((column) => column.id === entry)) : [];
+  const visible = new Set<ColumnId>(defaultVisibleColumnIds);
+
+  for (const id of requested) {
+    if (fixedColumnIds.includes(id)) continue;
+    visible.add(id);
+  }
+
+  for (const fixedId of fixedColumnIds) {
+    visible.add(fixedId);
+  }
+
+  return columns.filter((column) => visible.has(column.id)).map((column) => column.id);
+}
+
+function SortIndicator({ direction }: { direction: "asc" | "desc" | null }) {
+  if (direction === "asc") {
+    return <ArrowUp className="h-3.5 w-3.5" strokeWidth={1.8} />;
+  }
+
+  if (direction === "desc") {
+    return <ArrowDown className="h-3.5 w-3.5" strokeWidth={1.8} />;
+  }
+
+  return <ArrowUpDown className="h-3.5 w-3.5 opacity-70 transition group-hover:opacity-100" strokeWidth={1.8} />;
 }
 
 function ActionLink({ href, label, isSelected, style, sizeStyle }: { href: string; label: string; isSelected: boolean; style: typeof VIEW_ACTIVE_STYLE | typeof CHECK_ACTIVE_STYLE; sizeStyle: typeof PRIMARY_ACTION_STYLE | typeof SECONDARY_ACTION_STYLE }) {
@@ -131,7 +219,7 @@ function DeleteButton({ row, isSelected, deleteAction, returnTo }: { row: AssetG
   );
 }
 
-export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
+export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSorts }: AssetsGridProps) {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(rows[0]?.id ?? null);
   const [columnWidths, setColumnWidths] = useState<Record<ColumnId, number>>(() => {
     if (typeof window !== "undefined" && cachedColumnWidths) {
@@ -140,19 +228,29 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
 
     return defaultWidths;
   });
+  const [visibleColumnIds, setVisibleColumnIds] = useState<ColumnId[]>(() => {
+    if (typeof window !== "undefined" && cachedVisibleColumnIds) {
+      return cachedVisibleColumnIds;
+    }
+
+    return defaultVisibleColumnIds;
+  });
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
   const [resizingPair, setResizingPair] = useState<{ leftId: ColumnId; rightId: ColumnId } | null>(null);
   const [guideX, setGuideX] = useState<number | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(() => (typeof window !== "undefined" ? cachedContainerWidth : 0));
+  const [scrollState, setScrollState] = useState({ canScrollLeft: false, canScrollRight: false });
   const wrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const resizeStateRef = useRef<ResizeState | null>(null);
 
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Partial<Record<ColumnId, number>>;
+      const storedWidths = window.localStorage.getItem(STORAGE_KEY);
+      if (storedWidths) {
+        const parsed = JSON.parse(storedWidths) as Partial<Record<ColumnId, number>>;
         const next = { ...defaultWidths };
 
         for (const column of columns) {
@@ -166,13 +264,20 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
         cachedColumnWidths = next;
         setColumnWidths(next);
       }
+
+      const storedVisibility = window.localStorage.getItem(VISIBILITY_STORAGE_KEY);
+      if (storedVisibility) {
+        const parsed = JSON.parse(storedVisibility);
+        const nextVisibleColumnIds = normalizeVisibleColumnIds(parsed);
+        cachedVisibleColumnIds = nextVisibleColumnIds;
+        setVisibleColumnIds(nextVisibleColumnIds);
+      }
     } catch {
-      // Ignore invalid stored widths.
+      // Ignore invalid stored values.
     } finally {
       setIsHydrated(true);
     }
   }, []);
-
   useEffect(() => {
     setSelectedRowId((current) => {
       if (!rows.length) {
@@ -192,6 +297,10 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
   }, [columnWidths]);
 
   useEffect(() => {
+    cachedVisibleColumnIds = visibleColumnIds;
+  }, [visibleColumnIds]);
+
+  useEffect(() => {
     cachedContainerWidth = containerWidth;
   }, [containerWidth]);
 
@@ -200,10 +309,31 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
       return;
     }
 
-    const persistable = { ...columnWidths };
+    const persistable: Partial<Record<ColumnId, number>> = { ...columnWidths };
     delete persistable.actions;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable));
   }, [columnWidths, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
+    window.localStorage.setItem(VISIBILITY_STORAGE_KEY, JSON.stringify(visibleColumnIds));
+  }, [visibleColumnIds, isHydrated]);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setIsColumnsMenuOpen(false);
+      }
+    }
+
+    if (isColumnsMenuOpen) {
+      window.addEventListener("pointerdown", handlePointerDown);
+      return () => window.removeEventListener("pointerdown", handlePointerDown);
+    }
+  }, [isColumnsMenuOpen]);
 
   useLayoutEffect(() => {
     const updateWidth = () => {
@@ -222,6 +352,30 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
 
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+
+    const updateScrollState = () => {
+      const maxScrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
+      setScrollState({
+        canScrollLeft: wrapper.scrollLeft > 8,
+        canScrollRight: maxScrollLeft - wrapper.scrollLeft > 8,
+      });
+    };
+
+    updateScrollState();
+    wrapper.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+
+    return () => {
+      wrapper.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [rows.length, visibleColumnIds, containerWidth, columnWidths]);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -300,29 +454,54 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
   }
+  function toggleColumnVisibility(columnId: ColumnId) {
+    if (fixedColumnIds.includes(columnId)) {
+      return;
+    }
+
+    setVisibleColumnIds((current) => {
+      const visible = new Set(current);
+      if (visible.has(columnId)) {
+        visible.delete(columnId);
+      } else {
+        visible.add(columnId);
+      }
+
+      for (const fixedId of fixedColumnIds) {
+        visible.add(fixedId);
+      }
+
+      return columns.filter((column) => visible.has(column.id)).map((column) => column.id);
+    });
+  }
+
+  const visibleColumns = useMemo(() => columns.filter((column) => visibleColumnIds.includes(column.id)), [visibleColumnIds]);
 
   const renderedWidths = useMemo(() => {
     const next = { ...columnWidths };
-    const baseWidth = columns.reduce((sum, column) => sum + next[column.id], 0);
+    const baseWidth = visibleColumns.reduce((sum, column) => sum + next[column.id], 0);
     const extraWidth = Math.max(0, containerWidth - baseWidth);
 
     if (extraWidth > 0) {
-      next.serialNumber += extraWidth;
+      const stretchColumn = [...visibleColumns].reverse().find((column) => column.id !== "actions" && column.id !== "assetTag" && column.id !== "select");
+      if (stretchColumn) {
+        next[stretchColumn.id] += extraWidth;
+      }
     }
 
     return next;
-  }, [columnWidths, containerWidth]);
+  }, [columnWidths, containerWidth, visibleColumns]);
 
   const gridTemplateColumns = useMemo(
-    () => columns.map((column) => `${renderedWidths[column.id]}px`).join(" "),
-    [renderedWidths],
+    () => visibleColumns.map((column) => `${renderedWidths[column.id]}px`).join(" "),
+    [renderedWidths, visibleColumns],
   );
 
   const isGridVisible = isHydrated && (cachedContainerWidth > 0 || containerWidth > 0);
 
   const tableWidth = useMemo(
-    () => columns.reduce((sum, column) => sum + renderedWidths[column.id], 0),
-    [renderedWidths],
+    () => visibleColumns.reduce((sum, column) => sum + renderedWidths[column.id], 0),
+    [renderedWidths, visibleColumns],
   );
 
   return (
@@ -330,159 +509,226 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
       className="overflow-hidden rounded-[28px] border border-[#d7dde4] bg-[#f6f8fb] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] dark:border-[#556068] dark:bg-[#2c3134]"
       onClick={() => setSelectedRowId(null)}
     >
+      <div className="flex items-center justify-between border-b border-[#d7dde4] px-4 py-3 dark:border-[#556068]">
+        <div>
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Asset table</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose which optional columns stay visible. Select, Asset Tag, and Actions remain fixed.</p>
+        </div>
+        <div className="relative" ref={menuRef}>
+          <button
+            className={columnMenuButtonClassName}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsColumnsMenuOpen((current) => !current);
+            }}
+            type="button"
+          >
+            <Settings2 className="h-4 w-4" strokeWidth={1.8} />
+            <span>Columns</span>
+          </button>
+          {isColumnsMenuOpen ? (
+            <div className={columnMenuPanelClassName} onClick={(event) => event.stopPropagation()}>
+              <div className="mb-2 px-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Visible columns</p>
+              </div>
+              <div className="space-y-1">
+                {optionalColumns.map((column) => {
+                  const isChecked = visibleColumnIds.includes(column.id);
+                  return (
+                    <label key={column.id} className={columnMenuItemClassName}>
+                      <span>{column.label}</span>
+                      <input checked={isChecked} className="ui-check" onChange={() => toggleColumnVisibility(column.id)} type="checkbox" />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
       {rows.length === 0 ? (
         <div className="px-5 py-12 text-center">
           <p className="text-sm font-medium text-slate-700 dark:text-slate-200">No assets matched the current filters.</p>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Adjust the search or filters above to populate the asset grid.</p>
         </div>
       ) : (
-        <div
-          className="min-h-[188px] overflow-x-auto"
-          ref={wrapperRef}
-          style={{ visibility: isGridVisible ? "visible" : "hidden" }}
-        >
-          <div ref={contentRef} style={{ minWidth: `${tableWidth}px`, width: containerWidth > 0 ? "100%" : `${tableWidth}px` }}>
-            <div className="relative">
-              {guideX !== null ? (
-                <div
-                  className="pointer-events-none absolute inset-y-0 z-30 w-px bg-[#F69629] shadow-[0_0_0_1px_rgba(246,150,41,0.28)]"
-                  style={{ left: `${guideX}px` }}
-                />
-              ) : null}
+        <div className="relative">
+          {scrollState.canScrollLeft ? (
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-8 bg-gradient-to-r from-[#f6f8fb] via-[#f6f8fb]/92 to-transparent dark:from-[#2c3134] dark:via-[#2c3134]/92" />
+          ) : null}
+          {scrollState.canScrollRight ? (
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-8 bg-gradient-to-l from-[#f6f8fb] via-[#f6f8fb]/92 to-transparent dark:from-[#2c3134] dark:via-[#2c3134]/92" />
+          ) : null}
+          <div className="min-h-[188px] overflow-x-auto overscroll-x-contain pr-2" ref={wrapperRef} style={{ visibility: isGridVisible ? "visible" : "hidden", scrollbarWidth: "thin" }}>
+            <div ref={contentRef} style={{ minWidth: `${tableWidth}px`, width: containerWidth > 0 ? "100%" : `${tableWidth}px` }}>
+              <div className="relative">
+                {guideX !== null ? (
+                  <div className="pointer-events-none absolute inset-y-0 z-30 w-px bg-[#F69629] shadow-[0_0_0_1px_rgba(246,150,41,0.28)]" style={{ left: `${guideX}px` }} />
+                ) : null}
 
-              <div className="grid" style={{ gridTemplateColumns }}>
-                {columns.map((column, index) => {
-                  const isLast = index === columns.length - 1;
-                  const nextColumn = columns[index + 1] ?? null;
-                  const canResizeAgainstNext = column.resizable && nextColumn && nextColumn.id !== "actions";
-                  const headerClassName = [
-                    headerBaseClass,
-                    column.cellPadding ?? "px-4",
-                    column.id === "actions" ? "justify-start text-left" : getJustifyClass(column.justify),
-                    isLast ? "border-r-0" : "",
-                  ].join(" ");
+                <div className="grid" style={{ gridTemplateColumns }}>
+                  {visibleColumns.map((column, index) => {
+                    const isLast = index === visibleColumns.length - 1;
+                    const nextColumn = visibleColumns[index + 1] ?? null;
+                    const canResizeAgainstNext = column.resizable && nextColumn && nextColumn.id !== "actions";
+                    const stickyPlacement = getStickyPlacement(column.id, renderedWidths);
+                    const headerClassName = [
+                      headerBaseClass,
+                      column.cellPadding ?? "px-4",
+                      column.id === "actions" ? "justify-start text-left" : getJustifyClass(column.justify),
+                      stickyPlacement?.className ?? "",
+                      isLast ? "border-r-0" : "",
+                    ].join(" ");
+                    const headerSort = (column.id === "assetTag" || column.id === "assetModel") ? headerSorts[column.id] : null;
+                    const isActiveSort = column.id === "assetTag"
+                      ? activeSort === "tag-asc" || activeSort === "tag-desc"
+                      : column.id === "assetModel"
+                        ? activeSort === "model-asc" || activeSort === "model-desc"
+                        : false;
+
+                    return (
+                      <div key={column.id} className={headerClassName} style={stickyPlacement?.style}>
+                        {headerSort ? (
+                          <Link
+                            aria-label={headerSort.label}
+                            className={`${sortableHeaderButtonClassName} ${isActiveSort ? activeSortableHeaderButtonClassName : ""}`}
+                            href={headerSort.href}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <span className="block min-w-0 truncate whitespace-nowrap">{column.label}</span>
+                            <SortIndicator direction={headerSort.direction} />
+                          </Link>
+                        ) : (
+                          <span className="block min-w-0 truncate whitespace-nowrap">{column.label}</span>
+                        )}
+                        {canResizeAgainstNext ? (
+                          <button
+                            aria-label={`Resize ${column.label} column`}
+                            className={`absolute right-0 top-0 z-20 h-full w-3 translate-x-1/2 cursor-col-resize transition ${DEBUG_RESIZE ? "bg-[#F69629]/35" : "bg-slate-500/22"} hover:bg-[#F69629]/45 ${resizingPair?.leftId === column.id ? "bg-[#F69629]/65" : ""}`}
+                            onPointerDown={(event) => startResize(column.id, nextColumn.id, event)}
+                            type="button"
+                          >
+                            <span className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 ${DEBUG_RESIZE ? "bg-[#F69629]" : "bg-slate-500/80"}`} />
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {rows.map((row) => {
+                  const isSelected = row.id === selectedRowId;
+                  const rowClass = isSelected ? selectedBodyBaseClass : bodyBaseClass;
+                  const hoverClass = isSelected ? "hover:bg-[rgba(246,150,41,0.16)] dark:hover:bg-[#54483a]" : "hover:bg-[#fdf1e4] dark:hover:bg-[#3d4448]";
+                  const checkHref = buildAssetHref(row.id, {
+                    transfer: row.checkLabel === "Check in" ? "checkin" : "checkout",
+                    returnTo,
+                  });
+                  const viewHref = buildAssetHref(row.id, { returnTo });
 
                   return (
-                    <div key={column.id} className={headerClassName}>
-                      <span className="block min-w-0 truncate whitespace-nowrap">{column.label}</span>
-                      {canResizeAgainstNext ? (
-                        <button
-                          aria-label={`Resize ${column.label} column`}
-                          className={`absolute right-0 top-0 z-20 h-full w-3 translate-x-1/2 cursor-col-resize transition ${DEBUG_RESIZE ? "bg-[#F69629]/35" : "bg-slate-500/22"} hover:bg-[#F69629]/45 ${resizingPair?.leftId === column.id ? "bg-[#F69629]/65" : ""}`}
-                          onPointerDown={(event) => startResize(column.id, nextColumn.id, event)}
-                          type="button"
-                        >
-                          <span className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 ${DEBUG_RESIZE ? "bg-[#F69629]" : "bg-slate-500/80"}`} />
-                        </button>
-                      ) : null}
+                    <div
+                      key={row.id}
+                      className={`grid w-full cursor-pointer transition-colors ${hoverClass}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedRowId((current) => (current === row.id ? null : row.id));
+                      }}
+                      style={{ gridTemplateColumns }}
+                    >
+                      {visibleColumns.map((column, index) => {
+                        const isLast = index === visibleColumns.length - 1;
+                        const stickyPlacement = getStickyPlacement(column.id, renderedWidths);
+                        const cellClass = [
+                          rowClass,
+                          column.cellPadding ?? "px-4",
+                          getJustifyClass(column.justify),
+                          stickyPlacement?.className ?? "",
+                          isLast ? "border-r-0" : "",
+                        ].join(" ");
+
+                        if (column.id === "select") {
+                          return (
+                            <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
+                              <span className={isSelected ? "flex h-5 w-5 items-center justify-center rounded-full border border-[#F69629] bg-[#F69629]" : "flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white/80 dark:border-[#5a6267] dark:bg-[#2f3437]"}>
+                                <span className={isSelected ? "h-2.5 w-2.5 rounded-full bg-white" : "h-2.5 w-2.5 rounded-full bg-transparent"} />
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        if (column.id === "assetTag") {
+                          return (
+                            <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
+                              <span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]" title={row.assetTag}>{row.assetTag}</span>
+                            </div>
+                          );
+                        }
+
+                        if (column.id === "assetModel") {
+                          return (
+                            <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
+                              <div className="min-w-0">
+                                {row.make?.trim() ? <span className="block min-w-0 truncate whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400" title={row.make.trim()}>{row.make.trim()}</span> : null}
+                                <span className="block min-w-0 truncate whitespace-nowrap text-sm font-medium text-slate-950 dark:text-slate-100" title={row.model?.trim() || row.assetName}>{row.model?.trim() || row.assetName}</span>
+                                {row.model?.trim() && row.assetName.trim() && row.assetName.trim() !== row.model.trim() ? <span className="mt-1 block min-w-0 truncate whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400" title={row.assetName}>Name: {row.assetName}</span> : null}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (column.id === "assetName") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.assetName}>{row.assetName}</span></div>;
+                        }
+
+                        if (column.id === "status") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}>{row.status ? <AssetStatusPill color={row.status.color} label={row.status.label} /> : <span className="text-sm text-slate-500 dark:text-slate-400">No status</span>}</div>;
+                        }
+
+                        if (column.id === "user") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.user}>{row.user}</span></div>;
+                        }
+
+                        if (column.id === "serialNumber") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]" title={row.serialNumber}>{row.serialNumber}</span></div>;
+                        }
+
+                        if (column.id === "category") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.category}>{row.category}</span></div>;
+                        }
+
+                        if (column.id === "location") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.location}>{row.location}</span></div>;
+                        }
+
+                        if (column.id === "purchaseDate") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300">{row.purchaseDate}</span></div>;
+                        }
+
+                        if (column.id === "warrantyExpiry") {
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300">{row.warrantyExpiry}</span></div>;
+                        }
+
+                        return (
+                          <div key={column.id} className={cellClass} onClick={(event) => event.stopPropagation()} style={stickyPlacement?.style}>
+                            <div className="flex h-full w-full flex-nowrap items-center justify-end gap-2 overflow-hidden">
+                              <div className="flex justify-end" style={{ width: SECONDARY_ACTION_STYLE.width }}>
+                                <ActionLink href={viewHref} isSelected={isSelected} label="View" sizeStyle={SECONDARY_ACTION_STYLE} style={VIEW_ACTIVE_STYLE} />
+                              </div>
+                              <div className="flex justify-end" style={{ width: PRIMARY_ACTION_STYLE.width }}>
+                                <ActionLink href={checkHref} isSelected={isSelected} label={row.checkLabel} sizeStyle={PRIMARY_ACTION_STYLE} style={CHECK_ACTIVE_STYLE} />
+                              </div>
+                              <div className="flex justify-end" style={{ width: DELETE_ACTION_STYLE.width }}>
+                                <DeleteButton deleteAction={deleteAction} isSelected={isSelected} returnTo={returnTo} row={row} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
               </div>
-
-              {rows.map((row) => {
-                const isSelected = row.id === selectedRowId;
-                const rowClass = isSelected ? selectedBodyBaseClass : bodyBaseClass;
-                const hoverClass = isSelected
-                  ? "hover:bg-[rgba(246,150,41,0.16)] dark:hover:bg-[#54483a]"
-                  : "hover:bg-[#fdf1e4] dark:hover:bg-[#3d4448]";
-                const checkHref = buildAssetHref(row.id, {
-                  transfer: row.checkLabel === "Check in" ? "checkin" : "checkout",
-                  returnTo,
-                });
-                const viewHref = buildAssetHref(row.id, { returnTo });
-
-                return (
-                  <div
-                    key={row.id}
-                    className={`grid w-full cursor-pointer transition-colors ${hoverClass}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelectedRowId((current) => (current === row.id ? null : row.id));
-                    }}
-                    style={{ gridTemplateColumns }}
-                  >
-                    {columns.map((column, index) => {
-                      const isLast = index === columns.length - 1;
-                      const cellClass = [
-                        rowClass,
-                        column.cellPadding ?? "px-4",
-                        getJustifyClass(column.justify),
-                        isLast ? "border-r-0" : "",
-                      ].join(" ");
-
-                      if (column.id === "select") {
-                        return (
-                          <div key={column.id} className={cellClass}>
-                            <span className={isSelected
-                              ? "flex h-5 w-5 items-center justify-center rounded-full border border-[#F69629] bg-[#F69629]"
-                              : "flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white/80 dark:border-[#5a6267] dark:bg-[#2f3437]"}
-                            >
-                              <span className={isSelected ? "h-2.5 w-2.5 rounded-full bg-white" : "h-2.5 w-2.5 rounded-full bg-transparent"} />
-                            </span>
-                          </div>
-                        );
-                      }
-
-                      if (column.id === "assetTag") {
-                        return (
-                          <div key={column.id} className={cellClass}>
-                            <span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]">{row.assetTag}</span>
-                          </div>
-                        );
-                      }
-
-                      if (column.id === "assetName") {
-                        return (
-                          <div key={column.id} className={cellClass}>
-                            <span className="block min-w-0 truncate whitespace-nowrap text-sm font-medium text-slate-950 dark:text-slate-100">{row.assetName}</span>
-                          </div>
-                        );
-                      }
-
-                      if (column.id === "status") {
-                        return (
-                          <div key={column.id} className={cellClass}>
-                            {row.status ? <AssetStatusPill color={row.status.color} label={row.status.label} /> : <span className="text-sm text-slate-500 dark:text-slate-400">No status</span>}
-                          </div>
-                        );
-                      }
-
-                      if (column.id === "user") {
-                        return (
-                          <div key={column.id} className={cellClass}>
-                            <span className="block truncate text-sm text-slate-600 dark:text-slate-300">{row.user}</span>
-                          </div>
-                        );
-                      }
-
-                      if (column.id === "serialNumber") {
-                        return (
-                          <div key={column.id} className={cellClass}>
-                            <span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]">{row.serialNumber}</span>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div key={column.id} className={cellClass} onClick={(event) => event.stopPropagation()}>
-                          <div className="flex h-full w-full flex-nowrap items-center justify-end gap-2 overflow-hidden">
-                            <div className="flex justify-end" style={{ width: SECONDARY_ACTION_STYLE.width }}>
-                              <ActionLink href={viewHref} isSelected={isSelected} label="View" sizeStyle={SECONDARY_ACTION_STYLE} style={VIEW_ACTIVE_STYLE} />
-                            </div>
-                            <div className="flex justify-end" style={{ width: PRIMARY_ACTION_STYLE.width }}>
-                              <ActionLink href={checkHref} isSelected={isSelected} label={row.checkLabel} sizeStyle={PRIMARY_ACTION_STYLE} style={CHECK_ACTIVE_STYLE} />
-                            </div>
-                            <div className="flex justify-end" style={{ width: DELETE_ACTION_STYLE.width }}>
-                              <DeleteButton deleteAction={deleteAction} isSelected={isSelected} returnTo={returnTo} row={row} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>
@@ -490,3 +736,4 @@ export function AssetsGrid({ rows, returnTo, deleteAction }: AssetsGridProps) {
     </div>
   );
 }
+
