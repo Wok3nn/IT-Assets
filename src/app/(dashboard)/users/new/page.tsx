@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { UserCreateCard } from "@/modules/users/components/user-create-card";
 import { createUser, listAssignableRoles, listAssignableScopes } from "@/modules/users/user.service";
 import { readSetupState } from "@/services/setup-state";
@@ -16,6 +17,8 @@ async function createUserAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
+  const permissionContext = await getCurrentUserPermissionContext();
+  if (!permissionContext.capabilities.editUsers) redirect(USERS_DIRECTORY_HREF);
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const allowLogin = String(formData.get("allowLogin") ?? "false") === "true";
@@ -30,15 +33,20 @@ async function createUserAction(formData: FormData) {
 }
 
 export default async function NewUserPage() {
-  const [setupState, currentUser, roles, scopes] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    listAssignableRoles(),
-    listAssignableScopes(),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) redirect("/setup");
   if (!currentUser) redirect("/login");
+  if (!permissionContext.capabilities.editUsers) notFound();
+
+  const [roles, scopes] = await Promise.all([
+    listAssignableRoles(),
+    listAssignableScopes(),
+  ]);
 
   return (
     <AppShell>

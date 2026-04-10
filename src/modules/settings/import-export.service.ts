@@ -22,8 +22,6 @@ import {
 import { createUser } from "@/modules/users/user.service";
 import { db } from "@/services/database";
 
-export { clearAssetsData, clearUsersData } from "@/modules/settings/reset-management.service";
-
 type RowOutcome = {
   rowNumber: number;
   status: "imported" | "skipped" | "failed";

@@ -1,8 +1,9 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AdminSelectField } from "@/components/admin/admin-fields";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { buildAssetLookupUrl } from "@/modules/assets/assets-routing";
 import { getAssetById } from "@/modules/assets/asset.service";
 import { LabelTemplatePrintPreview } from "@/modules/labels/components/label-template-print-preview";
@@ -39,10 +40,10 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
   const requestHeaders = await headers();
   const requestOrigin = getRequestOrigin(requestHeaders);
 
-  const [setupState, currentUser, asset, enabledTemplates] = await Promise.all([
+  const [setupState, currentUser, permissionContext, enabledTemplates] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getAssetById(assetId),
+    getCurrentUserAssetPermissionContext(),
     listEnabledLabelTemplates(),
   ]);
 
@@ -54,8 +55,14 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
     redirect("/login");
   }
 
+  if (!permissionContext.capabilities.viewAssets || !permissionContext.capabilities.printLabels) {
+    notFound();
+  }
+
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
+
   if (!asset) {
-    redirect("/assets");
+    notFound();
   }
 
   if (enabledTemplates.length === 0) {

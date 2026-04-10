@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { CategoryEditCard } from "@/modules/categories/components/category-edit-card";
 import { getCategoryById, updateCategorySettings } from "@/modules/categories/category.service";
 import { listEnabledLabelTemplates } from "@/modules/labels/label-template.service";
@@ -47,6 +48,12 @@ async function updateCategorySettingsAction(formData: FormData) {
     redirect("/login");
   }
 
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editCategories) {
+    redirect("/categories");
+  }
+
   const categoryId = String(formData.get("categoryId") ?? "").trim();
   const returnTo = String(formData.get("returnTo") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -83,11 +90,10 @@ export default async function EditCategoryPage({ params, searchParams }: EditCat
     searchParams ? searchParams : Promise.resolve(undefined),
   ]);
 
-  const [setupState, currentUser, category, labelTemplates] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getCategoryById(categoryId),
-    listEnabledLabelTemplates(),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -98,8 +104,17 @@ export default async function EditCategoryPage({ params, searchParams }: EditCat
     redirect("/login");
   }
 
+  if (!permissionContext.capabilities.editCategories) {
+    notFound();
+  }
+
+  const [category, labelTemplates] = await Promise.all([
+    getCategoryById(categoryId),
+    listEnabledLabelTemplates(),
+  ]);
+
   if (!category) {
-    redirect("/categories");
+    notFound();
   }
 
   const returnTo = normalizeCategoryReturnTo(resolvedSearchParams?.returnTo, category.parent?.id ?? null);

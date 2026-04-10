@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -41,7 +42,7 @@ export function RoleMembersList({
   selectedRoleKey: string;
   searchQuery: string;
   roleMembers: RoleMember[];
-  onDelete: (userId: string) => JSX.Element;
+  onDelete: (userId: string) => ReactNode;
   buildEditHref: (userId: string) => string;
 }) {
   return (

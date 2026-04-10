@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { ImportCardShell } from "@/modules/settings/components/import-card-shell";
@@ -33,7 +33,7 @@ import {
   type ImportResolutionEntry,
   type UserImportResolutions,
 } from "@/modules/settings/import-export.shared";
-import { cardClass, fieldClass } from "@/modules/settings/components/import-export.styles";
+import { cardClass } from "@/modules/settings/components/import-export.styles";
 import {
   buildCategoryDecisionMapFromSelections,
   collectMissingCategoryPaths,
@@ -961,256 +961,27 @@ function ImportCard({
   );
 }
 
-type ClearActionKind = "assets" | "users";
-
-type ClearResult = {
-  tone: "success" | "error";
-  message: string;
-};
-
-function ClearActionCard({
-  actionLabel,
-  description,
-  onOpen,
-  phrase,
-  recordCount,
-}: {
-  actionLabel: string;
-  description: string;
-  onOpen: () => void;
-  phrase: string;
-  recordCount: number;
-}) {
-  return (
-    <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 dark:border-rose-900/60 dark:bg-rose-950/20">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-rose-900 dark:text-rose-100">{actionLabel}</h3>
-          <p className="mt-2 text-sm text-rose-800/90 dark:text-rose-200">{description}</p>
-          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-300">Current records: {recordCount} | Type {phrase} to confirm</p>
-        </div>
-        <Button
-          className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-600 dark:text-white dark:hover:bg-rose-500"
-          onClick={onOpen}
-          type="button"
-        >
-          {actionLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ClearDataDialog({
-  confirmationPhrase,
-  error,
-  isSubmitting,
-  onClose,
-  onConfirm,
-  onTypedValueChange,
-  title,
-  typedValue,
-  warning,
-}: {
-  confirmationPhrase: string;
-  error: string | null;
-  isSubmitting: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  onTypedValueChange: (value: string) => void;
-  title: string;
-  typedValue: string;
-  warning: string;
-}) {
-  const canConfirm = typedValue.trim() === confirmationPhrase && !isSubmitting;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
-      <button
-        aria-label="Close confirmation dialog"
-        className="absolute inset-0 bg-slate-950/60"
-        disabled={isSubmitting}
-        onClick={onClose}
-        type="button"
-      />
-      <div className="relative z-10 w-full max-w-lg rounded-[28px] border border-[#4b5255] bg-[#2f3437] p-6 shadow-[0_24px_48px_rgba(0,0,0,0.38)]">
-        <p className="text-sm uppercase tracking-[0.24em] text-rose-300">Destructive action</p>
-        <h2 className="mt-3 text-2xl font-semibold text-slate-100">{title}</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-300">{warning}</p>
-        <div className="mt-4 rounded-2xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">
-          Type <span className="font-semibold">{confirmationPhrase}</span> to continue.
-        </div>
-        <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-slate-200">Confirmation phrase</span>
-          <input
-            className={fieldClass}
-            disabled={isSubmitting}
-            onChange={(event) => onTypedValueChange(event.target.value)}
-            spellCheck={false}
-            type="text"
-            value={typedValue}
-          />
-        </label>
-        {error ? <div className="mt-4 rounded-2xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">{error}</div> : null}
-        <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-          <Button disabled={isSubmitting} onClick={onClose} type="button" variant="ghost">Cancel</Button>
-          <Button
-            className="bg-rose-600 text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-rose-900/50 dark:bg-rose-600 dark:text-white dark:hover:bg-rose-500"
-            disabled={!canConfirm}
-            onClick={onConfirm}
-            type="button"
-          >
-            {isSubmitting ? "Clearing..." : title}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 export function ImportExportPanel({ references }: ImportExportPanelProps) {
-  const router = useRouter();
-  const [pendingClearKind, setPendingClearKind] = useState<ClearActionKind | null>(null);
-  const [confirmationValue, setConfirmationValue] = useState("");
-  const [clearError, setClearError] = useState<string | null>(null);
-  const [clearResult, setClearResult] = useState<ClearResult | null>(null);
-  const [isClearing, setIsClearing] = useState(false);
-
-  const clearActions = useMemo(() => ([
-    {
-      kind: "assets" as const,
-      actionLabel: "Clear Assets",
-      confirmationPhrase: "CLEAR ASSETS",
-      warning: "This permanently removes every asset record from the app. Related asset-to-department links are removed first so the database stays consistent.",
-    },
-    {
-      kind: "users" as const,
-      actionLabel: "Clear Users",
-      confirmationPhrase: "CLEAR USERS",
-      warning: "This permanently removes every user record from the app. User sessions, role links, and department links are deleted, assigned assets are unassigned, and audit log actor references are detached before users are removed.",
-    },
-  ]), []);
-
-  const pendingAction = clearActions.find((action) => action.kind === pendingClearKind) ?? null;
-
-  async function handleConfirmClear() {
-    if (!pendingAction) {
-      return;
-    }
-
-    setIsClearing(true);
-    setClearError(null);
-    setClearResult(null);
-
-    try {
-      const response = await fetch("/api/settings/clear/" + pendingAction.kind, { method: "POST" });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error ?? ("Failed to clear " + pendingAction.kind + "."));
-      }
-
-      if (pendingAction.kind === "assets") {
-        const assetCount = data.summary.assetCount as number;
-        const detachedAssetScopeCount = data.summary.detachedAssetScopeCount as number;
-        setClearResult({
-          tone: "success",
-          message: "Cleared " + assetCount + " asset record" + (assetCount === 1 ? "" : "s") + ". Removed " + detachedAssetScopeCount + " related asset-to-department link" + (detachedAssetScopeCount === 1 ? "" : "s") + ".",
-        });
-        setPendingClearKind(null);
-        setConfirmationValue("");
-        window.setTimeout(() => {
-          router.refresh();
-        }, 1200);
-      } else {
-        const userCount = data.summary.userCount as number;
-        const clearedAssetAssignmentCount = data.summary.clearedAssetAssignmentCount as number;
-        const detachedAuditEntryCount = data.summary.detachedAuditEntryCount as number;
-        setClearResult({
-          tone: "success",
-          message: "Cleared " + userCount + " user record" + (userCount === 1 ? "" : "s") + ". Cleared " + clearedAssetAssignmentCount + " asset assignment" + (clearedAssetAssignmentCount === 1 ? "" : "s") + " and detached " + detachedAuditEntryCount + " audit actor reference" + (detachedAuditEntryCount === 1 ? "" : "s") + ". Redirecting to login...",
-        });
-        setPendingClearKind(null);
-        setConfirmationValue("");
-        window.setTimeout(() => {
-          window.location.href = "/login";
-        }, 1400);
-      }
-    } catch (error) {
-      setClearError(error instanceof Error ? error.message : ("Failed to clear " + pendingAction.kind + "."));
-    } finally {
-      setIsClearing(false);
-    }
-  }
-
   return (
-    <>
-      <div className="min-w-0 space-y-6">
-        <ImportCard description="Export assets to CSV or import new assets through a header-mapping workflow with validation, preview, and confirmation." exportHref="/api/settings/export/assets" fields={ASSET_IMPORT_FIELDS} importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically." kind="assets" references={references} title="Assets CSV" />
-        <ImportCard description="Export users to CSV or import new users with role and department mapping before confirmation." exportHref="/api/settings/export/users" fields={USER_IMPORT_FIELDS} kind="users" references={references} title="Users CSV" />
+    <div className="min-w-0 space-y-6">
+      <ImportCard description="Export assets to CSV or import new assets through a header-mapping workflow with validation, preview, and confirmation." exportHref="/api/settings/export/assets" fields={ASSET_IMPORT_FIELDS} importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically." kind="assets" references={references} title="Assets CSV" />
+      <ImportCard description="Export users to CSV or import new users with role and department mapping before confirmation." exportHref="/api/settings/export/users" fields={USER_IMPORT_FIELDS} kind="users" references={references} title="Users CSV" />
 
-        <section className={cardClass}>
+      <Link className={`${cardClass} block transition hover:-translate-y-0.5 hover:border-[#f0c48d] hover:shadow-[0_22px_42px_rgba(246,150,41,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F69629]/40 dark:hover:border-[#f0a853] dark:hover:shadow-[0_18px_34px_rgba(0,0,0,0.22)]`} href="/settings/reset">
+        <section>
           <div>
-            <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-100">Administrative clear data</h3>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">These actions permanently remove records from the app and are intentionally separated from the normal import/export workflow.</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">Settings shortcut</p>
+            <h3 className="mt-3 text-lg font-semibold text-slate-950 dark:text-slate-100">Reset / Administrative Actions</h3>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Manage destructive administrative actions such as clearing assets, users, categories, and other system data.</p>
           </div>
-
-          <div className="mt-5 space-y-4">
-            {clearResult ? (
-              <div className={clearResult.tone === "success"
-                ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
-                : "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"}
-              >
-                {clearResult.message}
-              </div>
-            ) : null}
-
-            <ClearActionCard
-              actionLabel="Clear Assets"
-              description="Delete asset records only. Categories, locations, statuses, departments, settings, templates, and other setup data remain intact."
-              onOpen={() => {
-                setPendingClearKind("assets");
-                setConfirmationValue("");
-                setClearError(null);
-              }}
-              phrase="CLEAR ASSETS"
-              recordCount={references.assets.existingAssetTags.length}
-            />
-            <ClearActionCard
-              actionLabel="Clear Users"
-              description="Delete user records only. Assets remain, but any user assignment is cleared first and audit history keeps detached actor references instead of being deleted."
-              onOpen={() => {
-                setPendingClearKind("users");
-                setConfirmationValue("");
-                setClearError(null);
-              }}
-              phrase="CLEAR USERS"
-              recordCount={references.users.existingEmails.length}
-            />
+          <div className="mt-5">
+            <span className="inline-flex rounded-full bg-[rgba(246,150,41,0.12)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#b56613] dark:bg-[rgba(246,150,41,0.18)] dark:text-[#ffd1a0]">
+              Open Reset
+            </span>
           </div>
         </section>
-      </div>
-
-      {pendingAction ? (
-        <ClearDataDialog
-          confirmationPhrase={pendingAction.confirmationPhrase}
-          error={clearError}
-          isSubmitting={isClearing}
-          onClose={() => {
-            if (isClearing) {
-              return;
-            }
-            setPendingClearKind(null);
-            setConfirmationValue("");
-            setClearError(null);
-          }}
-          onConfirm={handleConfirmClear}
-          onTypedValueChange={setConfirmationValue}
-          title={pendingAction.actionLabel}
-          typedValue={confirmationValue}
-          warning={pendingAction.warning}
-        />
-      ) : null}
-    </>
+      </Link>
+    </div>
   );
 }
 

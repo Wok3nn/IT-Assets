@@ -10,7 +10,8 @@ import { PageHero } from "@/components/layout/page-hero";
 import { PanelCard } from "@/components/layout/panel-card";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import {
   deleteLocation,
   getLocationById,
@@ -53,6 +54,12 @@ async function deleteLocationAction(formData: FormData) {
     redirect("/login");
   }
 
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editLocations) {
+    redirect("/locations");
+  }
+
   const locationId = String(formData.get("locationId") ?? "").trim();
   const parentIdValue = String(formData.get("parentId") ?? "").trim();
 
@@ -72,11 +79,10 @@ export default async function LocationsPage({ searchParams }: LocationsPageProps
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const selectedParentId = resolvedSearchParams?.parentId?.trim() || null;
 
-  const [setupState, currentUser, topLevelLocations, selectedParent] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    listTopLevelLocations(),
-    selectedParentId ? getLocationById(selectedParentId) : Promise.resolve(null),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -86,6 +92,15 @@ export default async function LocationsPage({ searchParams }: LocationsPageProps
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.capabilities.viewLocations) {
+    redirect("/dashboard");
+  }
+
+  const [topLevelLocations, selectedParent] = await Promise.all([
+    listTopLevelLocations(),
+    selectedParentId ? getLocationById(selectedParentId) : Promise.resolve(null),
+  ]);
 
   if (selectedParentId && !selectedParent) {
     redirect("/locations");
@@ -136,9 +151,11 @@ export default async function LocationsPage({ searchParams }: LocationsPageProps
                       </Button>
                     </Link>
                   ) : null}
-                  <Link href={buildNewLocationUrl(selectedParent?.id ?? null)}>
-                    <Button type="button">New location</Button>
-                  </Link>
+                  {permissionContext.capabilities.editLocations ? (
+                    <Link href={buildNewLocationUrl(selectedParent?.id ?? null)}>
+                      <Button type="button">New location</Button>
+                    </Link>
+                  ) : null}
                 </>
               }
               summary={summary}
@@ -195,27 +212,31 @@ export default async function LocationsPage({ searchParams }: LocationsPageProps
                         </div>
 
                         <div className="relative z-10 mt-6 grid grid-cols-2 gap-3">
-                          <Link href={editHref}>
-                            <Button className="w-full" type="button" variant="secondary">
-                              Edit
-                            </Button>
-                          </Link>
-                          <form action={deleteLocationAction}>
-                            <input name="locationId" type="hidden" value={location.id} />
-                            <input name="parentId" type="hidden" value={selectedParent?.id ?? ""} />
-                            <Button
-                              className={
-                                canDelete
-                                  ? "w-full rounded-2xl hover:bg-red-600 hover:text-white hover:ring-red-600 dark:hover:bg-red-500"
-                                  : "w-full rounded-2xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-900/70 dark:hover:bg-emerald-500/25"
-                              }
-                              disabled={!canDelete}
-                              type="submit"
-                              variant="secondary"
-                            >
-                              {canDelete ? "Delete" : "In use"}
-                            </Button>
-                          </form>
+                          {permissionContext.capabilities.editLocations ? (
+                            <>
+                              <Link href={editHref}>
+                                <Button className="w-full" type="button" variant="secondary">
+                                  Edit
+                                </Button>
+                              </Link>
+                              <form action={deleteLocationAction}>
+                                <input name="locationId" type="hidden" value={location.id} />
+                                <input name="parentId" type="hidden" value={selectedParent?.id ?? ""} />
+                                <Button
+                                  className={
+                                    canDelete
+                                      ? "w-full rounded-2xl hover:bg-red-600 hover:text-white hover:ring-red-600 dark:hover:bg-red-500"
+                                      : "w-full rounded-2xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-900/70 dark:hover:bg-emerald-500/25"
+                                  }
+                                  disabled={!canDelete}
+                                  type="submit"
+                                  variant="secondary"
+                                >
+                                  {canDelete ? "Delete" : "In use"}
+                                </Button>
+                              </form>
+                            </>
+                          ) : null}
                         </div>
                       </article>
                     );

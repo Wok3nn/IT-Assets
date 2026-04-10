@@ -21,7 +21,7 @@ function formatFieldSummary(fieldKeys: LabelTemplateFieldKey[]) {
     .join(", ");
 }
 
-export function LabelTemplateLibrary({ templates }: { templates: LabelTemplateSummary[] }) {
+export function LabelTemplateLibrary({ canEditTemplates, templates }: { canEditTemplates: boolean; templates: LabelTemplateSummary[] }) {
   if (templates.length === 0) {
     return (
       <PanelCard>
@@ -30,9 +30,11 @@ export function LabelTemplateLibrary({ templates }: { templates: LabelTemplateSu
         <div className="mt-6 rounded-3xl border border-dashed border-[#ece7df] px-5 py-10 text-center dark:border-[#4b5255]">
           <p className="text-lg font-semibold text-slate-950 dark:text-slate-100">No label templates yet</p>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Create the first template to establish a reusable label size and the initial asset fields that should appear on it.</p>
-          <div className="mt-5 flex justify-center">
-            <Link href="/labels/new"><Button type="button">New template</Button></Link>
-          </div>
+          {canEditTemplates ? (
+            <div className="mt-5 flex justify-center">
+              <Link href="/labels/new"><Button type="button">New template</Button></Link>
+            </div>
+          ) : null}
         </div>
       </PanelCard>
     );
@@ -65,8 +67,12 @@ export function LabelTemplateLibrary({ templates }: { templates: LabelTemplateSu
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <Link href={`/labels/new?duplicateId=${template.id}`}><Button type="button" variant="ghost">Duplicate</Button></Link>
-            <Link href={`/labels/${template.id}/edit`}><Button type="button">Edit template</Button></Link>
+            {canEditTemplates ? (
+              <>
+                <Link href={`/labels/new?duplicateId=${template.id}`}><Button type="button" variant="ghost">Duplicate</Button></Link>
+                <Link href={`/labels/${template.id}/edit`}><Button type="button">Edit template</Button></Link>
+              </>
+            ) : null}
           </div>
         </PanelCard>
       ))}

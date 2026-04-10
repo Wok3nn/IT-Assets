@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 
 type GeneralSettingsData = {
+  appTitle: string;
+  sessionTimeoutMinutes: number;
   startingAssetTagNumber: number;
 };
 
@@ -35,7 +37,7 @@ type EditableStatus = {
   assetCount: number;
 };
 
-type GeneralSettingsSectionKey = "assetTag" | "statuses" | "newStatus";
+type GeneralSettingsSectionKey = "appTitle" | "sessionTimeout" | "assetTag" | "statuses" | "newStatus";
 
 const SETTINGS_HUB_HREF = "/settings";
 const DEFAULT_NEW_STATUS_COLOR = "#f59e0b";
@@ -46,6 +48,10 @@ const collapsedSummaryClassName =
   "mt-3 text-sm text-slate-500 dark:text-slate-400";
 const compactNoteClassName =
   "rounded-2xl border border-slate-200/80 bg-slate-50/90 px-3.5 py-2.5 text-xs text-slate-500 dark:border-[#4b5255] dark:bg-[#2f3437]/90 dark:text-slate-400";
+const compactInputClassName = "h-9 rounded-xl px-3 py-1.5 text-sm";
+const compactColorInputClassName = "h-9 rounded-xl p-1.5";
+const statusRowClassName =
+  "grid gap-2 px-2.5 py-2 sm:grid-cols-[minmax(0,1fr)_44px] sm:items-center";
 
 function GeneralSettingsHeaderActions({
   isDirty,
@@ -95,7 +101,7 @@ function GeneralSettingsSectionCard({
   className?: string;
 }) {
   return (
-    <PanelCard className={cn("flex h-full flex-col p-4", className)}>
+    <PanelCard className={cn("flex flex-col p-4", className)}>
       <button className={cardHeaderButtonClassName} onClick={onToggle} type="button">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">{title}</h2>
@@ -134,6 +140,8 @@ export function GeneralSettingsPanels({
   initialSaved: boolean;
   saveGeneralSettingsAction: (formData: FormData) => void | Promise<void>;
 }) {
+  const initialAppTitle = generalSettings.appTitle;
+  const initialSessionTimeoutMinutes = String(generalSettings.sessionTimeoutMinutes);
   const initialStartingAssetTagNumber = String(generalSettings.startingAssetTagNumber);
   const initialStatuses = useMemo(
     () => assetStatuses.map((status) => ({
@@ -146,14 +154,18 @@ export function GeneralSettingsPanels({
     [assetStatuses],
   );
 
+  const [appTitle, setAppTitle] = useState(initialAppTitle);
+  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(initialSessionTimeoutMinutes);
   const [startingAssetTagNumber, setStartingAssetTagNumber] = useState(initialStartingAssetTagNumber);
   const [statuses, setStatuses] = useState<EditableStatus[]>(initialStatuses);
   const [newStatusName, setNewStatusName] = useState("");
   const [newStatusColor, setNewStatusColor] = useState(DEFAULT_NEW_STATUS_COLOR);
   const [isSaved, setIsSaved] = useState(initialSaved);
   const [openSections, setOpenSections] = useState<Record<GeneralSettingsSectionKey, boolean>>({
-    assetTag: true,
-    statuses: true,
+    appTitle: false,
+    sessionTimeout: false,
+    assetTag: false,
+    statuses: false,
     newStatus: false,
   });
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,6 +208,14 @@ export function GeneralSettingsPanels({
   };
 
   const isDirty = useMemo(() => {
+    if (appTitle !== initialAppTitle) {
+      return true;
+    }
+
+    if (sessionTimeoutMinutes !== initialSessionTimeoutMinutes) {
+      return true;
+    }
+
     if (startingAssetTagNumber !== initialStartingAssetTagNumber) {
       return true;
     }
@@ -214,8 +234,22 @@ export function GeneralSettingsPanels({
     }
 
     return newStatusName.trim().length > 0;
-  }, [initialStartingAssetTagNumber, initialStatuses, newStatusName, startingAssetTagNumber, statuses]);
+  }, [
+    appTitle,
+    initialAppTitle,
+    initialSessionTimeoutMinutes,
+    initialStartingAssetTagNumber,
+    initialStatuses,
+    newStatusName,
+    sessionTimeoutMinutes,
+    startingAssetTagNumber,
+    statuses,
+  ]);
 
+  const appTitleSummary = appTitle.trim()
+    ? `Sidebar label: ${appTitle.trim()}`
+    : `Sidebar label will use ${initialAppTitle}.`;
+  const sessionTimeoutSummary = `Users are signed out after ${sessionTimeoutMinutes || initialSessionTimeoutMinutes} minutes without an active session refresh.`;
   const assetTagSummary = `Starts from ${startingAssetTagNumber || initialStartingAssetTagNumber} and auto-increments to the next free numeric tag.`;
   const statusSummary = `${statuses.length} status${statuses.length === 1 ? "" : "es"} configured across ${statuses.reduce((sum, status) => sum + status.assetCount, 0)} asset${statuses.reduce((sum, status) => sum + status.assetCount, 0) === 1 ? "" : "s"}.`;
   const newStatusSummary = newStatusName.trim()
@@ -237,7 +271,64 @@ export function GeneralSettingsPanels({
         </div>
       </PageHero>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <GeneralSettingsSectionCard
+          description="Set the subtle application title shown in the expanded sidebar footer."
+          isOpen={openSections.appTitle}
+          onToggle={() => toggleSection("appTitle")}
+          summary={appTitleSummary}
+          title="App title"
+        >
+          <div className="space-y-3">
+            <FieldLabel>
+              <FieldLabelText>Application title</FieldLabelText>
+              <TextField
+                maxLength={80}
+                name="appTitle"
+                onChange={(event) => {
+                  clearSavedState();
+                  setAppTitle(event.target.value);
+                }}
+                placeholder="IT-Asset-Tracker"
+                type="text"
+                value={appTitle}
+              />
+            </FieldLabel>
+            <div className={compactNoteClassName}>
+              This controls the subtle application label near the bottom of the expanded sidebar. The collapsed sidebar keeps the logo-only treatment.
+            </div>
+          </div>
+        </GeneralSettingsSectionCard>
+
+        <GeneralSettingsSectionCard
+          description="Control how long local sign-in sessions stay active before requiring sign-in again."
+          isOpen={openSections.sessionTimeout}
+          onToggle={() => toggleSection("sessionTimeout")}
+          summary={sessionTimeoutSummary}
+          title="Session timeout"
+        >
+          <div className="space-y-3">
+            <FieldLabel>
+              <FieldLabelText>Timeout minutes</FieldLabelText>
+              <TextField
+                max={60}
+                min={5}
+                name="sessionTimeoutMinutes"
+                onChange={(event) => {
+                  clearSavedState();
+                  setSessionTimeoutMinutes(event.target.value);
+                }}
+                step={1}
+                type="number"
+                value={sessionTimeoutMinutes}
+              />
+            </FieldLabel>
+            <div className={compactNoteClassName}>
+              Allowed range is 5 to 60 minutes. The default is 15 minutes, and active session checks refresh the server-side expiry.
+            </div>
+          </div>
+        </GeneralSettingsSectionCard>
+
         <GeneralSettingsSectionCard
           description="Set the first numeric asset tag used when the app assigns the next available number."
           isOpen={openSections.assetTag}
@@ -267,23 +358,22 @@ export function GeneralSettingsPanels({
         </GeneralSettingsSectionCard>
 
         <GeneralSettingsSectionCard
-          className="xl:col-span-2"
           description="Rename statuses, adjust their color chips, and keep deployment workflow states tidy."
           isOpen={openSections.statuses}
           onToggle={() => toggleSection("statuses")}
           summary={statusSummary}
           title="Asset statuses"
         >
-          <div className="space-y-3">
-            <div className={compactNoteClassName}>Status rows stay compact here, while the page-level save action still commits all changes together.</div>
-            <div className="space-y-2.5">
-              {statuses.map((status, index) => (
-                <div key={status.id} className="rounded-[22px] border border-slate-200/80 bg-slate-50/95 px-3.5 py-3 dark:border-[#4b5255] dark:bg-[#2f3437]/90">
-                  <input name="statusId" type="hidden" value={status.id} />
-                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_94px_150px_88px] xl:items-center">
-                    <FieldLabel className="gap-1.5">
-                      <FieldLabelText>Name</FieldLabelText>
+          <div className="space-y-2.5">
+            <div className="overflow-hidden rounded-[20px] border border-slate-200/80 bg-slate-50/95 dark:border-[#4b5255] dark:bg-[#2f3437]/90">
+              <div className="divide-y divide-slate-200/80 dark:divide-[#4b5255]">
+                {statuses.map((status, index) => (
+                  <div key={status.id} className={statusRowClassName}>
+                    <input name="statusId" type="hidden" value={status.id} />
+                    <label className="min-w-0">
+                      <span className="sr-only">Status name</span>
                       <TextField
+                        className={compactInputClassName}
                         name="statusName"
                         onChange={(event) => {
                           clearSavedState();
@@ -294,11 +384,11 @@ export function GeneralSettingsPanels({
                         type="text"
                         value={status.name}
                       />
-                    </FieldLabel>
-                    <FieldLabel className="gap-1.5">
-                      <FieldLabelText>Color</FieldLabelText>
+                    </label>
+                    <label>
+                      <span className="sr-only">Status color</span>
                       <TextField
-                        className="h-11 p-2"
+                        className={cn(compactColorInputClassName, "w-full")}
                         name="statusColor"
                         onChange={(event) => {
                           clearSavedState();
@@ -309,21 +399,16 @@ export function GeneralSettingsPanels({
                         type="color"
                         value={status.color}
                       />
-                    </FieldLabel>
-                    <div className="space-y-1.5">
-                      <span className="block text-xs font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Preview</span>
-                      <div className="flex min-h-11 items-center">
-                        <AssetStatusPill color={status.color} label={status.name} />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5 text-sm">
-                      <span className="block text-xs font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">In use</span>
-                      <span className="text-slate-700 dark:text-slate-200">{status.assetCount} asset{status.assetCount === 1 ? "" : "s"}</span>
+                    </label>
+                    <div className="flex min-w-0 items-center justify-between gap-2 sm:col-span-2">
+                      <AssetStatusPill color={status.color} label={status.name} />
+                      <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{status.assetCount} asset{status.assetCount === 1 ? "" : "s"}</span>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">All status changes save together from the page header.</div>
           </div>
         </GeneralSettingsSectionCard>
 
@@ -352,7 +437,7 @@ export function GeneralSettingsPanels({
               <FieldLabel>
                 <FieldLabelText>Color</FieldLabelText>
                 <TextField
-                  className="h-11 p-2"
+                  className="h-10 p-1.5"
                   name="newStatusColor"
                   onChange={(event) => {
                     clearSavedState();

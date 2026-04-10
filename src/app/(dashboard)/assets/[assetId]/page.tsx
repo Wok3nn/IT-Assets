@@ -4,9 +4,10 @@ import type { CSSProperties } from "react";
 
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
-import { buildAssetHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
+import { buildAssetHref, buildAssetLabelHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
 import { AssetTransferPanel } from "@/modules/assets/asset-transfer-panel";
 import {
   checkInAsset,
@@ -59,9 +60,19 @@ async function checkOutAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
+  const permissionContext = await getCurrentUserAssetPermissionContext();
+
+  if (!permissionContext.capabilities.manageAssetTransfers) {
+    redirect("/assets");
+  }
 
   const assetId = formData.get("assetId")?.toString() ?? "";
   const returnTo = normalizeAssetsReturnTo(formData.get("returnTo")?.toString() ?? null);
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
+
+  if (!asset) {
+    redirect(returnTo);
+  }
 
   await checkOutAsset({
     assetId,
@@ -69,6 +80,7 @@ async function checkOutAssetAction(formData: FormData) {
     assignedLocationId: formData.get("checkoutLocationId")?.toString() ?? "",
     notes: formData.get("checkoutNote")?.toString() ?? "",
     actorUserId: currentUser.id,
+    accessScope: permissionContext.assetScope,
   });
 
   redirect(buildAssetHref(assetId, { returnTo }));
@@ -78,15 +90,26 @@ async function checkInAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
+  const permissionContext = await getCurrentUserAssetPermissionContext();
+
+  if (!permissionContext.capabilities.manageAssetTransfers) {
+    redirect("/assets");
+  }
 
   const assetId = formData.get("assetId")?.toString() ?? "";
   const returnTo = normalizeAssetsReturnTo(formData.get("returnTo")?.toString() ?? null);
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
+
+  if (!asset) {
+    redirect(returnTo);
+  }
 
   await checkInAsset({
     assetId,
     locationId: formData.get("checkInLocationId")?.toString() ?? "",
     notes: formData.get("checkInNote")?.toString() ?? "",
     actorUserId: currentUser.id,
+    accessScope: permissionContext.assetScope,
   });
 
   redirect(buildAssetHref(assetId, { returnTo }));
@@ -98,17 +121,23 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
   const transferMode = parseTransferMode(search.transfer);
   const returnTo = normalizeAssetsReturnTo(search.returnTo ?? null);
 
-  const [setupState, currentUser] = await Promise.all([readSetupState(), getCurrentUser()]);
+  const [setupState, currentUser, permissionContext] = await Promise.all([
+    readSetupState(),
+    getCurrentUser(),
+    getCurrentUserAssetPermissionContext(),
+  ]);
   if (!setupState?.isCompleted) redirect("/setup");
   if (!currentUser) redirect("/login");
+  if (!permissionContext.capabilities.viewAssets) notFound();
 
-  const [referenceData, asset, history] = await Promise.all([
+  const [referenceData, asset] = await Promise.all([
     listAssetReferenceData(),
-    getAssetById(assetId),
-    getAssetAuditHistory(assetId),
+    getAssetById(assetId, { accessScope: permissionContext.assetScope }),
   ]);
 
   if (!asset) notFound();
+
+  const history = await getAssetAuditHistory(assetId, undefined, { accessScope: permissionContext.assetScope });
 
   const recentHistory = history.slice(0, 3);
 
@@ -135,12 +164,16 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link href={`/assets/${asset.id}/label`}>
-                <Button type="button">Print label</Button>
-              </Link>
-              <Link href={buildAssetHref(asset.id, { section: "edit", returnTo })}>
-                <Button type="button" variant="secondary">Edit asset</Button>
-              </Link>
+              {permissionContext.capabilities.printLabels ? (
+                <Link href={buildAssetLabelHref(asset.id)}>
+                  <Button type="button">Print label</Button>
+                </Link>
+              ) : null}
+              {permissionContext.capabilities.editAssets ? (
+                <Link href={buildAssetHref(asset.id, { section: "edit", returnTo })}>
+                  <Button type="button" variant="secondary">Edit asset</Button>
+                </Link>
+              ) : null}
               <Link href={returnTo}>
                 <Button type="button" variant="ghost">Back to assets</Button>
               </Link>
@@ -149,25 +182,32 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
         </section>
 
         <div className="grid gap-6 xl:grid-cols-2">
-          <AssetTransferPanel
-            assetId={asset.id}
-            cardClass={subpanelClass}
-            checkInAction={checkInAssetAction}
-            checkOutAction={checkOutAssetAction}
-            fieldClass={fieldClass}
-            filterState={{ q: "", statusId: null, categoryId: null, scopeId: null, locationId: null, userId: null, sort: "updated-desc" }}
-            initialAssignedLocationId={asset.assignedLocationId}
-            initialAssignedUserId={asset.assignedUserId}
-            initialMode={transferMode}
-            isCheckedOut={Boolean(asset.assignedUserId || asset.status?.key === "ASSIGNED")}
-            locationLabel={asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) ?? "No location" : "No location"}
-            locations={referenceData.locations.map((location) => ({ id: location.id, label: buildTreeLabel(referenceData.locations, location.id) ?? location.name }))}
-            returnTo={returnTo}
-            statusColor={asset.status?.color ?? null}
-            statusLabel={asset.status?.name ?? "No status"}
-            userLabel={asset.assignedUser?.name ?? "Nobody"}
-            users={referenceData.users}
-          />
+          {permissionContext.capabilities.manageAssetTransfers ? (
+            <AssetTransferPanel
+              assetId={asset.id}
+              cardClass={subpanelClass}
+              checkInAction={checkInAssetAction}
+              checkOutAction={checkOutAssetAction}
+              fieldClass={fieldClass}
+              filterState={{ q: "", statusId: null, categoryId: null, scopeId: null, locationId: null, userId: null, sort: "updated-desc" }}
+              initialAssignedLocationId={asset.assignedLocationId}
+              initialAssignedUserId={asset.assignedUserId}
+              initialMode={transferMode}
+              isCheckedOut={Boolean(asset.assignedUserId || asset.status?.key === "ASSIGNED")}
+              locationLabel={asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) ?? "No location" : "No location"}
+              locations={referenceData.locations.map((location) => ({ id: location.id, label: buildTreeLabel(referenceData.locations, location.id) ?? location.name }))}
+              returnTo={returnTo}
+              statusColor={asset.status?.color ?? null}
+              statusLabel={asset.status?.name ?? "No status"}
+              userLabel={asset.assignedUser?.name ?? "Nobody"}
+              users={referenceData.users}
+            />
+          ) : (
+            <section className={subpanelClass}>
+              <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">Asset movement</h2>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">This role does not have check in / check out access.</p>
+            </section>
+          )}
 
           <section className={subpanelClass}>
             <div className="flex items-start justify-between gap-3">

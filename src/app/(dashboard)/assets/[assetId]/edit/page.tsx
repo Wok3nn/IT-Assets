@@ -5,7 +5,8 @@ import { notFound, redirect } from "next/navigation";
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { AssetForm } from "@/modules/assets/asset-form";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
@@ -44,9 +45,19 @@ async function updateAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
+  const permissionContext = await getCurrentUserAssetPermissionContext();
+
+  if (!permissionContext.capabilities.editAssets) {
+    redirect("/assets");
+  }
 
   const assetId = formData.get("assetId")?.toString() ?? "";
   const returnTo = normalizeAssetsReturnTo(formData.get("returnTo")?.toString() ?? null);
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
+
+  if (!asset) {
+    redirect(returnTo);
+  }
 
   await updateAsset({
     assetId,
@@ -64,6 +75,7 @@ async function updateAssetAction(formData: FormData) {
     assignedLocationId: formData.get("assignedLocationId")?.toString() ?? "",
     scopeIds: formData.getAll("scopeIds").map((value) => value.toString()),
     actorUserId: currentUser.id,
+    accessScope: permissionContext.assetScope,
   });
 
   revalidatePath("/assets");
@@ -77,13 +89,18 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
   const { assetId } = await params;
   const returnTo = normalizeAssetsReturnTo((await searchParams)?.returnTo ?? null);
 
-  const [setupState, currentUser] = await Promise.all([readSetupState(), getCurrentUser()]);
+  const [setupState, currentUser, permissionContext] = await Promise.all([
+    readSetupState(),
+    getCurrentUser(),
+    getCurrentUserAssetPermissionContext(),
+  ]);
   if (!setupState?.isCompleted) redirect("/setup");
   if (!currentUser) redirect("/login");
+  if (!permissionContext.capabilities.editAssets) notFound();
 
   const [referenceData, asset] = await Promise.all([
     listAssetReferenceData(),
-    getAssetById(assetId),
+    getAssetById(assetId, { accessScope: permissionContext.assetScope }),
   ]);
 
   if (!asset) notFound();

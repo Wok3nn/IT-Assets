@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/navigation/app-shell";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { GeneralSettingsPanels } from "@/modules/settings/components/general-settings-panels";
 import {
+  DEFAULT_APP_TITLE,
+  DEFAULT_SESSION_TIMEOUT_MINUTES,
   getGeneralSettings,
   listAssetStatuses,
   updateGeneralSettings,
@@ -24,6 +27,20 @@ type AssetStatus = {
 async function saveGeneralSettingsAction(formData: FormData) {
   "use server";
 
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    redirect("/login");
+  }
+
+  const permissionContext = await getCurrentUserSettingsPermissionContext();
+
+  if (!permissionContext.canViewSettings) {
+    redirect("/dashboard");
+  }
+
+  const appTitle = String(formData.get("appTitle") ?? DEFAULT_APP_TITLE).trim() || DEFAULT_APP_TITLE;
+  const sessionTimeoutMinutes = Number(formData.get("sessionTimeoutMinutes") ?? DEFAULT_SESSION_TIMEOUT_MINUTES);
   const startingAssetTagNumber = Number(formData.get("startingAssetTagNumber") ?? 5000);
   const statusIds = formData.getAll("statusId").map((value) => String(value ?? "").trim());
   const statusNames = formData.getAll("statusName").map((value) => String(value ?? "").trim());
@@ -31,7 +48,7 @@ async function saveGeneralSettingsAction(formData: FormData) {
   const newStatusName = String(formData.get("newStatusName") ?? "").trim();
   const newStatusColor = String(formData.get("newStatusColor") ?? "#f59e0b").trim();
 
-  await updateGeneralSettings({ startingAssetTagNumber });
+  await updateGeneralSettings({ appTitle, sessionTimeoutMinutes, startingAssetTagNumber });
 
   for (let index = 0; index < statusNames.length; index += 1) {
     const name = statusNames[index] ?? "";
@@ -57,11 +74,10 @@ export default async function GeneralSettingsPage({
   const savedParam = resolvedSearchParams?.saved;
   const initialSaved = Array.isArray(savedParam) ? savedParam.includes("true") : savedParam === "true";
 
-  const [setupState, currentUser, generalSettings, assetStatuses] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getGeneralSettings(),
-    listAssetStatuses(),
+    getCurrentUserSettingsPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -71,6 +87,15 @@ export default async function GeneralSettingsPage({
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.canViewSettings) {
+    redirect("/dashboard");
+  }
+
+  const [generalSettings, assetStatuses] = await Promise.all([
+    getGeneralSettings(),
+    listAssetStatuses(),
+  ]);
 
   return (
     <AppShell>

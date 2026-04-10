@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { LabelTemplatePrintPreview } from "@/modules/labels/components/label-template-print-preview";
 import { getLabelTemplateById } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
@@ -15,10 +16,10 @@ export default async function LabelTemplatePrintPage({ params }: LabelTemplatePr
   const resolvedParams = await params;
   const templateId = resolvedParams.templateId;
 
-  const [setupState, currentUser, template] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getLabelTemplateById(templateId),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -29,8 +30,14 @@ export default async function LabelTemplatePrintPage({ params }: LabelTemplatePr
     redirect("/login");
   }
 
+  if (!permissionContext.capabilities.viewLabels) {
+    notFound();
+  }
+
+  const template = await getLabelTemplateById(templateId);
+
   if (!template) {
-    redirect("/labels");
+    notFound();
   }
 
   return (

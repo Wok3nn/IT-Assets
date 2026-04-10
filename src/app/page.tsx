@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session.server";
 import { readSetupState } from "@/services/setup-state";
 
 export default async function HomePage() {

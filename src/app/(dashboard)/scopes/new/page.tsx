@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { ScopeCreateCard } from "@/modules/scopes/components/scope-create-card";
 import { createScope } from "@/modules/scopes/scope.service";
 import { readSetupState } from "@/services/setup-state";
@@ -19,6 +20,12 @@ async function createGroupAction(formData: FormData) {
 
   if (!currentUser) {
     redirect("/login");
+  }
+
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editDepartments) {
+    redirect(SCOPES_DIRECTORY_HREF);
   }
 
   const name = String(formData.get("name") ?? "").trim();
@@ -37,9 +44,10 @@ async function createGroupAction(formData: FormData) {
 }
 
 export default async function NewScopePage() {
-  const [setupState, currentUser] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -48,6 +56,10 @@ export default async function NewScopePage() {
 
   if (!currentUser) {
     redirect("/login");
+  }
+
+  if (!permissionContext.capabilities.editDepartments) {
+    notFound();
   }
 
   return (

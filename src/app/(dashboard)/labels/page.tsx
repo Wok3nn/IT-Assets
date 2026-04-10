@@ -5,16 +5,17 @@ import { HeaderAssetSearch } from "@/components/layout/header-asset-search";
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { LabelTemplateLibrary } from "@/modules/labels/components/label-template-library";
 import { listLabelTemplates } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
 
 export default async function LabelsPage() {
-  const [setupState, currentUser, templates] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    listLabelTemplates(),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -24,6 +25,12 @@ export default async function LabelsPage() {
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.capabilities.viewLabels) {
+    redirect("/dashboard");
+  }
+
+  const templates = await listLabelTemplates();
 
   return (
     <AppShell>
@@ -39,13 +46,15 @@ export default async function LabelsPage() {
               <HeaderAssetSearch compact />
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <Link href="/settings/labels"><Button type="button" variant="ghost">Settings entry</Button></Link>
-                <Link href="/labels/new"><Button type="button">New template</Button></Link>
+                {permissionContext.capabilities.editLabels ? (
+                  <Link href="/labels/new"><Button type="button">New template</Button></Link>
+                ) : null}
               </div>
             </div>
           </div>
         </PageHero>
 
-        <LabelTemplateLibrary templates={templates} />
+        <LabelTemplateLibrary canEditTemplates={permissionContext.capabilities.editLabels} templates={templates} />
       </div>
     </AppShell>
   );

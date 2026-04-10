@@ -13,6 +13,7 @@ const optionalIdSchema = z.union([z.string().trim().cuid(), z.literal("")]).opti
 const optionalTextSchema = z.union([z.string().trim().max(240), z.literal("")]).optional();
 const optionalDateSchema = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal("")]).optional();
 const optionalAssetTagSchema = z.union([z.string().trim().min(1).max(80), z.literal("")]).optional();
+const requiredIdSchema = z.string().trim().cuid();
 
 const assetSchema = z
   .object({
@@ -40,6 +41,24 @@ const assetSchema = z
       });
     }
   });
+
+const assetBulkEditSchema = z.object({
+  assetIds: z.array(requiredIdSchema).min(1),
+  make: z.string().trim().min(1).max(240).optional(),
+  model: z.string().trim().min(1).max(240).optional(),
+  categoryId: requiredIdSchema.optional(),
+  assignedLocationId: requiredIdSchema.optional(),
+  scopeId: requiredIdSchema.optional(),
+  actorUserId: requiredIdSchema.optional(),
+}).superRefine((input, ctx) => {
+  if (!input.make && !input.model && !input.categoryId && !input.assignedLocationId && !input.scopeId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["assetIds"],
+      message: "Choose at least one bulk change before applying updates.",
+    });
+  }
+});
 
 export type AssetSortOption = "updated-desc" | "tag-asc" | "tag-desc" | "model-asc" | "model-desc";
 
@@ -103,6 +122,18 @@ const assetListSelect = Prisma.validator<Prisma.AssetSelect>()({
 });
 
 type AssetListItem = Prisma.AssetGetPayload<{ select: typeof assetListSelect }>;
+type BulkEditableAsset = {
+  id: string;
+  assetTag: string;
+  name: string;
+  make: string | null;
+  model: string | null;
+  categoryId: string | null;
+  assignedLocationId: string | null;
+  scopes: Array<{ scopeId: string; scope: { id: string; name: string; slug: string } }>;
+  category: { id: string; name: string; parentId: string | null } | null;
+  assignedLocation: { id: string; name: string; parentId: string | null } | null;
+};
 type AssetSortCandidate = {
   id: string;
   assetTag: string;
@@ -111,6 +142,12 @@ type AssetSortCandidate = {
 };
 
 type DatabaseClient = typeof db | Prisma.TransactionClient;
+export type AssetAccessScope = {
+  accessMode: "all" | "limited";
+  categoryIds: string[];
+  departmentIds: string[];
+  locationIds: string[];
+};
 
 type AssetAuditEntry = {
   actorUserId?: string;
@@ -119,6 +156,62 @@ type AssetAuditEntry = {
   summary: string;
   payload?: unknown;
 };
+
+function buildAssetAccessWhere(accessScope?: AssetAccessScope | null): Prisma.AssetWhereInput | null {
+  if (!accessScope || accessScope.accessMode === "all") {
+    return null;
+  }
+
+  const scopeClauses: Prisma.AssetWhereInput[] = [];
+
+  if (accessScope.categoryIds.length > 0) {
+    scopeClauses.push({
+      categoryId: {
+        in: accessScope.categoryIds,
+      },
+    });
+  }
+
+  if (accessScope.departmentIds.length > 0) {
+    scopeClauses.push({
+      scopes: {
+        some: {
+          scopeId: {
+            in: accessScope.departmentIds,
+          },
+        },
+      },
+    });
+  }
+
+  if (accessScope.locationIds.length > 0) {
+    scopeClauses.push({
+      assignedLocationId: {
+        in: accessScope.locationIds,
+      },
+    });
+  }
+
+  if (scopeClauses.length === 0) {
+    return {
+      id: {
+        in: [],
+      },
+    };
+  }
+
+  return {
+    OR: scopeClauses,
+  };
+}
+
+function normalizeAndClauses(andInput?: Prisma.AssetWhereInput | Prisma.AssetWhereInput[]) {
+  if (!andInput) {
+    return [] as Prisma.AssetWhereInput[];
+  }
+
+  return Array.isArray(andInput) ? andInput : [andInput];
+}
 
 function normalizeOptional(value?: string) {
   const trimmed = value?.trim();
@@ -189,6 +282,7 @@ function buildAssetListWhere(options?: {
   locationId?: string | null;
   userId?: string | null;
   includeRetired?: boolean;
+  accessScope?: AssetAccessScope | null;
 }) {
   const where: Prisma.AssetWhereInput = {};
   const q = options?.q?.trim();
@@ -238,6 +332,12 @@ function buildAssetListWhere(options?: {
         key: "RETIRED",
       },
     };
+  }
+
+  const accessWhere = buildAssetAccessWhere(options?.accessScope);
+
+  if (accessWhere) {
+    where.AND = [...normalizeAndClauses(where.AND), accessWhere];
   }
 
   return where;
@@ -569,6 +669,7 @@ export async function listAssets(options?: {
   sort?: AssetSortOption;
   page?: number;
   pageSize?: number;
+  accessScope?: AssetAccessScope | null;
 }) {
   await ensureDefaultAssetStatuses();
 
@@ -702,9 +803,18 @@ export async function listAssets(options?: {
   };
 }
 
-export async function getAssetById(assetId: string) {
-  return db.asset.findUnique({
-    where: { id: assetId },
+export async function getAssetById(assetId: string, options?: { accessScope?: AssetAccessScope | null }) {
+  const accessWhere = buildAssetAccessWhere(options?.accessScope);
+
+  return db.asset.findFirst({
+    where: accessWhere
+      ? {
+          id: assetId,
+          AND: [accessWhere],
+        }
+      : {
+          id: assetId,
+        },
     select: {
       id: true,
       name: true,
@@ -766,6 +876,73 @@ export async function getAssetById(assetId: string) {
       },
     },
   });
+}
+
+export async function getAssetsByIds(assetIds: string[], options?: { accessScope?: AssetAccessScope | null }) {
+  const uniqueAssetIds = Array.from(new Set(assetIds.map((assetId) => assetId.trim()).filter(Boolean)));
+
+  if (uniqueAssetIds.length === 0) {
+    return [] as BulkEditableAsset[];
+  }
+
+  const accessWhere = buildAssetAccessWhere(options?.accessScope);
+
+  const assets = await db.asset.findMany({
+    where: accessWhere
+      ? {
+          AND: [
+            {
+              id: {
+                in: uniqueAssetIds,
+              },
+            },
+            accessWhere,
+          ],
+        }
+      : {
+          id: {
+            in: uniqueAssetIds,
+          },
+        },
+    select: {
+      id: true,
+      assetTag: true,
+      name: true,
+      make: true,
+      model: true,
+      categoryId: true,
+      assignedLocationId: true,
+      category: {
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+        },
+      },
+      scopes: {
+        select: {
+          scopeId: true,
+          scope: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      },
+      assignedLocation: {
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+        },
+      },
+    },
+  });
+
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+  return uniqueAssetIds.map((assetId) => assetById.get(assetId)).filter((asset): asset is BulkEditableAsset => Boolean(asset));
 }
 
 export async function createAsset(input: {
@@ -854,10 +1031,19 @@ export async function updateAsset(input: {
   assignedLocationId?: string;
   scopeIds?: string[];
   actorUserId?: string;
+  accessScope?: AssetAccessScope | null;
 }) {
   return db.$transaction(async (tx) => {
-    const existingAsset = await tx.asset.findUnique({
-      where: { id: input.assetId },
+    const accessWhere = buildAssetAccessWhere(input.accessScope);
+    const existingAsset = await tx.asset.findFirst({
+      where: accessWhere
+        ? {
+            id: input.assetId,
+            AND: [accessWhere],
+          }
+        : {
+            id: input.assetId,
+          },
       select: {
         id: true,
         name: true,
@@ -944,10 +1130,138 @@ export async function updateAsset(input: {
   });
 }
 
-export async function deleteAsset(assetId: string, actorUserId?: string) {
+export async function bulkUpdateAssets(input: {
+  assetIds: string[];
+  make?: string;
+  model?: string;
+  categoryId?: string;
+  assignedLocationId?: string;
+  scopeId?: string;
+  actorUserId?: string;
+  accessScope?: AssetAccessScope | null;
+}) {
+  const parsed = assetBulkEditSchema.parse({
+    ...input,
+    assetIds: Array.from(new Set(input.assetIds.map((assetId) => assetId.trim()).filter(Boolean))),
+    make: input.make?.trim() || undefined,
+    model: input.model?.trim() || undefined,
+    categoryId: normalizeOptional(input.categoryId) ?? undefined,
+    assignedLocationId: normalizeOptional(input.assignedLocationId) ?? undefined,
+    scopeId: normalizeOptional(input.scopeId) ?? undefined,
+    actorUserId: normalizeOptional(input.actorUserId) ?? undefined,
+  });
+
+  return db.$transaction(async (tx) => {
+    const accessWhere = buildAssetAccessWhere(input.accessScope);
+    const [validatedCategoryId, validatedAssignedLocationId, validatedScopeIds, existingAssets] = await Promise.all([
+      parsed.categoryId ? validateCategoryId(tx, parsed.categoryId) : Promise.resolve(undefined),
+      parsed.assignedLocationId ? ensureEntityExists(tx, "location", parsed.assignedLocationId, "Location") : Promise.resolve(undefined),
+      parsed.scopeId ? validateScopeIds(tx, [parsed.scopeId]) : Promise.resolve(undefined),
+      tx.asset.findMany({
+        where: accessWhere
+          ? {
+              AND: [
+                {
+                  id: {
+                    in: parsed.assetIds,
+                  },
+                },
+                accessWhere,
+              ],
+            }
+          : {
+              id: {
+                in: parsed.assetIds,
+              },
+            },
+        select: {
+          id: true,
+          assetTag: true,
+          make: true,
+          model: true,
+          categoryId: true,
+          assignedLocationId: true,
+          scopes: {
+            select: {
+              scopeId: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (existingAssets.length !== parsed.assetIds.length) {
+      throw new Error("One or more selected assets no longer exist.");
+    }
+
+    const assetById = new Map(existingAssets.map((asset) => [asset.id, asset]));
+    const orderedAssets = parsed.assetIds.map((assetId) => assetById.get(assetId)).filter((asset): asset is NonNullable<typeof existingAssets[number]> => Boolean(asset));
+
+    for (const asset of orderedAssets) {
+      const nextMake = parsed.make ?? asset.make;
+      const nextModel = parsed.model ?? asset.model;
+      const nextCategoryId = validatedCategoryId ?? asset.categoryId;
+      const nextAssignedLocationId = validatedAssignedLocationId ?? asset.assignedLocationId;
+      const nextScopeIds = validatedScopeIds ?? asset.scopes.map((scope) => scope.scopeId);
+
+      await tx.asset.update({
+        where: { id: asset.id },
+        data: {
+          make: parsed.make ?? undefined,
+          model: parsed.model ?? undefined,
+          categoryId: validatedCategoryId ?? undefined,
+          assignedLocationId: validatedAssignedLocationId ?? undefined,
+          scopes: validatedScopeIds
+            ? {
+                deleteMany: {},
+                create: validatedScopeIds.map((scopeId) => ({ scopeId })),
+              }
+            : undefined,
+        },
+      });
+
+      await createAssetAuditEntry(tx, {
+        actorUserId: parsed.actorUserId,
+        action: "asset.bulk_updated",
+        entityId: asset.id,
+        summary: `Bulk updated asset ${asset.assetTag}.`,
+        payload: {
+          before: {
+            make: asset.make,
+            model: asset.model,
+            categoryId: asset.categoryId,
+            assignedLocationId: asset.assignedLocationId,
+            scopeIds: asset.scopes.map((scope) => scope.scopeId).sort(),
+          },
+          after: {
+            make: nextMake,
+            model: nextModel,
+            categoryId: nextCategoryId,
+            assignedLocationId: nextAssignedLocationId,
+            scopeIds: nextScopeIds.slice().sort(),
+          },
+        },
+      });
+    }
+
+    return {
+      updatedCount: orderedAssets.length,
+    };
+  });
+}
+
+export async function deleteAsset(assetId: string, actorUserId?: string, accessScope?: AssetAccessScope | null) {
   await db.$transaction(async (tx) => {
-    const existingAsset = await tx.asset.findUnique({
-      where: { id: assetId },
+    const accessWhere = buildAssetAccessWhere(accessScope);
+    const existingAsset = await tx.asset.findFirst({
+      where: accessWhere
+        ? {
+            id: assetId,
+            AND: [accessWhere],
+          }
+        : {
+            id: assetId,
+          },
       select: {
         id: true,
         name: true,
@@ -982,10 +1296,19 @@ export async function checkOutAsset(input: {
   assignedLocationId?: string;
   notes?: string;
   actorUserId?: string;
+  accessScope?: AssetAccessScope | null;
 }) {
   return db.$transaction(async (tx) => {
-    const asset = await tx.asset.findUnique({
-      where: { id: input.assetId },
+    const accessWhere = buildAssetAccessWhere(input.accessScope);
+    const asset = await tx.asset.findFirst({
+      where: accessWhere
+        ? {
+            id: input.assetId,
+            AND: [accessWhere],
+          }
+        : {
+            id: input.assetId,
+          },
       select: {
         id: true,
         assetTag: true,
@@ -1044,10 +1367,19 @@ export async function checkInAsset(input: {
   locationId?: string;
   notes?: string;
   actorUserId?: string;
+  accessScope?: AssetAccessScope | null;
 }) {
   return db.$transaction(async (tx) => {
-    const asset = await tx.asset.findUnique({
-      where: { id: input.assetId },
+    const accessWhere = buildAssetAccessWhere(input.accessScope);
+    const asset = await tx.asset.findFirst({
+      where: accessWhere
+        ? {
+            id: input.assetId,
+            AND: [accessWhere],
+          }
+        : {
+            id: input.assetId,
+          },
       select: {
         id: true,
         assetTag: true,
@@ -1094,10 +1426,31 @@ export async function checkInAsset(input: {
   });
 }
 
-export async function getAssetAuditHistory(assetId: string, days?: number | null) {
+export async function getAssetAuditHistory(
+  assetId: string,
+  days?: number | null,
+  options?: { accessScope?: AssetAccessScope | null },
+) {
   const createdAtFilter = days && Number.isFinite(days)
     ? { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) }
     : undefined;
+  const accessWhere = buildAssetAccessWhere(options?.accessScope);
+
+  if (accessWhere) {
+    const accessibleAsset = await db.asset.findFirst({
+      where: {
+        id: assetId,
+        AND: [accessWhere],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!accessibleAsset) {
+      return [];
+    }
+  }
 
   return db.auditLog.findMany({
     where: {

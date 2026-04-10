@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { LocationCreateCard } from "@/modules/locations/components/location-create-card";
 import { createLocation, getLocationById, listAllLocations } from "@/modules/locations/location.service";
 import { readSetupState } from "@/services/setup-state";
@@ -31,6 +32,12 @@ async function createLocationAction(formData: FormData) {
 
   if (!currentUser) {
     redirect("/login");
+  }
+
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editLocations) {
+    redirect("/locations");
   }
 
   const name = String(formData.get("name") ?? "").trim();
@@ -60,11 +67,10 @@ export default async function NewLocationPage({ searchParams }: NewLocationPageP
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const defaultParentId = resolvedSearchParams?.parentId?.trim() || null;
 
-  const [setupState, currentUser, locations, defaultParent] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    listAllLocations(),
-    defaultParentId ? getLocationById(defaultParentId) : Promise.resolve(null),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -74,6 +80,15 @@ export default async function NewLocationPage({ searchParams }: NewLocationPageP
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.capabilities.editLocations) {
+    notFound();
+  }
+
+  const [locations, defaultParent] = await Promise.all([
+    listAllLocations(),
+    defaultParentId ? getLocationById(defaultParentId) : Promise.resolve(null),
+  ]);
 
   if (defaultParentId && !defaultParent) {
     redirect("/locations/new");

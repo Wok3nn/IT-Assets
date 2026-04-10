@@ -33,6 +33,7 @@ export function UsersDirectoryList({
   nextPageHref,
   currentUserId,
   buildEditHref,
+  canEditUsers,
   renderDeleteForm,
 }: {
   users: DirectoryUser[];
@@ -46,6 +47,7 @@ export function UsersDirectoryList({
   nextPageHref: string | null;
   currentUserId: string;
   buildEditHref: (userId: string) => string;
+  canEditUsers: boolean;
   renderDeleteForm: (userId: string, canDelete: boolean) => ReactNode;
 }) {
   if (users.length === 0) {
@@ -102,9 +104,11 @@ export function UsersDirectoryList({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2 whitespace-nowrap">
-                      <Link href={buildEditHref(user.id)}>
-                        <Button className="px-3 py-1.5 text-xs" type="button" variant="secondary">Edit</Button>
-                      </Link>
+                      {canEditUsers ? (
+                        <Link href={buildEditHref(user.id)}>
+                          <Button className="px-3 py-1.5 text-xs" type="button" variant="secondary">Edit</Button>
+                        </Link>
+                      ) : null}
                       {renderDeleteForm(user.id, canDelete)}
                     </div>
                   </td>

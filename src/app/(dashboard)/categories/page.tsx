@@ -10,7 +10,8 @@ import { PageHero } from "@/components/layout/page-hero";
 import { PanelCard } from "@/components/layout/panel-card";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { buildAssetsUrl } from "@/modules/assets/assets-routing";
 import {
   deleteCategory,
@@ -58,6 +59,12 @@ async function deleteCategoryAction(formData: FormData) {
     redirect("/login");
   }
 
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editCategories) {
+    redirect("/categories");
+  }
+
   const categoryId = String(formData.get("categoryId") ?? "").trim();
   const parentIdValue = String(formData.get("parentId") ?? "").trim();
 
@@ -77,11 +84,10 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const selectedParentId = resolvedSearchParams?.parentId?.trim() || null;
 
-  const [setupState, currentUser, topLevelCategories, selectedParent] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    listTopLevelCategories(),
-    selectedParentId ? getCategoryById(selectedParentId) : Promise.resolve(null),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -91,6 +97,15 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.capabilities.viewCategories) {
+    redirect("/dashboard");
+  }
+
+  const [topLevelCategories, selectedParent] = await Promise.all([
+    listTopLevelCategories(),
+    selectedParentId ? getCategoryById(selectedParentId) : Promise.resolve(null),
+  ]);
 
   if (selectedParentId && !selectedParent) {
     redirect("/categories");
@@ -148,9 +163,11 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
                       </Link>
                     </>
                   ) : null}
-                  <Link href={buildNewCategoryUrl(selectedParent?.id ?? null)}>
-                    <Button type="button">New category</Button>
-                  </Link>
+                  {permissionContext.capabilities.editCategories ? (
+                    <Link href={buildNewCategoryUrl(selectedParent?.id ?? null)}>
+                      <Button type="button">New category</Button>
+                    </Link>
+                  ) : null}
                 </>
               }
               summary={summary}
@@ -207,27 +224,31 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
                               View assets
                             </Button>
                           </Link>
-                          <Link href={editHref}>
-                            <Button className={categoryCardActionClassName} type="button" variant="secondary">
-                              Edit
-                            </Button>
-                          </Link>
-                          <form action={deleteCategoryAction}>
-                            <input name="categoryId" type="hidden" value={category.id} />
-                            <input name="parentId" type="hidden" value={selectedParent?.id ?? ""} />
-                            <Button
-                              className={
-                                canDelete
-                                  ? categoryCardDangerActionClassName
-                                  : categoryCardStatusClassName
-                              }
-                              disabled={!canDelete}
-                              type="submit"
-                              variant="secondary"
-                            >
-                              {canDelete ? "Delete" : "In use"}
-                            </Button>
-                          </form>
+                          {permissionContext.capabilities.editCategories ? (
+                            <>
+                              <Link href={editHref}>
+                                <Button className={categoryCardActionClassName} type="button" variant="secondary">
+                                  Edit
+                                </Button>
+                              </Link>
+                              <form action={deleteCategoryAction}>
+                                <input name="categoryId" type="hidden" value={category.id} />
+                                <input name="parentId" type="hidden" value={selectedParent?.id ?? ""} />
+                                <Button
+                                  className={
+                                    canDelete
+                                      ? categoryCardDangerActionClassName
+                                      : categoryCardStatusClassName
+                                  }
+                                  disabled={!canDelete}
+                                  type="submit"
+                                  variant="secondary"
+                                >
+                                  {canDelete ? "Delete" : "In use"}
+                                </Button>
+                              </form>
+                            </>
+                          ) : null}
                         </div>
                       </article>
                     );

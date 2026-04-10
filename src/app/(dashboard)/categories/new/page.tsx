@@ -5,11 +5,13 @@ import { revalidatePath } from "next/cache";
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { CategoryCreateCard } from "@/modules/categories/components/category-create-card";
 import { createCategory, getCategoryById, listAllCategories } from "@/modules/categories/category.service";
 import { listEnabledLabelTemplates } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
+import { notFound } from "next/navigation";
 
 type NewCategoryPageProps = {
   searchParams?: Promise<{
@@ -32,6 +34,12 @@ async function createCategoryAction(formData: FormData) {
 
   if (!currentUser) {
     redirect("/login");
+  }
+
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editCategories) {
+    redirect("/categories");
   }
 
   const name = String(formData.get("name") ?? "").trim();
@@ -61,12 +69,10 @@ export default async function NewCategoryPage({ searchParams }: NewCategoryPageP
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const defaultParentId = resolvedSearchParams?.parentId?.trim() || null;
 
-  const [setupState, currentUser, categories, defaultParent, labelTemplates] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    listAllCategories(),
-    defaultParentId ? getCategoryById(defaultParentId) : Promise.resolve(null),
-    listEnabledLabelTemplates(),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -76,6 +82,16 @@ export default async function NewCategoryPage({ searchParams }: NewCategoryPageP
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.capabilities.editCategories) {
+    notFound();
+  }
+
+  const [categories, defaultParent, labelTemplates] = await Promise.all([
+    listAllCategories(),
+    defaultParentId ? getCategoryById(defaultParentId) : Promise.resolve(null),
+    listEnabledLabelTemplates(),
+  ]);
 
   if (defaultParentId && !defaultParent) {
     redirect("/categories/new");

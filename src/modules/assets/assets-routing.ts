@@ -2,6 +2,7 @@ import type { AssetSortOption } from "@/modules/assets/asset.service";
 
 export const ASSET_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 export type AssetPageSize = (typeof ASSET_PAGE_SIZE_OPTIONS)[number];
+export const ASSET_BULK_EDIT_HREF = "/assets/bulk-edit";
 
 export type AssetsFilterState = {
   q?: string | null;
@@ -65,6 +66,15 @@ export function normalizeAssetsReturnTo(value?: string | null) {
   return "/assets";
 }
 
+export function parseAssetIdsParam(value?: string | string[] | null) {
+  if (!value) {
+    return [];
+  }
+
+  const values = Array.isArray(value) ? value : [value];
+  return Array.from(new Set(values.map((entry) => entry.trim()).filter(Boolean)));
+}
+
 export function buildAssetHref(
   assetId: string,
   options?: {
@@ -90,6 +100,10 @@ export function buildAssetHref(
 
   const query = params.toString();
   return query ? `${basePath}?${query}` : basePath;
+}
+
+export function buildAssetLabelHref(assetId: string) {
+  return `/assets/${assetId}/label`;
 }
 
 export function buildAssetLookupPath(assetId: string) {

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { LocationEditCard } from "@/modules/locations/components/location-edit-card";
 import { getLocationById, updateLocation } from "@/modules/locations/location.service";
 import { readSetupState } from "@/services/setup-state";
@@ -46,6 +47,12 @@ async function updateLocationAction(formData: FormData) {
     redirect("/login");
   }
 
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editLocations) {
+    redirect("/locations");
+  }
+
   const locationId = String(formData.get("locationId") ?? "").trim();
   const returnTo = String(formData.get("returnTo") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -82,10 +89,10 @@ export default async function EditLocationPage({ params, searchParams }: EditLoc
     searchParams ? searchParams : Promise.resolve(undefined),
   ]);
 
-  const [setupState, currentUser, location] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getLocationById(locationId),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -96,8 +103,14 @@ export default async function EditLocationPage({ params, searchParams }: EditLoc
     redirect("/login");
   }
 
+  if (!permissionContext.capabilities.editLocations) {
+    notFound();
+  }
+
+  const location = await getLocationById(locationId);
+
   if (!location) {
-    redirect("/locations");
+    notFound();
   }
 
   const returnTo = normalizeLocationReturnTo(resolvedSearchParams?.returnTo, location.parent?.id ?? null);

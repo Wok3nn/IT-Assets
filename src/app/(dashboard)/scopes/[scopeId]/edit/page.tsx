@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { ScopeEditCard } from "@/modules/scopes/components/scope-edit-card";
 import { getScopeById, updateScope } from "@/modules/scopes/scope.service";
 import { readSetupState } from "@/services/setup-state";
@@ -38,6 +39,12 @@ async function updateScopeAction(formData: FormData) {
 
   if (!currentUser) {
     redirect("/login");
+  }
+
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editDepartments) {
+    redirect(DEFAULT_SCOPES_RETURN_TO);
   }
 
   const scopeId = String(formData.get("scopeId") ?? "").trim();
@@ -84,10 +91,10 @@ export default async function EditScopePage({ params, searchParams }: EditScopeP
     searchParams ? searchParams : Promise.resolve(undefined),
   ]);
 
-  const [setupState, currentUser, scope] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getScopeById(scopeId),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -98,8 +105,14 @@ export default async function EditScopePage({ params, searchParams }: EditScopeP
     redirect("/login");
   }
 
+  if (!permissionContext.capabilities.editDepartments) {
+    notFound();
+  }
+
+  const scope = await getScopeById(scopeId);
+
   if (!scope) {
-    redirect(DEFAULT_SCOPES_RETURN_TO);
+    notFound();
   }
 
   const returnTo = normalizeScopesReturnTo(resolvedSearchParams?.returnTo);

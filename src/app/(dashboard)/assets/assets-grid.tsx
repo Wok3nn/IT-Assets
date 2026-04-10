@@ -4,8 +4,9 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowUpDown, Settings2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
-import { buildAssetHref } from "@/modules/assets/assets-routing";
+import { ASSET_BULK_EDIT_HREF, buildAssetHref, buildAssetLabelHref } from "@/modules/assets/assets-routing";
 import type { AssetSortOption } from "@/modules/assets/asset.service";
 
 export type AssetGridRow = {
@@ -62,6 +63,10 @@ type AssetsGridProps = {
   deleteAction: (formData: FormData) => void | Promise<void>;
   activeSort: AssetSortOption;
   headerSorts: Partial<Record<"assetTag" | "assetModel", HeaderSortConfig>>;
+  canBulkEditAssets: boolean;
+  canDeleteAssets: boolean;
+  canManageAssetTransfers: boolean;
+  canPrintLabels: boolean;
 };
 
 const DEBUG_RESIZE = false;
@@ -186,13 +191,13 @@ function ActionLink({ href, label, isSelected, style, sizeStyle }: { href: strin
   return <Link className={className} href={href} style={{ ...sizeStyle, ...style }}>{label}</Link>;
 }
 
-function DeleteButton({ row, isSelected, deleteAction, returnTo }: { row: AssetGridRow; isSelected: boolean; deleteAction: (formData: FormData) => void | Promise<void>; returnTo: string }) {
+function DeleteButton({ row, isAllowed, isSelected, deleteAction, returnTo }: { row: AssetGridRow; isAllowed: boolean; isSelected: boolean; deleteAction: (formData: FormData) => void | Promise<void>; returnTo: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const className = isSelected
     ? "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-white"
     : "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-slate-500 dark:text-slate-200";
 
-  if (!isSelected) {
+  if (!isSelected || !isAllowed) {
     return <span aria-disabled="true" className={className} style={{ ...DELETE_ACTION_STYLE, ...DISABLED_PILL_STYLE }}>Delete</span>;
   }
 
@@ -219,8 +224,19 @@ function DeleteButton({ row, isSelected, deleteAction, returnTo }: { row: AssetG
   );
 }
 
-export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSorts }: AssetsGridProps) {
+export function AssetsGrid({
+  rows,
+  returnTo,
+  deleteAction,
+  activeSort,
+  headerSorts,
+  canBulkEditAssets,
+  canDeleteAssets,
+  canManageAssetTransfers,
+  canPrintLabels,
+}: AssetsGridProps) {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(rows[0]?.id ?? null);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [columnWidths, setColumnWidths] = useState<Record<ColumnId, number>>(() => {
     if (typeof window !== "undefined" && cachedColumnWidths) {
       return cachedColumnWidths;
@@ -244,6 +260,7 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
   const wrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const resizeStateRef = useRef<ResizeState | null>(null);
 
   useEffect(() => {
@@ -293,6 +310,10 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
   }, [rows]);
 
   useEffect(() => {
+    setSelectedAssetIds((current) => current.filter((assetId) => rows.some((row) => row.id === assetId)));
+  }, [rows]);
+
+  useEffect(() => {
     cachedColumnWidths = columnWidths;
   }, [columnWidths]);
 
@@ -334,6 +355,16 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
       return () => window.removeEventListener("pointerdown", handlePointerDown);
     }
   }, [isColumnsMenuOpen]);
+
+  const allVisibleAssetIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const allVisibleSelected = allVisibleAssetIds.length > 0 && allVisibleAssetIds.every((assetId) => selectedAssetIds.includes(assetId));
+  const partiallySelected = selectedAssetIds.length > 0 && !allVisibleSelected;
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = partiallySelected;
+    }
+  }, [partiallySelected]);
 
   useLayoutEffect(() => {
     const updateWidth = () => {
@@ -475,6 +506,27 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
     });
   }
 
+  function toggleAssetSelection(assetId: string) {
+    setSelectedAssetIds((current) => (
+      current.includes(assetId) ? current.filter((id) => id !== assetId) : [...current, assetId]
+    ));
+  }
+
+  function toggleSelectAllVisible() {
+    setSelectedAssetIds((current) => {
+      if (allVisibleSelected) {
+        return current.filter((assetId) => !allVisibleAssetIds.includes(assetId));
+      }
+
+      const next = new Set(current);
+      for (const assetId of allVisibleAssetIds) {
+        next.add(assetId);
+      }
+
+      return Array.from(next);
+    });
+  }
+
   const visibleColumns = useMemo(() => columns.filter((column) => visibleColumnIds.includes(column.id)), [visibleColumnIds]);
 
   const renderedWidths = useMemo(() => {
@@ -512,38 +564,51 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
       <div className="flex items-center justify-between border-b border-[#d7dde4] px-4 py-3 dark:border-[#556068]">
         <div>
           <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Asset table</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose which optional columns stay visible. Select, Asset Tag, and Actions remain fixed.</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose optional columns, keep row-level actions separate, and use the checkbox column for bulk selection. Select, Asset Tag, and Actions remain fixed.</p>
         </div>
-        <div className="relative" ref={menuRef}>
-          <button
-            className={columnMenuButtonClassName}
-            onClick={(event) => {
-              event.stopPropagation();
-              setIsColumnsMenuOpen((current) => !current);
-            }}
-            type="button"
-          >
-            <Settings2 className="h-4 w-4" strokeWidth={1.8} />
-            <span>Columns</span>
-          </button>
-          {isColumnsMenuOpen ? (
-            <div className={columnMenuPanelClassName} onClick={(event) => event.stopPropagation()}>
-              <div className="mb-2 px-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Visible columns</p>
-              </div>
-              <div className="space-y-1">
-                {optionalColumns.map((column) => {
-                  const isChecked = visibleColumnIds.includes(column.id);
-                  return (
-                    <label key={column.id} className={columnMenuItemClassName}>
-                      <span>{column.label}</span>
-                      <input checked={isChecked} className="ui-check" onChange={() => toggleColumnVisibility(column.id)} type="checkbox" />
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+        <div className="flex items-center gap-3">
+          {canBulkEditAssets ? (
+            <form action={ASSET_BULK_EDIT_HREF} method="get" onClick={(event) => event.stopPropagation()}>
+              <input name="returnTo" type="hidden" value={returnTo} />
+              {selectedAssetIds.map((assetId) => (
+                <input key={assetId} name="assetIds" type="hidden" value={assetId} />
+              ))}
+              <Button disabled={selectedAssetIds.length === 0} type="submit" variant="secondary">
+                {selectedAssetIds.length === 0 ? "Bulk edit selected" : `Bulk edit ${selectedAssetIds.length} selected`}
+              </Button>
+            </form>
           ) : null}
+          <div className="relative" ref={menuRef}>
+            <button
+              className={columnMenuButtonClassName}
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsColumnsMenuOpen((current) => !current);
+              }}
+              type="button"
+            >
+              <Settings2 className="h-4 w-4" strokeWidth={1.8} />
+              <span>Columns</span>
+            </button>
+            {isColumnsMenuOpen ? (
+              <div className={columnMenuPanelClassName} onClick={(event) => event.stopPropagation()}>
+                <div className="mb-2 px-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Visible columns</p>
+                </div>
+                <div className="space-y-1">
+                  {optionalColumns.map((column) => {
+                    const isChecked = visibleColumnIds.includes(column.id);
+                    return (
+                      <label key={column.id} className={columnMenuItemClassName}>
+                        <span>{column.label}</span>
+                        <input checked={isChecked} className="ui-check" onChange={() => toggleColumnVisibility(column.id)} type="checkbox" />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
       {rows.length === 0 ? (
@@ -588,7 +653,16 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
 
                     return (
                       <div key={column.id} className={headerClassName} style={stickyPlacement?.style}>
-                        {headerSort ? (
+                        {column.id === "select" ? (
+                          <input
+                            checked={allVisibleSelected}
+                            className="ui-check"
+                            onChange={() => toggleSelectAllVisible()}
+                            onClick={(event) => event.stopPropagation()}
+                            ref={selectAllCheckboxRef}
+                            type="checkbox"
+                          />
+                        ) : headerSort ? (
                           <Link
                             aria-label={headerSort.label}
                             className={`${sortableHeaderButtonClassName} ${isActiveSort ? activeSortableHeaderButtonClassName : ""}`}
@@ -625,6 +699,7 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
                     returnTo,
                   });
                   const viewHref = buildAssetHref(row.id, { returnTo });
+                  const labelHref = buildAssetLabelHref(row.id);
 
                   return (
                     <div
@@ -650,9 +725,13 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
                         if (column.id === "select") {
                           return (
                             <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
-                              <span className={isSelected ? "flex h-5 w-5 items-center justify-center rounded-full border border-[#F69629] bg-[#F69629]" : "flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white/80 dark:border-[#5a6267] dark:bg-[#2f3437]"}>
-                                <span className={isSelected ? "h-2.5 w-2.5 rounded-full bg-white" : "h-2.5 w-2.5 rounded-full bg-transparent"} />
-                              </span>
+                              <input
+                                checked={selectedAssetIds.includes(row.id)}
+                                className="ui-check"
+                                onChange={() => toggleAssetSelection(row.id)}
+                                onClick={(event) => event.stopPropagation()}
+                                type="checkbox"
+                              />
                             </div>
                           );
                         }
@@ -660,7 +739,18 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
                         if (column.id === "assetTag") {
                           return (
                             <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
-                              <span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]" title={row.assetTag}>{row.assetTag}</span>
+                              {canPrintLabels ? (
+                                <Link
+                                  className="block truncate text-sm font-semibold text-[#b56613] decoration-[#d9892c] underline-offset-4 transition hover:underline focus-visible:underline focus-visible:outline-none dark:text-[#ffd7ab] dark:decoration-[#f0a853]"
+                                  href={labelHref}
+                                  onClick={(event) => event.stopPropagation()}
+                                  title={`Print label for ${row.assetTag}`}
+                                >
+                                  {row.assetTag}
+                                </Link>
+                              ) : (
+                                <span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]">{row.assetTag}</span>
+                              )}
                             </div>
                           );
                         }
@@ -716,10 +806,10 @@ export function AssetsGrid({ rows, returnTo, deleteAction, activeSort, headerSor
                                 <ActionLink href={viewHref} isSelected={isSelected} label="View" sizeStyle={SECONDARY_ACTION_STYLE} style={VIEW_ACTIVE_STYLE} />
                               </div>
                               <div className="flex justify-end" style={{ width: PRIMARY_ACTION_STYLE.width }}>
-                                <ActionLink href={checkHref} isSelected={isSelected} label={row.checkLabel} sizeStyle={PRIMARY_ACTION_STYLE} style={CHECK_ACTIVE_STYLE} />
+                                <ActionLink href={checkHref} isSelected={isSelected && canManageAssetTransfers} label={row.checkLabel} sizeStyle={PRIMARY_ACTION_STYLE} style={CHECK_ACTIVE_STYLE} />
                               </div>
                               <div className="flex justify-end" style={{ width: DELETE_ACTION_STYLE.width }}>
-                                <DeleteButton deleteAction={deleteAction} isSelected={isSelected} returnTo={returnTo} row={row} />
+                                <DeleteButton deleteAction={deleteAction} isAllowed={canDeleteAssets} isSelected={isSelected} returnTo={returnTo} row={row} />
                               </div>
                             </div>
                           </div>

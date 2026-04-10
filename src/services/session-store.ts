@@ -1,8 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
+import { getSessionTimeoutMinutes } from "@/modules/settings/settings.service";
 import { db } from "@/services/database";
 
 export const SESSION_COOKIE_NAME = "it_asset_tracker_session";
+const MINUTE_MS = 60 * 1000;
 
 export type StoredSession = {
   id: string;
@@ -29,12 +31,15 @@ function mapSession(session: {
 }
 
 export async function createSession(userId: string) {
+  const timeoutMinutes = await getSessionTimeoutMinutes();
+  const expiresAt = new Date(Date.now() + timeoutMinutes * MINUTE_MS);
+
   const session = await db.session.create({
     data: {
       id: randomUUID(),
       token: randomBytes(24).toString("hex"),
       userId,
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+      expiresAt,
     },
   });
 
@@ -62,7 +67,17 @@ export async function findSessionByToken(token: string) {
     return null;
   }
 
-  return mapSession(session);
+  const timeoutMinutes = await getSessionTimeoutMinutes();
+  const refreshedSession = await db.session.update({
+    where: {
+      id: session.id,
+    },
+    data: {
+      expiresAt: new Date(Date.now() + timeoutMinutes * MINUTE_MS),
+    },
+  });
+
+  return mapSession(refreshedSession);
 }
 
 export async function deleteSessionByToken(token: string) {

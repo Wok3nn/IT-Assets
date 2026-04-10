@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { AppShell } from "@/components/navigation/app-shell";
-import { getCurrentUser } from "@/lib/session";
+import { Button } from "@/components/ui/button";
+import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { ImportExportPanel } from "@/modules/settings/import-export-panel";
 import { getImportExportReferenceData } from "@/modules/settings/import-export.service";
 import { readSetupState } from "@/services/setup-state";
@@ -9,10 +12,10 @@ import { readSetupState } from "@/services/setup-state";
 const panelClass = "rounded-[32px] border border-[#ece7df] bg-white/92 p-6 shadow-panel backdrop-blur dark:border-[#464c4f] dark:bg-[#383d40]/92 dark:shadow-[0_18px_40px_rgba(0,0,0,0.18)]";
 
 export default async function ImportExportPage() {
-  const [setupState, currentUser, references] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getImportExportReferenceData(),
+    getCurrentUserSettingsPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -22,6 +25,12 @@ export default async function ImportExportPage() {
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.canViewSettings) {
+    redirect("/dashboard");
+  }
+
+  const references = await getImportExportReferenceData();
 
   return (
     <AppShell>
@@ -35,9 +44,7 @@ export default async function ImportExportPage() {
                 Export current data or import CSV files through a focused mapping workflow built for larger batches.
               </p>
             </div>
-            <a className="inline-flex items-center justify-center rounded-full bg-[#F69629] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#e5871e] hover:shadow-[0_12px_24px_rgba(246,150,41,0.28)] dark:text-[#2F3437] dark:hover:bg-[#ffab4b]" href="/settings">
-              Back to settings
-            </a>
+            <Link href="/settings"><Button type="button" variant="ghost">Back to settings</Button></Link>
           </div>
         </section>
 

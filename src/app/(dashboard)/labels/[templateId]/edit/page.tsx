@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { LabelTemplateForm } from "@/modules/labels/components/label-template-form";
 import {
   getLabelTemplateById,
@@ -40,6 +41,11 @@ export default async function EditLabelTemplatePage({ params, searchParams }: Ed
     if (!currentUser) {
       redirect("/login");
     }
+    const permissionContext = await getCurrentUserPermissionContext();
+
+    if (!permissionContext.capabilities.editLabels) {
+      redirect("/labels");
+    }
 
     await updateLabelTemplate(templateId, parseLabelTemplateFormData(formData));
 
@@ -50,10 +56,10 @@ export default async function EditLabelTemplatePage({ params, searchParams }: Ed
     redirect(`/labels/${templateId}/edit?saved=true`);
   }
 
-  const [setupState, currentUser, template] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    getLabelTemplateById(templateId),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -64,8 +70,14 @@ export default async function EditLabelTemplatePage({ params, searchParams }: Ed
     redirect("/login");
   }
 
+  if (!permissionContext.capabilities.editLabels) {
+    notFound();
+  }
+
+  const template = await getLabelTemplateById(templateId);
+
   if (!template) {
-    redirect("/labels");
+    notFound();
   }
 
   return (
@@ -77,7 +89,9 @@ export default async function EditLabelTemplatePage({ params, searchParams }: Ed
         description={getLabelTemplateEditorDescription(true)}
         extraHeaderActions={(
           <>
-            <Link href={`/labels/${template.id}/print`}><Button type="button" variant="ghost">Print preview</Button></Link>
+            {permissionContext.capabilities.viewLabels ? (
+              <Link href={`/labels/${template.id}/print`}><Button type="button" variant="ghost">Print preview</Button></Link>
+            ) : null}
           </>
         )}
         initialSaved={initialSaved}

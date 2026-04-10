@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { AssetForm } from "@/modules/assets/asset-form";
 import { buildAssetsUrl, parseAssetsPage, parseAssetsPageSize, parseAssetsSort } from "@/modules/assets/assets-routing";
 import { createAsset, getAssetById, listAssetReferenceData } from "@/modules/assets/asset.service";
@@ -46,6 +47,11 @@ async function createAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
+  const permissionContext = await getCurrentUserAssetPermissionContext();
+
+  if (!permissionContext.capabilities.createAssets) {
+    redirect("/assets");
+  }
 
   await createAsset({
     name: formData.get("name")?.toString() ?? "",
@@ -91,13 +97,18 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
   const pageSize = parseAssetsPageSize(params.pageSize);
   const duplicateId = params.duplicateId?.trim() || null;
 
-  const [setupState, currentUser] = await Promise.all([readSetupState(), getCurrentUser()]);
+  const [setupState, currentUser, permissionContext] = await Promise.all([
+    readSetupState(),
+    getCurrentUser(),
+    getCurrentUserAssetPermissionContext(),
+  ]);
   if (!setupState?.isCompleted) redirect("/setup");
   if (!currentUser) redirect("/login");
+  if (!permissionContext.capabilities.createAssets) notFound();
 
   const [referenceData, duplicateAsset] = await Promise.all([
     listAssetReferenceData(),
-    duplicateId ? getAssetById(duplicateId) : Promise.resolve(null),
+    duplicateId ? getAssetById(duplicateId, { accessScope: permissionContext.assetScope }) : Promise.resolve(null),
   ]);
 
   const backHref = buildAssetsUrl({ q: searchQuery || null, statusId, categoryId, scopeId, locationId, userId, sort, page, pageSize });

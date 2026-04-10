@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 
 import type { LabelTemplateSummary } from "../label-template.service";
 
-export function LabelsSettingsEntry({ templates }: { templates: LabelTemplateSummary[] }) {
+export function LabelsSettingsEntry({ canEditTemplates, templates }: { canEditTemplates: boolean; templates: LabelTemplateSummary[] }) {
   const recentTemplates = templates.slice(0, 3);
 
   return (
@@ -26,7 +26,7 @@ export function LabelsSettingsEntry({ templates }: { templates: LabelTemplateSum
             <h2 className="mt-3 text-xl font-semibold text-slate-950 dark:text-slate-100">Create a new template</h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Start a new label definition with size, unit, orientation, and the initial text elements future visual editing will build on.</p>
           </div>
-          <div><Link href="/labels/new"><Button type="button">New template</Button></Link></div>
+          <div>{canEditTemplates ? <Link href="/labels/new"><Button type="button">New template</Button></Link> : null}</div>
         </PanelCard>
 
         <PanelCard className="flex h-full flex-col justify-between gap-4 md:col-span-2 xl:col-span-1">
@@ -63,7 +63,7 @@ export function LabelsSettingsEntry({ templates }: { templates: LabelTemplateSum
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                 <span>{template.width} x {template.height} {template.unit}</span>
-                <Link href={`/labels/${template.id}/edit`}><Button type="button" variant="ghost">Edit</Button></Link>
+                {canEditTemplates ? <Link href={`/labels/${template.id}/edit`}><Button type="button" variant="ghost">Edit</Button></Link> : null}
               </div>
             </div>
           ))}

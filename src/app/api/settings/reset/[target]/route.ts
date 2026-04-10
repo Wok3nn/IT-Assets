@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { canManageSettings } from "@/lib/permissions";
-import { getCurrentUser, getCurrentUserRoleKeys } from "@/lib/session";
+import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser, getCurrentUserRoleKeys } from "@/lib/session.server";
 import { RESET_ACTIONS, type ResetActionKey, runResetAction } from "@/modules/settings/reset-management.service";
 import { readSetupState } from "@/services/setup-state";
 
@@ -10,10 +11,11 @@ export async function POST(
   context: { params: Promise<{ target: string }> },
 ) {
   const { target } = await context.params;
-  const [setupState, currentUser, roleKeys] = await Promise.all([
+  const [setupState, currentUser, roleKeys, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
     getCurrentUserRoleKeys(),
+    getCurrentUserSettingsPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -24,7 +26,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  if (!canManageSettings(roleKeys)) {
+  if (!permissionContext.canViewSettings || !canManageSettings(roleKeys)) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 

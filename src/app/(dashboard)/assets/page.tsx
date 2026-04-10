@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { HeaderAssetSearch } from "@/components/layout/header-asset-search";
 import { InsetCard } from "@/components/layout/inset-card";
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import {
   ASSET_PAGE_SIZE_OPTIONS,
   buildAssetsUrl,
@@ -18,7 +19,7 @@ import {
   parseAssetsSort,
   type AssetPageSize,
 } from "@/modules/assets/assets-routing";
-import { deleteAsset, listAssetReferenceData, listAssets } from "@/modules/assets/asset.service";
+import { deleteAsset, getAssetById, listAssetReferenceData, listAssets } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
 import { AssetsGrid, type AssetGridRow } from "./assets-grid";
@@ -102,11 +103,21 @@ async function deleteAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
+  const permissionContext = await getCurrentUserAssetPermissionContext();
+
+  if (!permissionContext.capabilities.deleteAssets) {
+    redirect("/assets");
+  }
 
   const assetId = formData.get("assetId")?.toString() ?? "";
   const returnTo = normalizeAssetsReturnTo(formData.get("returnTo")?.toString() ?? null);
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
 
-  await deleteAsset(assetId, currentUser.id);
+  if (!asset) {
+    redirect(returnTo);
+  }
+
+  await deleteAsset(assetId, currentUser.id, permissionContext.assetScope);
   revalidatePath("/assets");
   redirect(returnTo);
 }
@@ -124,12 +135,29 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
   const page = parseAssetsPage(params.page);
   const pageSize = parseAssetsPageSize(params.pageSize);
 
-  const [setupState, currentUser] = await Promise.all([readSetupState(), getCurrentUser()]);
+  const [setupState, currentUser, permissionContext] = await Promise.all([
+    readSetupState(),
+    getCurrentUser(),
+    getCurrentUserAssetPermissionContext(),
+  ]);
   if (!setupState?.isCompleted) redirect("/setup");
   if (!currentUser) redirect("/login");
+  if (!permissionContext.capabilities.viewAssets) notFound();
 
   const [assetResults, referenceData] = await Promise.all([
-    listAssets({ q: searchQuery, statusId, categoryId, scopeId, locationId, userId, includeRetired, sort, page, pageSize }),
+    listAssets({
+      q: searchQuery,
+      statusId,
+      categoryId,
+      scopeId,
+      locationId,
+      userId,
+      includeRetired,
+      sort,
+      page,
+      pageSize,
+      accessScope: permissionContext.assetScope,
+    }),
     listAssetReferenceData(),
   ]);
 
@@ -216,7 +244,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
             <div className="min-w-0">
               <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Assets</p>
               <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">Track every device in one place</h1>
-              <p className="mt-3 max-w-3xl text-slate-600 dark:text-slate-300">Use a compact list to select an asset, open its view page, or jump directly into the correct transfer action.</p>
+              <p className="mt-3 max-w-3xl text-slate-600 dark:text-slate-300">Use a compact list to browse assets, open row-level actions, or select multiple assets for a dedicated bulk edit flow.</p>
             </div>
             <div className="flex w-full min-w-0 max-w-[760px] flex-col gap-3 xl:flex-none">
               <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-end">
@@ -262,13 +290,15 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">Asset directory</h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Showing {visibleRangeStart}-{visibleRangeEnd} of {totalCount} filtered asset{totalCount === 1 ? "" : "s"}. Click a row to reveal actions, then open the asset view, transfer workflow, or delete confirmation.</p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Showing {visibleRangeStart}-{visibleRangeEnd} of {totalCount} filtered asset{totalCount === 1 ? "" : "s"}. Click a row to reveal actions, or use the checkbox column to send selected assets into the dedicated bulk edit screen.</p>
               <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Retired assets stay hidden by default in this operational view. Turn them on from the header toggle when you need the full inventory.</p>
             </div>
             <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[220px] xl:flex-row xl:items-center xl:justify-end">
-              <Link href="/assets/new">
-                <Button className="whitespace-nowrap" type="button">New asset</Button>
-              </Link>
+              {permissionContext.capabilities.createAssets ? (
+                <Link href="/assets/new">
+                  <Button className="whitespace-nowrap" type="button">New asset</Button>
+                </Link>
+              ) : null}
             </div>
           </div>
 
@@ -295,7 +325,17 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
               </div>
             </form>
 
-            <AssetsGrid activeSort={sort} deleteAction={deleteAssetAction} headerSorts={headerSorts} returnTo={returnTo} rows={assetGridRows} />
+            <AssetsGrid
+              activeSort={sort}
+              canBulkEditAssets={permissionContext.capabilities.bulkEditAssets}
+              canDeleteAssets={permissionContext.capabilities.deleteAssets}
+              canManageAssetTransfers={permissionContext.capabilities.manageAssetTransfers}
+              canPrintLabels={permissionContext.capabilities.printLabels}
+              deleteAction={deleteAssetAction}
+              headerSorts={headerSorts}
+              returnTo={returnTo}
+              rows={assetGridRows}
+            />
 
             <div className="flex flex-col gap-3 rounded-[26px] border border-[#d7dde4] bg-white/80 px-4 py-3 dark:border-[#556068] dark:bg-[#2c3134] sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-slate-600 dark:text-slate-300">Showing <span className="font-medium text-slate-950 dark:text-slate-100">{visibleRangeStart}-{visibleRangeEnd}</span> of <span className="font-medium text-slate-950 dark:text-slate-100">{totalCount}</span> assets.</p>
@@ -305,7 +345,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
                 </Link>
                 {paginationWindow.map((pageNumber) => (
                   <Link key={pageNumber} href={buildAssetsUrl({ ...sharedQuery, page: pageNumber })}>
-                    <Button type="button" variant={pageNumber === currentPage ? "default" : "ghost"}>{pageNumber}</Button>
+                    <Button type="button" variant={pageNumber === currentPage ? "primary" : "ghost"}>{pageNumber}</Button>
                   </Link>
                 ))}
                 <Link href={buildAssetsUrl({ ...sharedQuery, page: Math.min(totalPages, currentPage + 1) })} aria-disabled={currentPage === totalPages} className={currentPage === totalPages ? "pointer-events-none opacity-50" : undefined}>

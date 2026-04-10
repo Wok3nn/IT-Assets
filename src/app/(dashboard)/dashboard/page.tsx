@@ -4,7 +4,7 @@ import { HeaderAssetSearch } from "@/components/layout/header-asset-search";
 import { PageHero } from "@/components/layout/page-hero";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AppShell } from "@/components/navigation/app-shell";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session.server";
 import { getAssetSummary } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 

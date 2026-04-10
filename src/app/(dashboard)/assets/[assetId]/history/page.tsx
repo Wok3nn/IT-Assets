@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
 import { getAssetAuditHistory, getAssetById } from "@/modules/assets/asset.service";
@@ -35,16 +36,20 @@ export default async function AssetHistoryPage({ params, searchParams }: AssetHi
   const days = parseDays(search.days);
   const returnTo = normalizeAssetsReturnTo(search.returnTo ?? null);
 
-  const [setupState, currentUser] = await Promise.all([readSetupState(), getCurrentUser()]);
+  const [setupState, currentUser, permissionContext] = await Promise.all([
+    readSetupState(),
+    getCurrentUser(),
+    getCurrentUserAssetPermissionContext(),
+  ]);
   if (!setupState?.isCompleted) redirect("/setup");
   if (!currentUser) redirect("/login");
+  if (!permissionContext.capabilities.viewAssets) notFound();
 
-  const [asset, history] = await Promise.all([
-    getAssetById(assetId),
-    getAssetAuditHistory(assetId, days),
-  ]);
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
 
   if (!asset) notFound();
+
+  const history = await getAssetAuditHistory(assetId, days, { accessScope: permissionContext.assetScope });
 
   const dayOptions = [
     { label: "7 days", value: "7" },
@@ -67,9 +72,11 @@ export default async function AssetHistoryPage({ params, searchParams }: AssetHi
               </div>
             </div>
             <div className="flex gap-3">
-              <Link href={buildAssetHref(asset.id, { section: "edit", returnTo })}>
-                <Button type="button" variant="secondary">Edit asset</Button>
-              </Link>
+              {permissionContext.capabilities.editAssets ? (
+                <Link href={buildAssetHref(asset.id, { section: "edit", returnTo })}>
+                  <Button type="button" variant="secondary">Edit asset</Button>
+                </Link>
+              ) : null}
               <Link href={returnTo}>
                 <Button type="button" variant="ghost">Back to assets</Button>
               </Link>

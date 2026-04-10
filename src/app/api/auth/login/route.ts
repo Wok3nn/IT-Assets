@@ -70,7 +70,6 @@ export async function POST(request: Request) {
     sameSite: "lax",
     secure: appConfig.useSecureCookies,
     path: "/",
-    expires: new Date(session.expiresAt),
   });
 
   return response;

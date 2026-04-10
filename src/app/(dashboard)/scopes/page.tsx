@@ -10,7 +10,8 @@ import { PageHero } from "@/components/layout/page-hero";
 import { PanelCard } from "@/components/layout/panel-card";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { deleteScope, listScopes } from "@/modules/scopes/scope.service";
 import { readSetupState } from "@/services/setup-state";
 
@@ -30,6 +31,12 @@ async function deleteGroupAction(formData: FormData) {
     redirect("/login");
   }
 
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editDepartments) {
+    redirect("/scopes");
+  }
+
   const scopeId = String(formData.get("scopeId") ?? "").trim();
 
   if (!scopeId) {
@@ -45,10 +52,10 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
     await searchParams;
   }
 
-  const [setupState, currentUser, groups] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    listScopes(),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -58,6 +65,12 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.capabilities.viewDepartments) {
+    redirect("/dashboard");
+  }
+
+  const groups = await listScopes();
 
   const summary =
     groups.length === 0
@@ -85,9 +98,11 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
             <AdminSectionHeader
               actions={
                 <>
-                  <Link href={NEW_SCOPE_HREF}>
-                    <Button type="button">New department</Button>
-                  </Link>
+                  {permissionContext.capabilities.editDepartments ? (
+                    <Link href={NEW_SCOPE_HREF}>
+                      <Button type="button">New department</Button>
+                    </Link>
+                  ) : null}
                 </>
               }
               summary={summary}
@@ -146,26 +161,30 @@ export default async function ScopesPage({ searchParams }: ScopesPageProps) {
                         </div>
 
                         <div className="relative z-10 mt-6 grid grid-cols-2 gap-3">
-                          <Link href={editHref}>
-                            <Button className="w-full" type="button" variant="secondary">
-                              Edit
-                            </Button>
-                          </Link>
-                          <form action={deleteGroupAction}>
-                            <input name="scopeId" type="hidden" value={group.id} />
-                            <Button
-                              className={
-                                canDelete
-                                  ? "w-full rounded-2xl hover:bg-red-600 hover:text-white hover:ring-red-600 dark:hover:bg-red-500"
-                                  : "w-full rounded-2xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-900/70 dark:hover:bg-emerald-500/25"
-                              }
-                              disabled={!canDelete}
-                              type="submit"
-                              variant="secondary"
-                            >
-                              {group.isSystem ? "System" : canDelete ? "Delete" : "In use"}
-                            </Button>
-                          </form>
+                          {permissionContext.capabilities.editDepartments ? (
+                            <>
+                              <Link href={editHref}>
+                                <Button className="w-full" type="button" variant="secondary">
+                                  Edit
+                                </Button>
+                              </Link>
+                              <form action={deleteGroupAction}>
+                                <input name="scopeId" type="hidden" value={group.id} />
+                                <Button
+                                  className={
+                                    canDelete
+                                      ? "w-full rounded-2xl hover:bg-red-600 hover:text-white hover:ring-red-600 dark:hover:bg-red-500"
+                                      : "w-full rounded-2xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-900/70 dark:hover:bg-emerald-500/25"
+                                  }
+                                  disabled={!canDelete}
+                                  type="submit"
+                                  variant="secondary"
+                                >
+                                  {group.isSystem ? "System" : canDelete ? "Delete" : "In use"}
+                                </Button>
+                              </form>
+                            </>
+                          ) : null}
                         </div>
                       </article>
                     );

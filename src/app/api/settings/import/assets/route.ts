@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { importAssetsFromRows } from "@/modules/settings/import-export.service";
 import { readSetupState } from "@/services/setup-state";
 
@@ -24,7 +25,11 @@ const importSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const [setupState, currentUser] = await Promise.all([readSetupState(), getCurrentUser()]);
+  const [setupState, currentUser, permissionContext] = await Promise.all([
+    readSetupState(),
+    getCurrentUser(),
+    getCurrentUserSettingsPermissionContext(),
+  ]);
 
   if (!setupState?.isCompleted) {
     return NextResponse.json({ error: "Setup is not complete." }, { status: 400 });
@@ -32,6 +37,10 @@ export async function POST(request: Request) {
 
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (!permissionContext.canViewSettings || !permissionContext.capabilities.createAssets) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   try {

@@ -4,7 +4,8 @@ import { HeaderAssetSearch } from "@/components/layout/header-asset-search";
 import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { canManageSettings } from "@/lib/permissions";
-import { getCurrentUser, getCurrentUserRoleKeys } from "@/lib/session";
+import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser, getCurrentUserRoleKeys } from "@/lib/session.server";
 import { SettingsNavCard } from "@/modules/settings/components/settings-nav-card";
 import { readSetupState } from "@/services/setup-state";
 
@@ -28,14 +29,17 @@ const baseSettingsCards = [
   {
     href: "/settings/authentication",
     title: "Authentication Settings",
-    description: "Authentication providers and future Entra configuration will live in their own dedicated settings surface.",
-    badge: "Planned",
+    description: "Configure local sign-in, Microsoft Entra provider settings, SSO options, and group-to-role mapping.",
   },
   {
     href: "/settings/branding",
-    title: "Branding Settings",
-    description: "Site identity, logos, and organization branding controls are reserved here for future rollout.",
-    badge: "Planned",
+    title: "Branding",
+    description: "Configure app logos and browser icons used on the login screen, sidebar, and browser tab.",
+  },
+  {
+    href: "/settings/permissions",
+    title: "Permissions",
+    description: "Open the dedicated role-permissions workspace to choose a role and prepare capabilities, scope, and navigation rules.",
   },
   {
     href: "/settings/import-export",
@@ -45,10 +49,11 @@ const baseSettingsCards = [
 ];
 
 export default async function SettingsPage() {
-  const [setupState, currentUser, roleKeys] = await Promise.all([
+  const [setupState, currentUser, roleKeys, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
     getCurrentUserRoleKeys(),
+    getCurrentUserSettingsPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -59,17 +64,30 @@ export default async function SettingsPage() {
     redirect("/login");
   }
 
-  const settingsCards = canManageSettings(roleKeys)
-    ? [
-        ...baseSettingsCards,
-        {
-          href: "/settings/reset",
-          title: "Reset",
-          description: "Open the dedicated admin-only reset surface for selective destructive cleanup and full app reset controls.",
-          badge: "Restricted",
-        },
-      ]
-    : baseSettingsCards;
+  if (!permissionContext.canViewSettings) {
+    redirect("/dashboard");
+  }
+
+  const settingsCards = baseSettingsCards.filter((card) => {
+    if (card.href === "/settings/permissions") {
+      return permissionContext.canManagePermissions;
+    }
+
+    if (card.href === "/settings/labels") {
+      return permissionContext.capabilities.viewLabels;
+    }
+
+    return true;
+  });
+
+  if (canManageSettings(roleKeys)) {
+    settingsCards.push({
+      href: "/settings/reset",
+      title: "Reset",
+      description: "Open the dedicated admin-only reset surface for selective destructive cleanup and full app reset controls.",
+      badge: "Restricted",
+    });
+  }
 
   return (
     <AppShell>

@@ -1,8 +1,9 @@
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/navigation/app-shell";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { LabelTemplateForm } from "@/modules/labels/components/label-template-form";
 import {
   createLabelTemplate,
@@ -21,6 +22,11 @@ async function createLabelTemplateAction(formData: FormData) {
 
   if (!currentUser) {
     redirect("/login");
+  }
+  const permissionContext = await getCurrentUserPermissionContext();
+
+  if (!permissionContext.capabilities.editLabels) {
+    redirect("/labels");
   }
 
   const created = await createLabelTemplate(parseLabelTemplateFormData(formData));
@@ -43,10 +49,10 @@ export default async function NewLabelTemplatePage({ searchParams }: NewLabelTem
   const resolvedSearchParams = await searchParams;
   const duplicateId = getSingleSearchParam(resolvedSearchParams.duplicateId)?.trim() || null;
 
-  const [setupState, currentUser, duplicatedTemplate] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
-    duplicateId ? getDuplicatedLabelTemplateValues(duplicateId) : Promise.resolve(null),
+    getCurrentUserPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -56,6 +62,12 @@ export default async function NewLabelTemplatePage({ searchParams }: NewLabelTem
   if (!currentUser) {
     redirect("/login");
   }
+
+  if (!permissionContext.capabilities.editLabels) {
+    notFound();
+  }
+
+  const duplicatedTemplate = duplicateId ? await getDuplicatedLabelTemplateValues(duplicateId) : null;
 
   if (duplicateId && !duplicatedTemplate) {
     redirect("/labels");

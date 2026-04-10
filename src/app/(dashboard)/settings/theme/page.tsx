@@ -1,14 +1,16 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/navigation/app-shell";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
+import { getCurrentUser } from "@/lib/session.server";
 import { SettingsPlaceholderPanel } from "@/modules/settings/components/settings-placeholder-panel";
 import { readSetupState } from "@/services/setup-state";
 
 export default async function ThemeSettingsPage() {
-  const [setupState, currentUser] = await Promise.all([
+  const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
+    getCurrentUserSettingsPermissionContext(),
   ]);
 
   if (!setupState?.isCompleted) {
@@ -17,6 +19,10 @@ export default async function ThemeSettingsPage() {
 
   if (!currentUser) {
     redirect("/login");
+  }
+
+  if (!permissionContext.canViewSettings) {
+    redirect("/dashboard");
   }
 
   return (
