@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { AppLogo } from "@/components/branding/app-logo";
 import { FieldLabel, FieldLabelText } from "@/components/forms/field-label";
 import { TextField } from "@/components/forms/text-field";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -135,6 +136,11 @@ export default function SetupPage() {
       <div className="mx-auto max-w-6xl rounded-[40px] border border-white/70 bg-[rgba(255,255,255,0.92)] p-6 shadow-panel backdrop-blur dark:border-[#4a5256] dark:bg-[linear-gradient(180deg,rgba(63,68,72,0.94)_0%,rgba(54,59,63,0.92)_100%)] lg:p-10">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
           <section>
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-[#f2c28c]/70 bg-[rgba(246,150,41,0.08)] dark:border-[#7f5a2d]/80 dark:bg-[rgba(246,150,41,0.12)]">
+                <AppLogo className="h-10 w-10 drop-shadow-[0_12px_18px_rgba(246,150,41,0.16)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" />
+              </div>
+            </div>
             <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-200">
               First-run setup
             </p>

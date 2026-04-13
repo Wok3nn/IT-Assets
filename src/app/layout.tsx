@@ -1,18 +1,47 @@
 import type { Metadata } from "next";
 
+import { appConfig } from "@/services/config";
+import { getGeneralSettings } from "@/modules/settings/settings.service";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "IT-Asset-Tracker",
-  description: "A modern self-hosted asset management platform.",
-  icons: {
-    icon: [
-      { url: "/api/branding/icon/light", media: "(prefers-color-scheme: light)" },
-      { url: "/api/branding/icon/dark", media: "(prefers-color-scheme: dark)" },
-    ],
-    shortcut: "/api/branding/icon/light",
-  },
-};
+const APP_DESCRIPTION = "A modern self-hosted asset management platform.";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getGeneralSettings();
+  const appTitle = settings.appTitle;
+
+  return {
+    metadataBase: new URL(appConfig.appUrl),
+    title: {
+      default: appTitle,
+      template: `%s | ${appTitle}`,
+    },
+    description: APP_DESCRIPTION,
+    applicationName: appTitle,
+    manifest: "/manifest.webmanifest",
+    icons: {
+      icon: [
+        { url: "/api/branding/icon/light", media: "(prefers-color-scheme: light)" },
+        { url: "/api/branding/icon/dark", media: "(prefers-color-scheme: dark)" },
+      ],
+      shortcut: "/api/branding/icon/light",
+      apple: [{ url: "/api/branding/icon/light" }],
+    },
+    openGraph: {
+      title: appTitle,
+      description: APP_DESCRIPTION,
+      siteName: appTitle,
+      images: [{ url: "/api/branding/logo/light" }],
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title: appTitle,
+      description: APP_DESCRIPTION,
+      images: ["/api/branding/logo/light"],
+    },
+  };
+}
 
 const themeScript = `
 (() => {

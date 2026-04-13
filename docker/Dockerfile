@@ -13,6 +13,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4050
+LABEL org.opencontainers.image.title="IT-Asset-Tracker"
+LABEL org.opencontainers.image.description="A modern self-hosted asset management platform."
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public

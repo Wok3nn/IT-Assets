@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getBrandingSettings } from "@/modules/settings/settings.service";
+import { appConfig } from "@/services/config";
 
 type BrandingAssetRouteParams = {
   params: Promise<{
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest, { params }: BrandingAssetRoutePa
         ? branding.darkIconUrl
         : branding.lightIconUrl;
 
-  const response = NextResponse.redirect(new URL(assetUrl, request.url));
+  const response = NextResponse.redirect(new URL(assetUrl, `${appConfig.appUrl}/`));
   response.headers.set("Cache-Control", "no-store");
 
   return response;
