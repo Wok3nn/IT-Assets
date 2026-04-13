@@ -1,47 +1,45 @@
 import type { Metadata } from "next";
 
 import { appConfig } from "@/services/config";
-import { getGeneralSettings } from "@/modules/settings/settings.service";
 import "./globals.css";
 
+const APP_TITLE = "IT-Asset-Tracker";
 const APP_DESCRIPTION = "A modern self-hosted asset management platform.";
+const STATIC_LIGHT_ICON_PATH = "/branding/asset-tracker-logo-light-transparent.ico";
+const STATIC_DARK_ICON_PATH = "/branding/asset-tracker-logo-dark-transparent.ico";
+const STATIC_LIGHT_LOGO_PATH = "/branding/asset-tracker-logo-light-transparent.png";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getGeneralSettings();
-  const appTitle = settings.appTitle;
-
-  return {
-    metadataBase: new URL(appConfig.appUrl),
-    title: {
-      default: appTitle,
-      template: `%s | ${appTitle}`,
-    },
+export const metadata: Metadata = {
+  metadataBase: new URL(appConfig.appUrl),
+  title: {
+    default: APP_TITLE,
+    template: `%s | ${APP_TITLE}`,
+  },
+  description: APP_DESCRIPTION,
+  applicationName: APP_TITLE,
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: STATIC_LIGHT_ICON_PATH, media: "(prefers-color-scheme: light)" },
+      { url: STATIC_DARK_ICON_PATH, media: "(prefers-color-scheme: dark)" },
+    ],
+    shortcut: STATIC_LIGHT_ICON_PATH,
+    apple: [{ url: STATIC_LIGHT_LOGO_PATH }],
+  },
+  openGraph: {
+    title: APP_TITLE,
     description: APP_DESCRIPTION,
-    applicationName: appTitle,
-    manifest: "/manifest.webmanifest",
-    icons: {
-      icon: [
-        { url: "/api/branding/icon/light", media: "(prefers-color-scheme: light)" },
-        { url: "/api/branding/icon/dark", media: "(prefers-color-scheme: dark)" },
-      ],
-      shortcut: "/api/branding/icon/light",
-      apple: [{ url: "/api/branding/icon/light" }],
-    },
-    openGraph: {
-      title: appTitle,
-      description: APP_DESCRIPTION,
-      siteName: appTitle,
-      images: [{ url: "/api/branding/logo/light" }],
-      type: "website",
-    },
-    twitter: {
-      card: "summary",
-      title: appTitle,
-      description: APP_DESCRIPTION,
-      images: ["/api/branding/logo/light"],
-    },
-  };
-}
+    siteName: APP_TITLE,
+    images: [{ url: STATIC_LIGHT_LOGO_PATH }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: APP_TITLE,
+    description: APP_DESCRIPTION,
+    images: [STATIC_LIGHT_LOGO_PATH],
+  },
+};
 
 const themeScript = `
 (() => {

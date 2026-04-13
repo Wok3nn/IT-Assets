@@ -1,16 +1,12 @@
 import type { MetadataRoute } from "next";
 
-import { getGeneralSettings } from "@/modules/settings/settings.service";
-
+const APP_TITLE = "IT-Asset-Tracker";
 const APP_DESCRIPTION = "A modern self-hosted asset management platform.";
 
-export default async function manifest(): Promise<MetadataRoute.Manifest> {
-  const settings = await getGeneralSettings();
-  const appTitle = settings.appTitle;
-
+export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: appTitle,
-    short_name: appTitle,
+    name: APP_TITLE,
+    short_name: APP_TITLE,
     description: APP_DESCRIPTION,
     start_url: "/",
     display: "standalone",
@@ -18,12 +14,16 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     theme_color: "#f69629",
     icons: [
       {
-        src: "/api/branding/icon/light",
+        src: "/branding/asset-tracker-logo-light-transparent.png",
         purpose: "any",
+        sizes: "1024x1024",
+        type: "image/png",
       },
       {
-        src: "/api/branding/icon/dark",
+        src: "/branding/asset-tracker-logo-dark-transparent.png",
         purpose: "any",
+        sizes: "1024x1024",
+        type: "image/png",
       },
     ],
   };
