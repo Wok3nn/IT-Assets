@@ -1,9 +1,13 @@
 "use client";
 
 import { Check, Database, LoaderCircle, Palette, ShieldUser } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { FieldLabel, FieldLabelText } from "@/components/forms/field-label";
+import { TextField } from "@/components/forms/text-field";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 
 type FormState = {
@@ -128,105 +132,94 @@ export default function SetupPage() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.08),_transparent_24%),linear-gradient(180deg,#fcfcfd_0%,#f5f7fa_100%)] px-4 py-8 dark:bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.12),_transparent_28%),linear-gradient(180deg,#2f3437_0%,#2b3033_56%,#262b2d_100%)]">
-      <div className="mx-auto max-w-6xl rounded-[40px] border border-white/70 bg-[rgba(255,255,255,0.9)] p-6 shadow-panel backdrop-blur dark:border-[#464d50] dark:bg-[#3a4043]/88 lg:p-10">
+      <div className="mx-auto max-w-6xl rounded-[40px] border border-white/70 bg-[rgba(255,255,255,0.92)] p-6 shadow-panel backdrop-blur dark:border-[#4a5256] dark:bg-[linear-gradient(180deg,rgba(63,68,72,0.94)_0%,rgba(54,59,63,0.92)_100%)] lg:p-10">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
           <section>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-300">
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-200">
               First-run setup
             </p>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 dark:text-[#fff3e4]">
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 dark:text-[#fff7ec]">
               Bring the platform online in a few guided steps.
             </h1>
-            <p className="mt-4 max-w-2xl text-base text-slate-600 dark:text-slate-200">
+            <p className="mt-4 max-w-2xl text-base text-slate-600 dark:text-slate-100">
               The setup wizard creates the first local admin and stores the application name used across the interface.
             </p>
             <div className="mt-8 grid gap-4">
               {steps.map(({ title, description, icon: Icon }) => (
                 <div
                   key={title}
-                  className="flex items-start gap-4 rounded-3xl border border-[#f4dcc0] bg-[rgba(255,255,255,0.78)] p-5 dark:border-[#4a5257] dark:bg-[#41484c]/88"
+                  className="flex items-start gap-4 rounded-3xl border border-[#f1d8bc] bg-[rgba(255,255,255,0.8)] p-5 dark:border-[#596166] dark:bg-[linear-gradient(180deg,rgba(79,85,89,0.88)_0%,rgba(70,76,80,0.82)_100%)]"
                 >
                   <div className="rounded-2xl bg-[rgba(246,150,41,0.14)] p-3 text-[#F69629] dark:bg-[rgba(246,150,41,0.18)] dark:text-[#ffbf78]">
                     <Icon className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-medium text-slate-950 dark:text-[#fff3e4]">{title}</h2>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-200">{description}</p>
+                    <h2 className="text-lg font-medium text-slate-950 dark:text-[#fff4e3]">{title}</h2>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-100">{description}</p>
                   </div>
                 </div>
               ))}
             </div>
           </section>
-          <section className="rounded-[32px] border border-[#f1c998] bg-[linear-gradient(180deg,#ffb45b_0%,#f69629_100%)] p-6 text-white shadow-[0_20px_50px_rgba(246,150,41,0.28)] dark:border-[#51595d] dark:bg-[#363c3f]">
-            <h2 className="text-2xl font-semibold text-white dark:text-[#fff3e4]">Setup wizard</h2>
+
+          <section className="rounded-[32px] border border-[#e6c49d] bg-[linear-gradient(180deg,rgba(255,246,235,0.99)_0%,rgba(250,236,217,0.98)_100%)] p-6 shadow-[0_20px_50px_rgba(246,150,41,0.16)] dark:border-[#596166] dark:bg-[linear-gradient(180deg,rgba(60,65,69,0.98)_0%,rgba(52,57,61,0.99)_100%)] dark:shadow-[0_24px_50px_rgba(0,0,0,0.3)]">
+            <h2 className="text-2xl font-semibold text-slate-950 dark:text-[#fff3e4]">Setup wizard</h2>
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white dark:text-[#fff3e4]">
-                  Organization / site name
-                </label>
-                <input
-                  className="w-full rounded-2xl border border-white/20 bg-white/14 px-4 py-3 text-white placeholder:text-white/75 outline-none transition focus:border-white/40 focus:bg-white/18 dark:border-[#596166] dark:bg-[#2f3437] dark:text-[#fff3e4] dark:placeholder:text-slate-400 dark:focus:border-[#F69629]/55"
+              <FieldLabel>
+                <FieldLabelText>Organization / site name</FieldLabelText>
+                <TextField
                   placeholder="Example: Northwind Asset Operations"
                   value={form.siteName}
                   onChange={(event) => updateField("siteName", event.target.value)}
                 />
-                <p className="mt-2 text-xs text-white/80 dark:text-slate-300">
+                <p className="text-xs text-slate-600 dark:text-slate-300">
                   This is the name shown in the app header, settings, and labels. It is not the admin display name.
                 </p>
-                {errors.siteName ? <p className="mt-2 text-xs text-rose-200">{errors.siteName}</p> : null}
-              </div>
+                {errors.siteName ? <p className="text-xs text-rose-600 dark:text-rose-300">{errors.siteName}</p> : null}
+              </FieldLabel>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white dark:text-[#fff3e4]">
-                  Admin email
-                </label>
-                <input
-                  className="w-full rounded-2xl border border-white/20 bg-white/14 px-4 py-3 text-white placeholder:text-white/75 outline-none transition focus:border-white/40 focus:bg-white/18 dark:border-[#596166] dark:bg-[#2f3437] dark:text-[#fff3e4] dark:placeholder:text-slate-400 dark:focus:border-[#F69629]/55"
+              <FieldLabel>
+                <FieldLabelText>Admin email</FieldLabelText>
+                <TextField
                   placeholder="admin@example.com"
                   type="email"
                   value={form.adminEmail}
                   onChange={(event) => updateField("adminEmail", event.target.value)}
                 />
-                {errors.adminEmail ? <p className="mt-2 text-xs text-rose-200">{errors.adminEmail}</p> : null}
-              </div>
+                {errors.adminEmail ? <p className="text-xs text-rose-600 dark:text-rose-300">{errors.adminEmail}</p> : null}
+              </FieldLabel>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white dark:text-[#fff3e4]">
-                  Password
-                </label>
-                <input
-                  className="w-full rounded-2xl border border-white/20 bg-white/14 px-4 py-3 text-white placeholder:text-white/75 outline-none transition focus:border-white/40 focus:bg-white/18 dark:border-[#596166] dark:bg-[#2f3437] dark:text-[#fff3e4] dark:placeholder:text-slate-400 dark:focus:border-[#F69629]/55"
+              <FieldLabel>
+                <FieldLabelText>Password</FieldLabelText>
+                <TextField
                   placeholder="At least 8 characters"
                   type="password"
                   value={form.password}
                   onChange={(event) => updateField("password", event.target.value)}
                 />
-                {errors.password ? <p className="mt-2 text-xs text-rose-200">{errors.password}</p> : null}
-              </div>
+                {errors.password ? <p className="text-xs text-rose-600 dark:text-rose-300">{errors.password}</p> : null}
+              </FieldLabel>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white dark:text-[#fff3e4]">
-                  Confirm password
-                </label>
-                <input
-                  className="w-full rounded-2xl border border-white/20 bg-white/14 px-4 py-3 text-white placeholder:text-white/75 outline-none transition focus:border-white/40 focus:bg-white/18 dark:border-[#596166] dark:bg-[#2f3437] dark:text-[#fff3e4] dark:placeholder:text-slate-400 dark:focus:border-[#F69629]/55"
+              <FieldLabel>
+                <FieldLabelText>Confirm password</FieldLabelText>
+                <TextField
                   placeholder="Re-enter password"
                   type="password"
                   value={form.confirmPassword}
                   onChange={(event) => updateField("confirmPassword", event.target.value)}
                 />
-                {errors.confirmPassword ? <p className="mt-2 text-xs text-rose-200">{errors.confirmPassword}</p> : null}
-              </div>
+                {errors.confirmPassword ? <p className="text-xs text-rose-600 dark:text-rose-300">{errors.confirmPassword}</p> : null}
+              </FieldLabel>
 
-              <div className="rounded-2xl border border-white/16 bg-white/10 p-4 text-sm text-white/90 dark:border-[#4f575b] dark:bg-[#2f3437] dark:text-slate-200">
+              <div className="rounded-2xl border border-[#ddc2a7] bg-white/82 p-4 text-sm text-slate-700 dark:border-[#4f575b] dark:bg-[#2b3033] dark:text-slate-200">
                 <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-white dark:text-[#F69629]" />
+                  <Check className="h-4 w-4 text-[#F69629]" />
                   <span>Setup now writes server-side state under /data for the containerized install.</span>
                 </div>
               </div>
 
-              {formError ? <p className="text-sm text-rose-200">{formError}</p> : null}
-              {successMessage ? <p className="text-sm text-emerald-100 dark:text-emerald-300">{successMessage}</p> : null}
+              {formError ? <p className="text-sm text-rose-600 dark:text-rose-300">{formError}</p> : null}
+              {successMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{successMessage}</p> : null}
 
               <Button className="w-full" disabled={isSubmitting} type="submit">
                 {isSubmitting ? (
@@ -239,11 +232,22 @@ export default function SetupPage() {
                 )}
               </Button>
             </form>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+              <span>Already have an account?</span>
+              <Link href="/login">
+                <Button type="button" variant="secondary">
+                  Login
+                </Button>
+              </Link>
+            </div>
           </section>
+        </div>
+
+        <div className="mt-6 flex justify-start border-t border-[#ebddcd] pt-4 dark:border-[#545c60]">
+          <ThemeToggle collapsed />
         </div>
       </div>
     </main>
   );
 }
-
-

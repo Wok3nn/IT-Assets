@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { buildAppUrl } from "@/services/config";
 import { deleteSessionByToken, SESSION_COOKIE_NAME } from "@/services/session-store";
 
 export async function POST(request: Request) {
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     await deleteSessionByToken(token);
   }
 
-  const response = NextResponse.redirect(new URL("/login", request.url));
+  const response = NextResponse.redirect(buildAppUrl("/login"));
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
     value: "",

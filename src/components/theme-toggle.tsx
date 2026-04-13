@@ -41,8 +41,8 @@ export function ThemeToggle({ collapsed = false }: ThemeToggleProps) {
     <button
       aria-label={label}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200/80 bg-white/90 text-sm font-medium text-slate-700 shadow-panel backdrop-blur transition hover:border-[#f0c48d] hover:bg-white hover:text-[#b56613] dark:border-[#5a4a36] dark:bg-[#34393c] dark:text-[#fff3e4] dark:shadow-[0_16px_30px_rgba(0,0,0,0.24)] dark:hover:border-[#F69629] dark:hover:bg-[rgba(246,150,41,0.16)] dark:hover:text-[#ffd7ab]",
-        collapsed ? "h-11 w-11 rounded-[18px] px-0" : "w-full px-4 py-3",
+        "inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-300/85 bg-white/88 text-sm font-medium text-slate-700 shadow-[0_10px_22px_rgba(15,23,42,0.08)] backdrop-blur transition hover:border-[#f0c48d] hover:bg-white hover:text-[#b56613] dark:border-[#596166] dark:bg-[#2f3437]/92 dark:text-slate-100 dark:shadow-[0_12px_24px_rgba(0,0,0,0.2)] dark:hover:border-[#F69629] dark:hover:bg-[#353b3f] dark:hover:text-[#ffe1be]",
+        collapsed ? "h-10 w-10 rounded-[16px] px-0 text-slate-600 dark:text-slate-200" : "w-full px-4 py-3",
       )}
       onClick={toggleTheme}
       title={collapsed ? label : undefined}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getEntraAuthenticationConfig, isEntraAuthenticationConfigured } from "@/modules/settings/authentication-settings.service";
-import { appConfig } from "@/services/config";
+import { appConfig, buildAppUrl } from "@/services/config";
 import { db } from "@/services/database";
 import {
   ENTRA_AUTH_NONCE_COOKIE_NAME,
@@ -14,7 +14,7 @@ import { readSetupState } from "@/services/setup-state";
 import { findUserByEmail } from "@/services/user-store";
 
 function redirectToLogin(request: Request, reason: string) {
-  return NextResponse.redirect(new URL(`/login?entraError=${encodeURIComponent(reason)}`, request.url));
+  return NextResponse.redirect(buildAppUrl(`/login?entraError=${encodeURIComponent(reason)}`));
 }
 
 function clearEntraCookies(response: NextResponse) {
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
   const setupState = await readSetupState();
 
   if (!setupState?.isCompleted) {
-    return NextResponse.redirect(new URL("/setup", request.url));
+    return NextResponse.redirect(buildAppUrl("/setup"));
   }
 
   const stateCookie = parseStateCookie(getCookieValue(request, ENTRA_AUTH_STATE_COOKIE_NAME));
@@ -132,7 +132,7 @@ export async function GET(request: Request) {
     });
 
     const session = await createSession(user.id);
-    const response = NextResponse.redirect(new URL("/dashboard", request.url));
+    const response = NextResponse.redirect(buildAppUrl("/dashboard"));
 
     response.cookies.set({
       httpOnly: true,

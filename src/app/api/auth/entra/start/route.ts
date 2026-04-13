@@ -4,19 +4,13 @@ import {
   getEntraAuthenticationConfig,
   isEntraAuthenticationConfigured,
 } from "@/modules/settings/authentication-settings.service";
-import { appConfig } from "@/services/config";
+import { appConfig, buildAppUrl } from "@/services/config";
 import {
   createEntraAuthRequest,
   ENTRA_AUTH_NONCE_COOKIE_NAME,
   ENTRA_AUTH_STATE_COOKIE_NAME,
 } from "@/services/entra-auth";
 import { readSetupState } from "@/services/setup-state";
-
-function getRequestOrigin(request: Request) {
-  const url = new URL(request.url);
-
-  return `${url.protocol}//${url.host}`;
-}
 
 function encodeStateCookie(input: {
   codeVerifier: string;
@@ -26,22 +20,22 @@ function encodeStateCookie(input: {
   return Buffer.from(JSON.stringify(input)).toString("base64url");
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   const setupState = await readSetupState();
 
   if (!setupState?.isCompleted) {
-    return NextResponse.redirect(new URL("/setup", request.url));
+    return NextResponse.redirect(buildAppUrl("/setup"));
   }
 
   const config = await getEntraAuthenticationConfig();
 
   if (!isEntraAuthenticationConfigured(config)) {
-    return NextResponse.redirect(new URL("/login?entraError=not-configured", request.url));
+    return NextResponse.redirect(buildAppUrl("/login?entraError=not-configured"));
   }
 
   const authRequest = createEntraAuthRequest({
     config,
-    origin: getRequestOrigin(request),
+    origin: appConfig.appUrl,
   });
   const response = NextResponse.redirect(authRequest.authUrl);
 
