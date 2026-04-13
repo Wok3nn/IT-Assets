@@ -138,7 +138,7 @@ export default function SetupPage() {
           <section>
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-[#f2c28c]/70 bg-[rgba(246,150,41,0.08)] dark:border-[#7f5a2d]/80 dark:bg-[rgba(246,150,41,0.12)]">
-                <AppLogo className="h-10 w-10 drop-shadow-[0_12px_18px_rgba(246,150,41,0.16)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" />
+                <AppLogo className="h-12 w-12 drop-shadow-[0_12px_18px_rgba(246,150,41,0.16)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" />
               </div>
             </div>
             <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-200">

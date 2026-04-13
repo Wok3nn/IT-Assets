@@ -157,7 +157,7 @@ export function BrandingSettingsPanel({
                   {usesDefaultBranding ? "Using the default transparent logo and icon assets." : "Custom branding overrides are active."}
                 </p>
               </div>
-              <AppLogo className="h-16 w-16 shrink-0 drop-shadow-[0_12px_18px_rgba(246,150,41,0.16)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" darkSrc={darkLogoUrl} lightSrc={lightLogoUrl} />
+              <AppLogo className="h-20 w-20 shrink-0 drop-shadow-[0_12px_18px_rgba(246,150,41,0.16)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" darkSrc={darkLogoUrl} lightSrc={lightLogoUrl} />
             </div>
             <div className="mt-4 grid gap-2 text-xs text-slate-500 dark:text-slate-400">
               <div className="truncate">Light logo: {lightLogoUrl}</div>

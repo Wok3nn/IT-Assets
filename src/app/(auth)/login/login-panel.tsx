@@ -100,7 +100,7 @@ export function LoginPanel({ branding, entraError, entraSignInEnabled }: LoginPa
         <div className="w-full rounded-[32px] border border-[#e3d8ca] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] p-8 shadow-panel backdrop-blur dark:border-[#50585c] dark:bg-[linear-gradient(180deg,rgba(58,63,67,0.96)_0%,rgba(50,55,59,0.98)_100%)] dark:shadow-[0_24px_50px_rgba(0,0,0,0.28)]">
           <div className="flex justify-center">
             <AppLogo
-              className="h-20 w-20 drop-shadow-[0_18px_28px_rgba(15,23,42,0.12)] dark:drop-shadow-[0_20px_32px_rgba(0,0,0,0.28)]"
+              className="h-24 w-24 drop-shadow-[0_18px_28px_rgba(15,23,42,0.12)] dark:drop-shadow-[0_20px_32px_rgba(0,0,0,0.28)]"
               darkSrc={branding.darkLogoUrl}
               lightSrc={branding.lightLogoUrl}
               priority

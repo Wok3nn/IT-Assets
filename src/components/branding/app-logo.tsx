@@ -18,10 +18,10 @@ export function AppLogo({
   priority = false,
 }: AppLogoProps) {
   return (
-    <span className={cn("relative inline-flex overflow-hidden", className)} aria-label="IT Asset Tracker">
+    <span className={cn("relative inline-flex h-full w-full items-center justify-center", className)} aria-label="IT Asset Tracker">
       <Image
         alt="IT Asset Tracker"
-        className={cn("block h-full w-full object-contain dark:hidden", imageClassName)}
+        className={cn("block h-full w-full object-cover dark:hidden", imageClassName)}
         height={1024}
         priority={priority}
         src={lightSrc}
@@ -30,7 +30,7 @@ export function AppLogo({
       <Image
         alt=""
         aria-hidden="true"
-        className={cn("hidden h-full w-full object-contain dark:block", imageClassName)}
+        className={cn("hidden h-full w-full object-cover dark:block", imageClassName)}
         height={1024}
         priority={priority}
         src={darkSrc}

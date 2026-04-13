@@ -14,15 +14,39 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#f69629",
     icons: [
       {
+        src: "/branding/asset-tracker-logo-light-transparent-32.png",
+        purpose: "any",
+        sizes: "32x32",
+        type: "image/png",
+      },
+      {
+        src: "/branding/asset-tracker-logo-light-transparent-64.png",
+        purpose: "any",
+        sizes: "64x64",
+        type: "image/png",
+      },
+      {
         src: "/branding/asset-tracker-logo-light-transparent.png",
         purpose: "any",
-        sizes: "1024x1024",
+        sizes: "256x256",
+        type: "image/png",
+      },
+      {
+        src: "/branding/asset-tracker-logo-dark-transparent-32.png",
+        purpose: "any",
+        sizes: "32x32",
+        type: "image/png",
+      },
+      {
+        src: "/branding/asset-tracker-logo-dark-transparent-64.png",
+        purpose: "any",
+        sizes: "64x64",
         type: "image/png",
       },
       {
         src: "/branding/asset-tracker-logo-dark-transparent.png",
         purpose: "any",
-        sizes: "1024x1024",
+        sizes: "256x256",
         type: "image/png",
       },
     ],

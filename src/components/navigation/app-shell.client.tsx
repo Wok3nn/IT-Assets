@@ -83,7 +83,7 @@ export function AppShellClient({ appTitle, branding, children, visibleNavItemIds
               {isCollapsed ? (
                 <div className="flex flex-col items-center gap-3">
                   <div className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-[#f2c28c]/70 bg-[rgba(246,150,41,0.08)] dark:border-[#7f5a2d]/80 dark:bg-[rgba(246,150,41,0.12)]">
-                    <AppLogo className="h-11 w-11 drop-shadow-[0_12px_18px_rgba(246,150,41,0.18)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" darkSrc={branding.darkLogoUrl} lightSrc={branding.lightLogoUrl} />
+                    <AppLogo className="h-12 w-12 drop-shadow-[0_12px_18px_rgba(246,150,41,0.18)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" darkSrc={branding.darkLogoUrl} lightSrc={branding.lightLogoUrl} />
                   </div>
                   <button
                     aria-label="Expand sidebar"
@@ -99,7 +99,7 @@ export function AppShellClient({ appTitle, branding, children, visibleNavItemIds
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0">
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[24px] border border-[#f2c28c]/70 bg-[rgba(246,150,41,0.08)] dark:border-[#7f5a2d]/80 dark:bg-[rgba(246,150,41,0.12)]">
-                      <AppLogo className="h-12 w-12 drop-shadow-[0_12px_18px_rgba(246,150,41,0.18)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" darkSrc={branding.darkLogoUrl} lightSrc={branding.lightLogoUrl} />
+                      <AppLogo className="h-14 w-14 drop-shadow-[0_12px_18px_rgba(246,150,41,0.18)] dark:drop-shadow-[0_14px_22px_rgba(0,0,0,0.24)]" darkSrc={branding.darkLogoUrl} lightSrc={branding.lightLogoUrl} />
                     </div>
                   </div>
                   <button
