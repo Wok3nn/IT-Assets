@@ -60,25 +60,26 @@ Basic startup flow:
 
 1. Clone the repository.
 2. Create a Compose file using the example above.
-3. Build and start the container:
+3. Create the host data directory:
+
+```bash
+mkdir -p /opt/docker/data/it-assets
+```
+
+4. Build and start the container:
 
 ```bash
 docker compose up -d --build
 ```
 
-4. Run database migrations:
+5. Open `http://localhost:4050` and complete the first-run setup wizard.
 
-```bash
-docker compose exec it-assets npm run db:deploy
-```
+On container startup, the app now automatically:
+- creates its internal `/data/db`, `/data/state`, and `/data/uploads` folders if they do not exist
+- initializes the SQLite database schema automatically on first startup
+- bootstraps missing default roles and asset statuses without overwriting existing records
 
-5. Seed the baseline roles and statuses:
-
-```bash
-docker compose exec it-assets npm run db:seed
-```
-
-6. Open `http://localhost:4050` and complete the first-run setup wizard.
+You should not need to run `npx prisma ...` inside the container.
 
 ## First-Run Setup
 
@@ -157,13 +158,9 @@ git pull
 docker compose up -d --build
 ```
 
-3. Apply any new migrations:
+3. Let the container restart normally. It applies pending migrations automatically on startup before the app server begins accepting requests.
 
-```bash
-docker compose exec it-assets npm run db:deploy
-```
-
-If release notes or future changes require a new seed pass, run `npm run db:seed` again.
+Avoid `npx prisma ...` inside the container. If you ever need a manual Prisma command, use the project scripts such as `npm run db:deploy` so the local pinned Prisma version is used.
 
 ## Validation Before Push
 
@@ -201,7 +198,7 @@ If you want to run the app without Docker:
 2. Install dependencies with `npm install`
 3. Generate Prisma client with `npm run db:generate`
 4. Run migrations with `npm run db:deploy`
-5. Seed baseline data with `npm run db:seed`
+5. Bootstrap missing baseline roles and statuses with `npm run db:bootstrap`
 6. Start the dev server with `npm run dev`
 
 ## Notes
