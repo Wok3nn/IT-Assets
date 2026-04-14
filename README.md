@@ -123,6 +123,8 @@ Inside the container, the app uses:
 - `/data/db/app.db` for the SQLite database
 - `/data/state` for app state files
 
+***Future Updates inlcude external DB options***
+
 If you change the mounted volume path, keep `DATABASE_URL` and `APP_DATA_DIR` aligned with that layout.
 
 ## Updating The App
