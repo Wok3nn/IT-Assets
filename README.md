@@ -1,3 +1,17 @@
+<p align="center">
+  <img 
+    src="https://github.com/user-attachments/assets/786c4b73-204c-49bc-bfbf-cbe17c38e8f7" 
+    width="200" 
+    alt="IT-Asset-Tracker Logo"
+  />
+</p>
+
+<h1 align="center">IT-Assets</h1>
+
+<p align="center">
+  A self-hosted asset management app for teams that need a simple way to track equipment, people, locations, categories, and printable labels from one web interface.
+</p>
+
 # IT-Asset-Tracker
 
 IT-Asset-Tracker is a self-hosted asset management app for teams that need a simple way to track equipment, people, locations, categories, and printable labels from one web interface.
