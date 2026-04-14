@@ -83,12 +83,17 @@ You should not need to run `npx prisma ...` inside the container.
 
 ## First-Run Setup
 
+<img width="1172" height="883" alt="image" src="https://github.com/user-attachments/assets/74397022-3000-437d-8d90-95cf60228096" />
+
 On a fresh database, the app opens the First-Run Setup page. This creates the initial workspace and the first local admin account.
 
 After setup is complete:
 - `/setup` is no longer the normal landing page
 - you sign in through `/login`
+<img width="469" height="591" alt="image" src="https://github.com/user-attachments/assets/11601469-0a0f-4dbb-9c4a-d863bf6f5789" />
+
 - the main dashboard becomes available
+<img width="2276" height="1250" alt="image" src="https://github.com/user-attachments/assets/db2d43d7-66e7-409e-b14e-9f02f07efa68" />
 
 ## Key Environment Variables
 
