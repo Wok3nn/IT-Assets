@@ -1,6 +1,17 @@
+import { createLabelTemplate, listPortableLabelTemplates } from "@/modules/labels/label-template.service";
 import { createAsset } from "@/modules/assets/asset.service";
 import { createCategory } from "@/modules/categories/category.service";
+import { createLocation } from "@/modules/locations/location.service";
 import { createScope } from "@/modules/scopes/scope.service";
+import {
+  labelTemplateElementFieldKeySchema,
+  labelTemplateElementTypeSchema,
+  labelTemplateFieldKeySchema,
+  labelTemplateFontWeightSchema,
+  labelTemplateOrientationSchema,
+  labelTemplateTextAlignmentSchema,
+  labelTemplateUnitSchema,
+} from "@/modules/labels/label-template.shared";
 import {
   buildCategoryDecisionMap,
   buildCategoryReferenceLabel,
@@ -16,11 +27,15 @@ import {
   type AssetImportResolutions,
   type ImportColumnMapping,
   type ImportExportReferenceData,
+  type ImportFormat,
   type ImportResolutionEntry,
+  type TabularData,
   type UserImportResolutions,
 } from "@/modules/settings/import-export.shared";
 import { createUser } from "@/modules/users/user.service";
 import { db } from "@/services/database";
+import { utils as xlsxUtils, write as writeWorkbook } from "xlsx";
+import { z } from "zod";
 
 type RowOutcome = {
   rowNumber: number;
@@ -39,6 +54,58 @@ type ImportSummary = {
   warnings: string[];
   rowResults: RowOutcome[];
 };
+
+type ExportPayload = {
+  fileName: string;
+  format: ImportFormat;
+  tabular?: TabularData;
+  records?: Array<Record<string, string>>;
+  jsonBody?: unknown;
+};
+
+const labelTemplateImportSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(240).optional().default(""),
+  width: z.number().positive().max(1000),
+  height: z.number().positive().max(1000),
+  unit: labelTemplateUnitSchema,
+  orientation: labelTemplateOrientationSchema,
+  marginTop: z.number().min(0).max(100),
+  marginRight: z.number().min(0).max(100),
+  marginBottom: z.number().min(0).max(100),
+  marginLeft: z.number().min(0).max(100),
+  isEnabled: z.boolean(),
+  enabledFieldKeys: z.array(labelTemplateFieldKeySchema),
+  elements: z.array(
+    z.object({
+      type: labelTemplateElementTypeSchema,
+      fieldKey: labelTemplateElementFieldKeySchema,
+      x: z.number().min(0).max(1000),
+      y: z.number().min(0).max(1000),
+      width: z.number().positive().max(1000),
+      height: z.number().positive().max(1000),
+      fontSize: z.number().int().min(6).max(96),
+      fontWeight: labelTemplateFontWeightSchema,
+      italic: z.boolean(),
+      textAlign: labelTemplateTextAlignmentSchema,
+      rotation: z.number().min(-360).max(360),
+      zIndex: z.number().int().min(0).max(1000),
+    }),
+  ),
+});
+
+const labelTemplateImportFileSchema = z.union([
+  z.object({
+    kind: z.literal("labels").optional(),
+    exportedAt: z.string().optional(),
+    templates: z.array(labelTemplateImportSchema),
+  }),
+  z.object({
+    kind: z.literal("labels").optional(),
+    exportedAt: z.string().optional(),
+    records: z.array(labelTemplateImportSchema),
+  }),
+]);
 
 
 function buildTreeLabel(items: Array<{ id: string; name: string; parentId: string | null }>, itemId: string | null | undefined) {
@@ -60,6 +127,133 @@ function buildTreeLabel(items: Array<{ id: string; name: string; parentId: strin
 
 function normalizeValue(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? "";
+}
+
+function normalizePathLabel(value: string) {
+  return value
+    .split("/")
+    .flatMap((segment) => segment.split("\\"))
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function splitPathSegments(value: string) {
+  const normalizedPath = normalizePathLabel(value);
+  return normalizedPath ? normalizedPath.split(" / ").map((segment) => segment.trim()).filter(Boolean) : [];
+}
+
+function buildPathLabelFromMappedValues(pathValue: string, nameValue?: string, parentPathValue?: string) {
+  const directPath = normalizePathLabel(pathValue);
+  if (directPath) {
+    return directPath;
+  }
+
+  const name = nameValue?.trim() ?? "";
+  if (!name) {
+    return "";
+  }
+
+  const parentPath = normalizePathLabel(parentPathValue ?? "");
+  return parentPath ? `${parentPath} / ${name}` : name;
+}
+
+function normalizeColorMode(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "none";
+  if (normalized === "border" || normalized === "fill" || normalized === "none") {
+    return normalized;
+  }
+  return null;
+}
+
+function normalizeColorHex(value: string) {
+  const trimmed = value.trim().toUpperCase();
+  if (!trimmed) return "";
+  return /^#(?:[0-9A-F]{6})$/.test(trimmed) ? trimmed : null;
+}
+
+async function ensureCategoryPath(
+  pathLabel: string,
+  references: Array<{ id: string; label: string; name: string; parentId: string | null }>,
+  leafAppearance?: { colorHex?: string; colorMode?: "border" | "fill" | "none" },
+) {
+  const segments = splitPathSegments(pathLabel);
+  if (segments.length === 0) {
+    throw new Error("Category Path is required.");
+  }
+
+  let parentId: string | null = null;
+  let currentPath = "";
+
+  for (const [index, segment] of segments.entries()) {
+    currentPath = currentPath ? `${currentPath} / ${segment}` : segment;
+    const normalizedPath = normalizeValue(currentPath);
+    let existing = references.find((item) => normalizeValue(item.label) === normalizedPath) ?? null;
+
+    if (!existing) {
+      const created = await createCategory({
+        name: segment,
+        parentId: parentId ?? undefined,
+        colorHex: index === segments.length - 1 ? leafAppearance?.colorHex : undefined,
+        colorMode: index === segments.length - 1 ? leafAppearance?.colorMode : undefined,
+      });
+
+      existing = {
+        id: created.id,
+        label: currentPath,
+        name: created.name,
+        parentId: created.parentId,
+      };
+      references.push(existing);
+    }
+
+    parentId = existing.id;
+  }
+
+  return references.find((item) => normalizeValue(item.label) === normalizeValue(currentPath)) ?? null;
+}
+
+async function ensureLocationPath(
+  pathLabel: string,
+  references: Array<{ id: string; label: string; name: string; parentId: string | null }>,
+  leafInput?: { description?: string; colorHex?: string; colorMode?: "border" | "fill" | "none" },
+) {
+  const segments = splitPathSegments(pathLabel);
+  if (segments.length === 0) {
+    throw new Error("Location Path is required.");
+  }
+
+  let parentId: string | null = null;
+  let currentPath = "";
+
+  for (const [index, segment] of segments.entries()) {
+    currentPath = currentPath ? `${currentPath} / ${segment}` : segment;
+    const normalizedPath = normalizeValue(currentPath);
+    let existing = references.find((item) => normalizeValue(item.label) === normalizedPath) ?? null;
+
+    if (!existing) {
+      const created = await createLocation({
+        name: segment,
+        parentId: parentId ?? undefined,
+        description: index === segments.length - 1 ? leafInput?.description : undefined,
+        colorHex: index === segments.length - 1 ? leafInput?.colorHex : undefined,
+        colorMode: index === segments.length - 1 ? leafInput?.colorMode : undefined,
+      });
+
+      existing = {
+        id: created.id,
+        label: currentPath,
+        name: created.name,
+        parentId: created.parentId,
+      };
+      references.push(existing);
+    }
+
+    parentId = existing.id;
+  }
+
+  return references.find((item) => normalizeValue(item.label) === normalizeValue(currentPath)) ?? null;
 }
 
 function buildLookupByLabel<T extends { id: string; label: string }>(items: T[]) {
@@ -168,7 +362,7 @@ async function createImportedRole(name: string) {
 export async function getImportExportReferenceData(): Promise<ImportExportReferenceData> {
   await ensureDefaultAssetStatuses();
 
-  const [categories, scopes, locations, statuses, users, roles, assets] = await Promise.all([
+  const [categories, scopes, locations, statuses, users, roles, assets, labelTemplates] = await Promise.all([
     db.category.findMany({ select: { id: true, name: true, parentId: true }, orderBy: [{ name: "asc" }] }),
     db.scope.findMany({ select: { id: true, name: true }, orderBy: [{ name: "asc" }] }),
     db.location.findMany({ select: { id: true, name: true, parentId: true }, orderBy: [{ name: "asc" }] }),
@@ -176,6 +370,7 @@ export async function getImportExportReferenceData(): Promise<ImportExportRefere
     db.user.findMany({ select: { id: true, name: true, email: true }, orderBy: [{ name: "asc" }] }),
     db.role.findMany({ select: { key: true, name: true }, orderBy: [{ name: "asc" }] }),
     db.asset.findMany({ select: { assetTag: true } }),
+    db.labelTemplate.findMany({ select: { name: true }, orderBy: [{ name: "asc" }] }),
   ]);
 
   return {
@@ -197,10 +392,22 @@ export async function getImportExportReferenceData(): Promise<ImportExportRefere
       roles,
       existingEmails: users.map((item) => item.email.toLowerCase()),
     },
+    categories: {
+      existingPaths: categories.map((item) => buildCategoryReferenceLabel(categories, item.id) ?? item.name),
+    },
+    scopes: {
+      existingNames: scopes.map((item) => item.name),
+    },
+    locations: {
+      existingPaths: locations.map((item) => buildTreeLabel(locations, item.id) ?? item.name),
+    },
+    labels: {
+      existingNames: labelTemplates.map((item) => item.name),
+    },
   };
 }
 
-export async function exportAssetsCsv() {
+async function buildAssetsExportData(): Promise<TabularData> {
   await ensureDefaultAssetStatuses();
 
   const assets = await db.asset.findMany({
@@ -261,10 +468,10 @@ export async function exportAssetsCsv() {
     asset.notes ?? "",
   ]);
 
-  return stringifyCsv(headers, rows);
+  return { headers, rows };
 }
 
-export async function exportUsersCsv() {
+async function buildUsersExportData(): Promise<TabularData> {
   const users = await db.user.findMany({
     select: {
       name: true,
@@ -301,7 +508,180 @@ export async function exportUsersCsv() {
     user.createdAt.toISOString(),
   ]);
 
-  return stringifyCsv(headers, rows);
+  return { headers, rows };
+}
+
+async function buildCategoriesExportData(): Promise<TabularData> {
+  const categories = await db.category.findMany({
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+      colorHex: true,
+      colorMode: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+
+  const headers = ["Category Path", "Category Name", "Parent Category", "Color Hex", "Color Mode"];
+  const rows = categories
+    .map((category) => {
+      const path = buildCategoryReferenceLabel(categories, category.id) ?? category.name;
+      const parentPath = category.parentId ? buildCategoryReferenceLabel(categories, category.parentId) ?? "" : "";
+
+      return [
+        path,
+        category.name,
+        parentPath,
+        category.colorHex ?? "",
+        category.colorMode ?? "none",
+      ];
+    })
+    .sort((left, right) => left[0].localeCompare(right[0]));
+
+  return { headers, rows };
+}
+
+async function buildScopesExportData(): Promise<TabularData> {
+  const scopes = await db.scope.findMany({
+    select: {
+      name: true,
+      description: true,
+      colorHex: true,
+      colorMode: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+
+  const headers = ["Department Name", "Description", "Color Hex", "Color Mode"];
+  const rows = scopes.map((scope) => [
+    scope.name,
+    scope.description ?? "",
+    scope.colorHex ?? "",
+    scope.colorMode ?? "none",
+  ]);
+
+  return { headers, rows };
+}
+
+async function buildLocationsExportData(): Promise<TabularData> {
+  const locations = await db.location.findMany({
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+      description: true,
+      colorHex: true,
+      colorMode: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+
+  const headers = ["Location Path", "Location Name", "Parent Location", "Description", "Color Hex", "Color Mode"];
+  const rows = locations
+    .map((location) => {
+      const path = buildTreeLabel(locations, location.id) ?? location.name;
+      const parentPath = location.parentId ? buildTreeLabel(locations, location.parentId) ?? "" : "";
+
+      return [
+        path,
+        location.name,
+        parentPath,
+        location.description ?? "",
+        location.colorHex ?? "",
+        location.colorMode ?? "none",
+      ];
+    })
+    .sort((left, right) => left[0].localeCompare(right[0]));
+
+  return { headers, rows };
+}
+
+async function buildLabelsExportData(): Promise<ExportPayload> {
+  const templates = await listPortableLabelTemplates();
+
+  return {
+    fileName: "labels-export",
+    format: "json",
+    jsonBody: {
+      kind: "labels",
+      exportedAt: new Date().toISOString(),
+      templates,
+    },
+  };
+}
+
+async function buildExportPayload(kind: "assets" | "users" | "categories" | "scopes" | "locations" | "labels", format: ImportFormat): Promise<ExportPayload> {
+  if (kind === "labels") {
+    return buildLabelsExportData();
+  }
+
+  const tabular = kind === "assets"
+    ? await buildAssetsExportData()
+    : kind === "users"
+      ? await buildUsersExportData()
+      : kind === "categories"
+        ? await buildCategoriesExportData()
+        : kind === "scopes"
+          ? await buildScopesExportData()
+          : await buildLocationsExportData();
+
+  return {
+    fileName: `${kind}-export`,
+    format,
+    tabular,
+    records: tabular.rows.map((row) => Object.fromEntries(tabular.headers.map((header, index) => [header, row[index] ?? ""]))),
+  };
+}
+
+export async function exportAssetsCsv() {
+  const data = await buildAssetsExportData();
+  return stringifyCsv(data.headers, data.rows);
+}
+
+export async function exportUsersCsv() {
+  const data = await buildUsersExportData();
+  return stringifyCsv(data.headers, data.rows);
+}
+
+export async function exportData(kind: "assets" | "users" | "categories" | "scopes" | "locations" | "labels", format: ImportFormat) {
+  return buildExportPayload(kind, format);
+}
+
+export function buildExportFileResponse(payload: ExportPayload) {
+  if (payload.format === "json") {
+    return {
+      body: JSON.stringify(
+        payload.jsonBody ?? {
+          kind: payload.fileName.replace(/-export$/, ""),
+          exportedAt: new Date().toISOString(),
+          records: payload.records ?? [],
+        },
+        null,
+        2,
+      ),
+      contentType: "application/json; charset=utf-8",
+      fileName: `${payload.fileName}.json`,
+    };
+  }
+
+  if (payload.format === "xlsx") {
+    const worksheet = xlsxUtils.aoa_to_sheet([payload.tabular.headers, ...payload.tabular.rows]);
+    const workbook = xlsxUtils.book_new();
+    xlsxUtils.book_append_sheet(workbook, worksheet, "Export");
+
+    return {
+      body: Buffer.from(writeWorkbook(workbook, { type: "buffer", bookType: "xlsx" })),
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      fileName: `${payload.fileName}.xlsx`,
+    };
+  }
+
+  return {
+    body: stringifyCsv(payload.tabular?.headers ?? [], payload.tabular?.rows ?? []),
+    contentType: "text/csv; charset=utf-8",
+    fileName: `${payload.fileName}.csv`,
+  };
 }
 
 export async function importAssetsFromRows(input: {
@@ -646,6 +1026,397 @@ export async function importUsersFromRows(input: {
       summary.rowsFailed += 1;
       const message = error instanceof Error ? error.message : "Unexpected import error.";
       summary.rowResults.push({ rowNumber, status: "failed", messages: [message, ...messages] });
+    }
+  }
+
+  return summary;
+}
+
+export async function importCategoriesFromRows(input: {
+  columns: ImportColumnMapping[];
+  rows: string[][];
+}) {
+  validateUniqueMappings(input.columns);
+
+  const mappedFieldIds = new Set(input.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string));
+  if (!mappedFieldIds.has("path")) {
+    throw new Error("Missing required category import mapping: path");
+  }
+
+  const categories = await db.category.findMany({
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+
+  const references = categories.map((category) => ({
+    id: category.id,
+    label: buildCategoryReferenceLabel(categories, category.id) ?? category.name,
+    name: category.name,
+    parentId: category.parentId,
+  }));
+
+  const existingPaths = new Set(references.map((item) => normalizeValue(item.label)));
+  const seenPaths = new Set<string>();
+  const nonBlankRows = input.rows.filter((row) => !isBlankRow(row));
+  const summary: ImportSummary = {
+    totalRowsRead: nonBlankRows.length,
+    rowsValid: 0,
+    rowsImported: 0,
+    rowsSkipped: 0,
+    rowsFailed: 0,
+    warnings: [],
+    rowResults: [],
+  };
+
+  for (const [index, row] of nonBlankRows.entries()) {
+    const rowNumber = index + 2;
+    const mapped = getMappedValues(input.columns, row);
+    const path = buildPathLabelFromMappedValues(mapped.get("path") ?? "", mapped.get("name"), mapped.get("parentPath"));
+    const normalizedPath = normalizeValue(path);
+    const colorHex = normalizeColorHex(mapped.get("colorHex") ?? "");
+    const colorMode = normalizeColorMode(mapped.get("colorMode") ?? "");
+    const messages: string[] = [];
+
+    if (!path) {
+      messages.push("Category Path is required.");
+    }
+    if ((mapped.get("colorHex") ?? "").trim() && colorHex === null) {
+      messages.push("Color Hex must be a valid #RRGGBB value.");
+    }
+    if ((mapped.get("colorMode") ?? "").trim() && colorMode === null) {
+      messages.push("Color Mode must be border, fill, or none.");
+    }
+
+    if (messages.length > 0) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages });
+      continue;
+    }
+
+    summary.rowsValid += 1;
+
+    if (existingPaths.has(normalizedPath)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages: [`Category already exists: ${path}`] });
+      continue;
+    }
+
+    if (seenPaths.has(normalizedPath)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages: [`Category is duplicated in this file: ${path}`] });
+      continue;
+    }
+
+    try {
+      const created = await ensureCategoryPath(path, references, {
+        colorHex: colorHex || undefined,
+        colorMode: (colorMode ?? "none") as "border" | "fill" | "none",
+      });
+
+      if (created) {
+        existingPaths.add(normalizedPath);
+        seenPaths.add(normalizedPath);
+      }
+
+      summary.rowsImported += 1;
+      summary.rowResults.push({ rowNumber, status: "imported", messages: ["Imported successfully."] });
+    } catch (error) {
+      summary.rowsFailed += 1;
+      summary.rowResults.push({
+        rowNumber,
+        status: "failed",
+        messages: [error instanceof Error ? error.message : "Unexpected import error."],
+      });
+    }
+  }
+
+  return summary;
+}
+
+export async function importScopesFromRows(input: {
+  columns: ImportColumnMapping[];
+  rows: string[][];
+}) {
+  validateUniqueMappings(input.columns);
+
+  const mappedFieldIds = new Set(input.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string));
+  if (!mappedFieldIds.has("name")) {
+    throw new Error("Missing required department import mapping: name");
+  }
+
+  const scopes = await db.scope.findMany({
+    select: {
+      name: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+
+  const existingNames = new Set(scopes.map((scope) => normalizeValue(scope.name)));
+  const seenNames = new Set<string>();
+  const nonBlankRows = input.rows.filter((row) => !isBlankRow(row));
+  const summary: ImportSummary = {
+    totalRowsRead: nonBlankRows.length,
+    rowsValid: 0,
+    rowsImported: 0,
+    rowsSkipped: 0,
+    rowsFailed: 0,
+    warnings: [],
+    rowResults: [],
+  };
+
+  for (const [index, row] of nonBlankRows.entries()) {
+    const rowNumber = index + 2;
+    const mapped = getMappedValues(input.columns, row);
+    const name = (mapped.get("name") ?? "").trim();
+    const description = (mapped.get("description") ?? "").trim();
+    const colorHex = normalizeColorHex(mapped.get("colorHex") ?? "");
+    const colorMode = normalizeColorMode(mapped.get("colorMode") ?? "");
+    const normalizedName = normalizeValue(name);
+    const messages: string[] = [];
+
+    if (!name) {
+      messages.push("Department Name is required.");
+    }
+    if ((mapped.get("colorHex") ?? "").trim() && colorHex === null) {
+      messages.push("Color Hex must be a valid #RRGGBB value.");
+    }
+    if ((mapped.get("colorMode") ?? "").trim() && colorMode === null) {
+      messages.push("Color Mode must be border, fill, or none.");
+    }
+
+    if (messages.length > 0) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages });
+      continue;
+    }
+
+    summary.rowsValid += 1;
+
+    if (existingNames.has(normalizedName)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages: [`Department already exists: ${name}`] });
+      continue;
+    }
+
+    if (seenNames.has(normalizedName)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages: [`Department is duplicated in this file: ${name}`] });
+      continue;
+    }
+
+    try {
+      await createScope({
+        name,
+        description: description || undefined,
+        colorHex: colorHex || undefined,
+        colorMode: (colorMode ?? "none") as "border" | "fill" | "none",
+      });
+
+      existingNames.add(normalizedName);
+      seenNames.add(normalizedName);
+      summary.rowsImported += 1;
+      summary.rowResults.push({ rowNumber, status: "imported", messages: ["Imported successfully."] });
+    } catch (error) {
+      summary.rowsFailed += 1;
+      summary.rowResults.push({
+        rowNumber,
+        status: "failed",
+        messages: [error instanceof Error ? error.message : "Unexpected import error."],
+      });
+    }
+  }
+
+  return summary;
+}
+
+export async function importLocationsFromRows(input: {
+  columns: ImportColumnMapping[];
+  rows: string[][];
+}) {
+  validateUniqueMappings(input.columns);
+
+  const mappedFieldIds = new Set(input.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string));
+  if (!mappedFieldIds.has("path")) {
+    throw new Error("Missing required location import mapping: path");
+  }
+
+  const locations = await db.location.findMany({
+    select: {
+      id: true,
+      name: true,
+      parentId: true,
+    },
+    orderBy: [{ name: "asc" }],
+  });
+
+  const references = locations.map((location) => ({
+    id: location.id,
+    label: buildTreeLabel(locations, location.id) ?? location.name,
+    name: location.name,
+    parentId: location.parentId,
+  }));
+
+  const existingPaths = new Set(references.map((item) => normalizeValue(item.label)));
+  const seenPaths = new Set<string>();
+  const nonBlankRows = input.rows.filter((row) => !isBlankRow(row));
+  const summary: ImportSummary = {
+    totalRowsRead: nonBlankRows.length,
+    rowsValid: 0,
+    rowsImported: 0,
+    rowsSkipped: 0,
+    rowsFailed: 0,
+    warnings: [],
+    rowResults: [],
+  };
+
+  for (const [index, row] of nonBlankRows.entries()) {
+    const rowNumber = index + 2;
+    const mapped = getMappedValues(input.columns, row);
+    const path = buildPathLabelFromMappedValues(mapped.get("path") ?? "", mapped.get("name"), mapped.get("parentPath"));
+    const normalizedPath = normalizeValue(path);
+    const description = (mapped.get("description") ?? "").trim();
+    const colorHex = normalizeColorHex(mapped.get("colorHex") ?? "");
+    const colorMode = normalizeColorMode(mapped.get("colorMode") ?? "");
+    const messages: string[] = [];
+
+    if (!path) {
+      messages.push("Location Path is required.");
+    }
+    if ((mapped.get("colorHex") ?? "").trim() && colorHex === null) {
+      messages.push("Color Hex must be a valid #RRGGBB value.");
+    }
+    if ((mapped.get("colorMode") ?? "").trim() && colorMode === null) {
+      messages.push("Color Mode must be border, fill, or none.");
+    }
+
+    if (messages.length > 0) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages });
+      continue;
+    }
+
+    summary.rowsValid += 1;
+
+    if (existingPaths.has(normalizedPath)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages: [`Location already exists: ${path}`] });
+      continue;
+    }
+
+    if (seenPaths.has(normalizedPath)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({ rowNumber, status: "skipped", messages: [`Location is duplicated in this file: ${path}`] });
+      continue;
+    }
+
+    try {
+      const created = await ensureLocationPath(path, references, {
+        description: description || undefined,
+        colorHex: colorHex || undefined,
+        colorMode: (colorMode ?? "none") as "border" | "fill" | "none",
+      });
+
+      if (created) {
+        existingPaths.add(normalizedPath);
+        seenPaths.add(normalizedPath);
+      }
+
+      summary.rowsImported += 1;
+      summary.rowResults.push({ rowNumber, status: "imported", messages: ["Imported successfully."] });
+    } catch (error) {
+      summary.rowsFailed += 1;
+      summary.rowResults.push({
+        rowNumber,
+        status: "failed",
+        messages: [error instanceof Error ? error.message : "Unexpected import error."],
+      });
+    }
+  }
+
+  return summary;
+}
+
+export async function importLabelTemplatesFromJson(input: unknown) {
+  const parsed = labelTemplateImportFileSchema.parse(input);
+  const templates = "templates" in parsed ? parsed.templates : parsed.records;
+  const existingNames = new Set(
+    (await db.labelTemplate.findMany({ select: { name: true }, orderBy: [{ name: "asc" }] }))
+      .map((template) => normalizeValue(template.name)),
+  );
+  const seenNames = new Set<string>();
+
+  const summary: ImportSummary = {
+    totalRowsRead: templates.length,
+    rowsValid: 0,
+    rowsImported: 0,
+    rowsSkipped: 0,
+    rowsFailed: 0,
+    warnings: [],
+    rowResults: [],
+  };
+
+  for (const [index, template] of templates.entries()) {
+    const rowNumber = index + 1;
+    const normalizedName = normalizeValue(template.name);
+
+    summary.rowsValid += 1;
+
+    if (existingNames.has(normalizedName)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({
+        rowNumber,
+        status: "skipped",
+        messages: [`Label template already exists: ${template.name}`],
+      });
+      continue;
+    }
+
+    if (seenNames.has(normalizedName)) {
+      summary.rowsSkipped += 1;
+      summary.rowResults.push({
+        rowNumber,
+        status: "skipped",
+        messages: [`Label template is duplicated in this file: ${template.name}`],
+      });
+      continue;
+    }
+
+    try {
+      await createLabelTemplate({
+        name: template.name,
+        description: template.description,
+        width: template.width,
+        height: template.height,
+        unit: template.unit,
+        orientation: template.orientation,
+        isEnabled: template.isEnabled,
+        marginTop: template.marginTop,
+        marginRight: template.marginRight,
+        marginBottom: template.marginBottom,
+        marginLeft: template.marginLeft,
+        enabledFieldKeys: template.enabledFieldKeys,
+        elements: template.elements,
+      });
+
+      existingNames.add(normalizedName);
+      seenNames.add(normalizedName);
+      summary.rowsImported += 1;
+      summary.rowResults.push({
+        rowNumber,
+        status: "imported",
+        messages: ["Imported successfully."],
+      });
+    } catch (error) {
+      summary.rowsFailed += 1;
+      summary.rowResults.push({
+        rowNumber,
+        status: "failed",
+        messages: [error instanceof Error ? error.message : "Unexpected import error."],
+      });
     }
   }
 

@@ -41,10 +41,24 @@ export default async function ImportExportPage() {
               <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Settings</p>
               <h1 className="mt-3 text-3xl font-semibold text-slate-950 dark:text-slate-100">Import / Export</h1>
               <p className="mt-3 max-w-3xl text-slate-600 dark:text-slate-300">
-                Export current data or import CSV files through a focused mapping workflow built for larger batches.
+                Export assets, users, categories, departments, locations, and labels or import CSV, XLSX, and JSON files through focused admin workflows, with labels using a JSON-first portable format.
               </p>
             </div>
             <Link href="/settings"><Button type="button" variant="ghost">Back to settings</Button></Link>
+          </div>
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-300">
+              <p className="font-medium text-slate-900 dark:text-slate-100">CSV / XLSX</p>
+              <p className="mt-1">Best for spreadsheet editing and larger admin cleanup passes.</p>
+            </div>
+            <div className="rounded-2xl border border-[#f2c28c] bg-[rgba(246,150,41,0.1)] px-4 py-3 text-sm text-[#9a5a13] dark:border-[#7f5a2d] dark:bg-[rgba(246,150,41,0.16)] dark:text-[#ffd1a0]">
+              <p className="font-medium">JSON</p>
+              <p className="mt-1">Best for full-fidelity structured exports and imports, especially for Labels.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-300">
+              <p className="font-medium text-slate-900 dark:text-slate-100">Duplicate handling</p>
+              <p className="mt-1">Existing items are skipped during import so admins can re-run files safely.</p>
+            </div>
           </div>
         </section>
 

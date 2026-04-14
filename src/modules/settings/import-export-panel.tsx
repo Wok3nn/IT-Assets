@@ -19,8 +19,14 @@ import { MappingSection } from "@/modules/settings/components/mapping-section";
 import { ValidationSummary } from "@/modules/settings/components/validation-summary";
 import {
   ASSET_IMPORT_FIELDS,
+  CATEGORY_IMPORT_FIELDS,
+  detectImportFormat,
   IGNORE_FIELD_ID,
+  LOCATION_IMPORT_FIELDS,
+  parseJsonRecords,
   USER_IMPORT_FIELDS,
+  SCOPE_IMPORT_FIELDS,
+  type ImportFormat,
   parseBooleanish,
   parseCsv,
   splitMultiValue,
@@ -43,6 +49,12 @@ import {
 
 type ImportExportPanelProps = {
   references: ImportExportReferenceData;
+};
+
+type LabelImportPreviewState = {
+  fileName: string;
+  templateNames: string[];
+  payload: unknown;
 };
 
 function normalizeValue(value: string) {
@@ -527,6 +539,166 @@ function buildUserValidation(state: ParsedImportState, references: ImportExportR
 
   return { globalErrors, rowErrors, rowWarnings, validRows, resolutionGroups, resolutionSummary };
 }
+
+function normalizePathLabel(value: string) {
+  return value
+    .split("/")
+    .flatMap((segment) => segment.split("\\"))
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function buildPathLabel(pathValue: string, nameValue?: string, parentPathValue?: string) {
+  const directPath = normalizePathLabel(pathValue);
+  if (directPath) {
+    return directPath;
+  }
+
+  const name = nameValue?.trim() ?? "";
+  if (!name) {
+    return "";
+  }
+
+  const parentPath = normalizePathLabel(parentPathValue ?? "");
+  return parentPath ? `${parentPath} / ${name}` : name;
+}
+
+function normalizeColorHex(value: string) {
+  const trimmed = value.trim().toUpperCase();
+  if (!trimmed) return "";
+  return /^#(?:[0-9A-F]{6})$/.test(trimmed) ? trimmed : null;
+}
+
+function normalizeColorMode(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "none";
+  return normalized === "border" || normalized === "fill" || normalized === "none" ? normalized : null;
+}
+
+function buildSimpleValidation(kind: "categories" | "scopes" | "locations", state: ParsedImportState, references: ImportExportReferenceData): ValidationState {
+  const globalErrors: string[] = [];
+  const rowErrors: Array<{ rowNumber: number; messages: string[] }> = [];
+  const rowWarnings: Array<{ rowNumber: number; messages: string[] }> = [];
+  const fieldIds = state.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string);
+  const duplicates = fieldIds.filter((fieldId, index) => fieldIds.indexOf(fieldId) !== index);
+
+  if (duplicates.length > 0) {
+    globalErrors.push("Each app field can only be mapped once.");
+  }
+
+  if (kind === "scopes") {
+    if (!fieldIds.includes("name")) {
+      globalErrors.push("Department Name must be mapped before import can continue.");
+    }
+  } else if (!fieldIds.includes("path")) {
+    globalErrors.push(`${kind === "categories" ? "Category" : "Location"} Path must be mapped before import can continue.`);
+  }
+
+  const existingKeys = new Set(
+    kind === "categories"
+      ? references.categories.existingPaths.map((value) => normalizeValue(value))
+      : kind === "locations"
+        ? references.locations.existingPaths.map((value) => normalizeValue(value))
+        : references.scopes.existingNames.map((value) => normalizeValue(value)),
+  );
+  const seenFileKeys = new Set<string>();
+
+  let validRows = 0;
+
+  nonBlankRows(state.rows).forEach((row, index) => {
+    const rowNumber = index + 2;
+    const mapped = getMappedValues(state.columns, row);
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    const dedupeKey = kind === "scopes"
+      ? (mapped.get("name") ?? "").trim()
+      : buildPathLabel(mapped.get("path") ?? "", mapped.get("name"), mapped.get("parentPath"));
+    const normalizedKey = normalizeValue(dedupeKey);
+    const colorHex = normalizeColorHex(mapped.get("colorHex") ?? "");
+    const colorMode = normalizeColorMode(mapped.get("colorMode") ?? "");
+
+    if (!dedupeKey) {
+      errors.push(kind === "scopes" ? "Department Name is required." : `${kind === "categories" ? "Category" : "Location"} Path is required.`);
+    }
+
+    if ((mapped.get("colorHex") ?? "").trim() && colorHex === null) {
+      errors.push("Color Hex must be a valid #RRGGBB value.");
+    }
+
+    if ((mapped.get("colorMode") ?? "").trim() && colorMode === null) {
+      errors.push("Color Mode must be border, fill, or none.");
+    }
+
+    if (normalizedKey) {
+      if (existingKeys.has(normalizedKey)) {
+        warnings.push(`${kind === "scopes" ? "Department" : kind === "categories" ? "Category" : "Location"} already exists and will be skipped: ${dedupeKey}`);
+      }
+      if (seenFileKeys.has(normalizedKey)) {
+        warnings.push(`${kind === "scopes" ? "Department" : kind === "categories" ? "Category" : "Location"} is duplicated in this file and later rows will be skipped: ${dedupeKey}`);
+      }
+      seenFileKeys.add(normalizedKey);
+    }
+
+    if (errors.length > 0) {
+      rowErrors.push({ rowNumber, messages: errors });
+    } else {
+      validRows += 1;
+    }
+
+    if (warnings.length > 0) {
+      rowWarnings.push({ rowNumber, messages: warnings });
+    }
+  });
+
+  return {
+    globalErrors,
+    rowErrors,
+    rowWarnings,
+    validRows,
+    resolutionGroups: [],
+    resolutionSummary: {
+      createCount: 0,
+      mapCount: 0,
+      skipCount: 0,
+      unresolvedCount: 0,
+    },
+  };
+}
+
+function parseLabelImportPreview(text: string) {
+  const parsed = JSON.parse(text) as unknown;
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Label import JSON must be an object.");
+  }
+
+  const templates = Array.isArray((parsed as { templates?: unknown[] }).templates)
+    ? (parsed as { templates: unknown[] }).templates
+    : Array.isArray((parsed as { records?: unknown[] }).records)
+      ? (parsed as { records: unknown[] }).records
+      : null;
+
+  if (!templates) {
+    throw new Error("Label import JSON must include a templates array.");
+  }
+
+  const templateNames = templates.map((template, index) => {
+    if (!template || typeof template !== "object" || Array.isArray(template)) {
+      throw new Error(`Label template ${index + 1} must be an object.`);
+    }
+
+    const name = typeof (template as { name?: unknown }).name === "string" ? (template as { name: string }).name.trim() : "";
+    if (!name) {
+      throw new Error(`Label template ${index + 1} is missing a name.`);
+    }
+
+    return name;
+  });
+
+  return { payload: parsed, templateNames };
+}
 function ImportCard({
   kind,
   title,
@@ -535,6 +707,8 @@ function ImportCard({
   fields,
   references,
   importNote,
+  formatGuidance,
+  skipNote,
 }: {
   kind: ImportKind;
   title: string;
@@ -543,6 +717,8 @@ function ImportCard({
   fields: ImportFieldDefinition[];
   references: ImportExportReferenceData;
   importNote?: string;
+  formatGuidance?: string;
+  skipNote?: string;
 }) {
   const [state, setState] = useState<ParsedImportState | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -557,7 +733,9 @@ function ImportCard({
 
   const resolutionGroups = useMemo(() => {
     if (!state) return [];
-    return kind === "assets" ? buildAssetResolutionGroups(state, references) : buildUserResolutionGroups(state, references);
+    if (kind === "assets") return buildAssetResolutionGroups(state, references);
+    if (kind === "users") return buildUserResolutionGroups(state, references);
+    return [];
   }, [kind, references, state]);
 
   useEffect(() => {
@@ -569,9 +747,13 @@ function ImportCard({
 
   const validation = useMemo(() => {
     if (!state) return null;
-    return kind === "assets"
-      ? buildAssetValidation(state, references, resolutionGroups, resolutionSelections)
-      : buildUserValidation(state, references, resolutionGroups, resolutionSelections);
+    if (kind === "assets") {
+      return buildAssetValidation(state, references, resolutionGroups, resolutionSelections);
+    }
+    if (kind === "users") {
+      return buildUserValidation(state, references, resolutionGroups, resolutionSelections);
+    }
+    return buildSimpleValidation(kind, state, references);
   }, [kind, references, resolutionGroups, resolutionSelections, state]);
 
   const requiredMappingRows = useMemo(() => {
@@ -630,11 +812,30 @@ function ImportCard({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const text = await file.text();
-    const parsed = parseCsv(text);
+    const format = detectImportFormat(file.name);
+    if (!format) {
+      setSubmitError("Unsupported file type. Upload CSV, XLSX, or JSON.");
+      return;
+    }
+
+    const parsed = format === "csv"
+      ? parseCsv(await file.text())
+      : format === "json"
+        ? parseJsonRecords(await file.text())
+        : await (async () => {
+            const XLSX = await import("xlsx");
+            const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const rows = (XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][])
+              .map((row) => row.map((cell) => String(cell ?? "").trim()))
+              .filter((row) => row.some((cell) => cell.length > 0));
+            const [headers = [], ...bodyRows] = rows as string[][];
+            return { headers, rows: bodyRows };
+          })();
 
     if (parsed.headers.length === 0) {
-      setSubmitError("The uploaded CSV does not contain a header row.");
+      setSubmitError("The uploaded file does not contain a header row.");
       return;
     }
 
@@ -839,6 +1040,10 @@ function ImportCard({
       return payload;
     }
 
+    if (kind !== "users") {
+      return undefined;
+    }
+
     const payload: UserImportResolutions = {};
 
     for (const group of resolutionGroups) {
@@ -892,7 +1097,15 @@ function ImportCard({
   }
 
   return (
-    <ImportCardShell description={description} exportHref={exportHref} importNote={importNote} onFileChange={handleFileChange} title={title}>
+    <ImportCardShell
+      description={description}
+      exportHref={exportHref}
+      formatGuidance={formatGuidance}
+      importNote={importNote}
+      onFileChange={handleFileChange}
+      skipNote={skipNote}
+      title={title}
+    >
       {state ? (
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#4b5255] dark:bg-[#34393c]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -938,7 +1151,7 @@ function ImportCard({
               actionBar={
                 <div className="sticky bottom-0 z-10 rounded-2xl border border-[#ece7df] bg-white/95 p-4 shadow-panel backdrop-blur dark:border-[#4b5255] dark:bg-[#2f3437]/95">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Import only creates new records. Rows with blocking issues are skipped.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Import only creates new records. Existing matches and rows with blocking issues are skipped.</p>
                     <div className="flex flex-wrap items-center gap-3">
                       <Button className="min-w-36" onClick={resetMappings} type="button" variant="secondary">Reset mapping</Button>
                       <Button disabled={isSubmitting || validation.globalErrors.length > 0 || validation.rowErrors.length > 0 || validation.validRows === 0 || validation.resolutionSummary.unresolvedCount > 0} onClick={handleImport} type="button">{isSubmitting ? "Importing..." : `Confirm import ${validation.validRows} row${validation.validRows === 1 ? "" : "s"}`}</Button>
@@ -961,11 +1174,192 @@ function ImportCard({
   );
 }
 
+function LabelsImportCard({ references }: { references: ImportExportReferenceData }) {
+  const [previewState, setPreviewState] = useState<LabelImportPreviewState | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const existingNames = useMemo(
+    () => new Set(references.labels.existingNames.map((value) => normalizeValue(value))),
+    [references.labels.existingNames],
+  );
+
+  const previewDuplicateCount = useMemo(() => {
+    if (!previewState) return 0;
+    return previewState.templateNames.filter((name) => existingNames.has(normalizeValue(name))).length;
+  }, [existingNames, previewState]);
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (detectImportFormat(file.name) !== "json") {
+      setSubmitError("Labels import only supports JSON.");
+      return;
+    }
+
+    try {
+      const parsed = parseLabelImportPreview(await file.text());
+      setPreviewState({
+        fileName: file.name,
+        templateNames: parsed.templateNames,
+        payload: parsed.payload,
+      });
+      setImportSummary(null);
+      setSubmitError(null);
+    } catch (error) {
+      setPreviewState(null);
+      setImportSummary(null);
+      setSubmitError(error instanceof Error ? error.message : "Label template import failed.");
+    }
+  }
+
+  async function handleImport() {
+    if (!previewState) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    setImportSummary(null);
+
+    try {
+      const response = await fetch("/api/settings/import/labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(previewState.payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Label template import failed.");
+      }
+
+      setImportSummary(data.summary as ImportSummary);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Label template import failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <ImportCardShell
+      description="Export full-fidelity label templates as portable JSON and import them back without flattening the template definition."
+      exportFormats={["json"] as ImportFormat[]}
+      exportHref="/api/settings/export/labels"
+      formatGuidance="JSON is the preferred label format because it preserves dimensions, margins, enabled fields, and element definitions without flattening."
+      importAccept=".json,application/json"
+      importLabel="Import label templates JSON"
+      importNote="Labels use a JSON-first workflow so template sizing, orientation, enabled fields, and element definitions round-trip without losing fidelity."
+      onFileChange={handleFileChange}
+      skipNote="Existing label templates are skipped by normalized template name during import."
+      title="Labels"
+    >
+      {previewState ? (
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#4b5255] dark:bg-[#34393c]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Ready to import {previewState.fileName}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {previewState.templateNames.length} template(s) detected. {previewDuplicateCount} already match existing template names and will be skipped.
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                setPreviewState(null);
+                setImportSummary(null);
+                setSubmitError(null);
+              }}
+              type="button"
+              variant="ghost"
+            >
+              Choose another file
+            </Button>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-[#f8f9fb] px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-300">
+            <p className="font-medium text-slate-900 dark:text-slate-100">Templates in file</p>
+            <div className="mt-2 space-y-1">
+              {previewState.templateNames.slice(0, 8).map((name) => (
+                <p key={name}>{name}</p>
+              ))}
+              {previewState.templateNames.length > 8 ? (
+                <p>+ {previewState.templateNames.length - 8} more template(s)</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 z-10 rounded-2xl border border-[#ece7df] bg-white/95 p-4 shadow-panel backdrop-blur dark:border-[#4b5255] dark:bg-[#2f3437]/95">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Import only creates new templates. Existing matches by normalized template name are skipped.</p>
+              <Button className="min-w-36" disabled={isSubmitting || previewState.templateNames.length === 0} onClick={handleImport} type="button">
+                {isSubmitting ? "Importing..." : `Confirm import ${previewState.templateNames.length} template${previewState.templateNames.length === 1 ? "" : "s"}`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {submitError ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">{submitError}</div> : null}
+      {importSummary ? <ImportSummaryCard importSummary={importSummary} kind="labels" /> : null}
+    </ImportCardShell>
+  );
+}
+
 export function ImportExportPanel({ references }: ImportExportPanelProps) {
   return (
     <div className="min-w-0 space-y-6">
-      <ImportCard description="Export assets to CSV or import new assets through a header-mapping workflow with validation, preview, and confirmation." exportHref="/api/settings/export/assets" fields={ASSET_IMPORT_FIELDS} importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically." kind="assets" references={references} title="Assets CSV" />
-      <ImportCard description="Export users to CSV or import new users with role and department mapping before confirmation." exportHref="/api/settings/export/users" fields={USER_IMPORT_FIELDS} kind="users" references={references} title="Users CSV" />
+      <ImportCard
+        description="Export assets or import new assets through the existing header-mapping workflow with validation, preview, and confirmation."
+        exportHref="/api/settings/export/assets"
+        fields={ASSET_IMPORT_FIELDS}
+        formatGuidance="CSV/XLSX are best for spreadsheet cleanup and bulk edits. JSON is useful when you want a portable structured export."
+        importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically."
+        kind="assets"
+        references={references}
+        skipNote="Existing asset tags, duplicate rows, and rows with blocking issues are skipped."
+        title="Assets"
+      />
+      <ImportCard
+        description="Export users or import new users with role and department mapping before confirmation."
+        exportHref="/api/settings/export/users"
+        fields={USER_IMPORT_FIELDS}
+        formatGuidance="CSV/XLSX are best for spreadsheet administration. JSON is available when you want a structured handoff."
+        kind="users"
+        references={references}
+        skipNote="Existing emails, duplicate rows, and rows with blocking issues are skipped."
+        title="Users"
+      />
+      <ImportCard
+        description="Export category structure or import category paths with duplicate-safe skip behavior."
+        exportHref="/api/settings/export/categories"
+        fields={CATEGORY_IMPORT_FIELDS}
+        formatGuidance="CSV/XLSX are best for editing hierarchical paths in a spreadsheet. JSON is available for structured exchange."
+        kind="categories"
+        references={references}
+        skipNote="Existing category paths and repeated paths in the same file are skipped."
+        title="Categories"
+      />
+      <ImportCard
+        description="Export departments or import department records with duplicate-safe skip behavior."
+        exportHref="/api/settings/export/scopes"
+        fields={SCOPE_IMPORT_FIELDS}
+        formatGuidance="CSV/XLSX are best for spreadsheet editing. JSON is available when you need a structured export."
+        kind="scopes"
+        references={references}
+        skipNote="Existing department names and repeated names in the same file are skipped."
+        title="Departments"
+      />
+      <ImportCard
+        description="Export location structure or import location paths with duplicate-safe skip behavior."
+        exportHref="/api/settings/export/locations"
+        fields={LOCATION_IMPORT_FIELDS}
+        formatGuidance="CSV/XLSX are best for editing nested location paths in a spreadsheet. JSON is available for structured exchange."
+        kind="locations"
+        references={references}
+        skipNote="Existing location paths and repeated paths in the same file are skipped."
+        title="Locations"
+      />
+      <LabelsImportCard references={references} />
 
       <Link className={`${cardClass} block transition hover:-translate-y-0.5 hover:border-[#f0c48d] hover:shadow-[0_22px_42px_rgba(246,150,41,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F69629]/40 dark:hover:border-[#f0a853] dark:hover:shadow-[0_18px_34px_rgba(0,0,0,0.22)]`} href="/settings/reset">
         <section>

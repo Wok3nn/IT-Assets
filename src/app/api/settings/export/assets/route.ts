@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
-import { exportAssetsCsv } from "@/modules/settings/import-export.service";
+import { buildExportFileResponse, exportData } from "@/modules/settings/import-export.service";
 import { readSetupState } from "@/services/setup-state";
 
-export async function GET() {
+function getFormat(request: Request) {
+  const format = new URL(request.url).searchParams.get("format");
+  return format === "json" || format === "xlsx" ? format : "csv";
+}
+
+export async function GET(request: Request) {
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),
@@ -24,11 +29,11 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const csv = await exportAssetsCsv();
-  return new NextResponse(csv, {
+  const responseFile = buildExportFileResponse(await exportData("assets", getFormat(request)));
+  return new NextResponse(responseFile.body, {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="assets-export.csv"',
+      "Content-Type": responseFile.contentType,
+      "Content-Disposition": `attachment; filename="${responseFile.fileName}"`,
       "Cache-Control": "no-store",
     },
   });

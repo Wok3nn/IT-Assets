@@ -61,6 +61,34 @@ const defaultTemplateSizeByUnit = getDefaultTemplateDimensions(LABEL_TEMPLATE_DE
 
 export type LabelTemplateSummary = Awaited<ReturnType<typeof listLabelTemplates>>[number];
 export type LabelTemplateEditorData = Awaited<ReturnType<typeof getLabelTemplateById>>;
+export type PortableLabelTemplate = {
+  name: string;
+  description: string;
+  width: number;
+  height: number;
+  unit: LabelTemplateEditorValues["unit"];
+  orientation: LabelTemplateEditorValues["orientation"];
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
+  isEnabled: boolean;
+  enabledFieldKeys: LabelTemplateFieldKey[];
+  elements: Array<{
+    type: LabelTemplateElementDefinition["type"];
+    fieldKey: LabelTemplateElementDefinition["fieldKey"];
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontSize: number;
+    fontWeight: LabelTemplateElementDefinition["fontWeight"];
+    italic: boolean;
+    textAlign: LabelTemplateElementDefinition["textAlign"];
+    rotation: number;
+    zIndex: number;
+  }>;
+};
 
 function slugifyTemplateName(name: string) {
   return name
@@ -457,6 +485,51 @@ export async function listLabelTemplates() {
 export async function listEnabledLabelTemplates() {
   const templates = await listLabelTemplates();
   return templates.filter((template) => template.isEnabled);
+}
+
+export async function listPortableLabelTemplates(): Promise<PortableLabelTemplate[]> {
+  const templates = await db.labelTemplate.findMany({
+    select: getTemplateSelect(),
+    orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+  });
+
+  return templates.map((template) => {
+    const elements = template.elements
+      .map((element) => mapTemplateElement(element))
+      .filter((element): element is NonNullable<ReturnType<typeof mapTemplateElement>> => Boolean(element));
+
+    return {
+      name: template.name,
+      description: template.description ?? "",
+      width: template.width,
+      height: template.height,
+      unit: labelTemplateUnitSchema.catch(LABEL_TEMPLATE_DEFAULT_UNIT).parse(template.unit),
+      orientation: labelTemplateOrientationSchema.catch(LABEL_TEMPLATE_DEFAULT_ORIENTATION).parse(template.orientation),
+      marginTop: template.marginTop,
+      marginRight: template.marginRight,
+      marginBottom: template.marginBottom,
+      marginLeft: template.marginLeft,
+      isEnabled: template.isEnabled,
+      enabledFieldKeys: elements
+        .filter((element) => element.type === "text")
+        .map((element) => element.fieldKey)
+        .filter((fieldKey): fieldKey is LabelTemplateFieldKey => isLabelTextFieldKey(fieldKey)),
+      elements: elements.map((element) => ({
+        type: element.type,
+        fieldKey: element.fieldKey,
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        fontSize: element.fontSize,
+        fontWeight: element.fontWeight,
+        italic: element.italic,
+        textAlign: element.textAlign,
+        rotation: element.rotation,
+        zIndex: element.zIndex,
+      })),
+    };
+  });
 }
 
 export async function getLabelTemplateById(templateId: string): Promise<LabelTemplateEditorValues & {

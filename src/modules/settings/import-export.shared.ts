@@ -1,4 +1,5 @@
-export type ImportKind = "assets" | "users";
+export type ImportKind = "assets" | "users" | "categories" | "scopes" | "locations" | "labels";
+export type ImportFormat = "csv" | "xlsx" | "json";
 
 export type ImportColumnMapping = {
   header: string;
@@ -6,6 +7,11 @@ export type ImportColumnMapping = {
 };
 
 export type CsvParseResult = {
+  headers: string[];
+  rows: string[][];
+};
+
+export type TabularData = {
   headers: string[];
   rows: string[][];
 };
@@ -56,9 +62,23 @@ export type ImportExportReferenceData = {
     roles: Array<{ key: string; name: string }>;
     existingEmails: string[];
   };
+  categories: {
+    existingPaths: string[];
+  };
+  scopes: {
+    existingNames: string[];
+  };
+  locations: {
+    existingPaths: string[];
+  };
+  labels: {
+    existingNames: string[];
+  };
 };
 
 export const IGNORE_FIELD_ID = "__ignore__";
+export const IMPORT_FILE_ACCEPT = ".csv,.xlsx,.json,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const EXPORT_FORMATS: ImportFormat[] = ["csv", "xlsx", "json"];
 
 export const ASSET_IMPORT_FIELDS: ImportFieldDefinition[] = [
   { id: "assetTag", label: "Asset Tag", required: true, aliases: ["asset tag", "tag", "asset id"] },
@@ -82,6 +102,30 @@ export const USER_IMPORT_FIELDS: ImportFieldDefinition[] = [
   { id: "role", label: "Role", required: false, aliases: ["role", "user role", "permission"] },
   { id: "scopes", label: "Department", required: false, aliases: ["department", "departments", "group", "groups", "scope", "scopes"] },
   { id: "isActive", label: "Active", required: false, aliases: ["active", "status", "enabled"] },
+];
+
+export const CATEGORY_IMPORT_FIELDS: ImportFieldDefinition[] = [
+  { id: "path", label: "Category Path", required: true, aliases: ["category path", "path", "category", "full path"] },
+  { id: "name", label: "Category Name", required: false, aliases: ["name", "category name"] },
+  { id: "parentPath", label: "Parent Category", required: false, aliases: ["parent category", "parent path", "parent"] },
+  { id: "colorHex", label: "Color Hex", required: false, aliases: ["color", "hex", "color hex"] },
+  { id: "colorMode", label: "Color Mode", required: false, aliases: ["color mode", "appearance"] },
+];
+
+export const SCOPE_IMPORT_FIELDS: ImportFieldDefinition[] = [
+  { id: "name", label: "Department Name", required: true, aliases: ["department", "department name", "name", "scope", "scope name"] },
+  { id: "description", label: "Description", required: false, aliases: ["description", "details", "notes"] },
+  { id: "colorHex", label: "Color Hex", required: false, aliases: ["color", "hex", "color hex"] },
+  { id: "colorMode", label: "Color Mode", required: false, aliases: ["color mode", "appearance"] },
+];
+
+export const LOCATION_IMPORT_FIELDS: ImportFieldDefinition[] = [
+  { id: "path", label: "Location Path", required: true, aliases: ["location path", "path", "location", "full path"] },
+  { id: "name", label: "Location Name", required: false, aliases: ["name", "location name"] },
+  { id: "parentPath", label: "Parent Location", required: false, aliases: ["parent location", "parent path", "parent"] },
+  { id: "description", label: "Description", required: false, aliases: ["description", "details", "notes"] },
+  { id: "colorHex", label: "Color Hex", required: false, aliases: ["color", "hex", "color hex"] },
+  { id: "colorMode", label: "Color Mode", required: false, aliases: ["color mode", "appearance"] },
 ];
 
 export function normalizeHeader(value: string) {
@@ -185,6 +229,64 @@ export function splitMultiValue(value: string) {
     .split(/[;,]/g)
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+export function detectImportFormat(fileName: string): ImportFormat | null {
+  const normalized = fileName.trim().toLowerCase();
+  if (normalized.endsWith(".csv")) return "csv";
+  if (normalized.endsWith(".xlsx")) return "xlsx";
+  if (normalized.endsWith(".json")) return "json";
+  return null;
+}
+
+export function buildRowsFromObjectRecords(records: Array<Record<string, unknown>>): TabularData {
+  const headers = Array.from(
+    new Set(
+      records.flatMap((record) => Object.keys(record)),
+    ),
+  );
+
+  const rows = records.map((record) =>
+    headers.map((header) => {
+      const value = record[header];
+      if (value == null) return "";
+      if (typeof value === "string") return value;
+      if (typeof value === "number" || typeof value === "boolean") return String(value);
+      return JSON.stringify(value);
+    }),
+  );
+
+  return { headers, rows };
+}
+
+export function parseJsonRecords(text: string): TabularData {
+  const parsed = JSON.parse(text) as unknown;
+
+  const records = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { records?: unknown }).records)
+      ? (parsed as { records: unknown[] }).records
+      : null;
+
+  if (!records) {
+    throw new Error("JSON import must be an array of records or an object with a records array.");
+  }
+
+  const objectRecords = records.map((record, index) => {
+    if (!record || typeof record !== "object" || Array.isArray(record)) {
+      throw new Error(`JSON record ${index + 1} must be an object.`);
+    }
+
+    return record as Record<string, unknown>;
+  });
+
+  return buildRowsFromObjectRecords(objectRecords);
+}
+
+export function rowsToObjectRecords(headers: string[], rows: string[][]) {
+  return rows.map((row) =>
+    Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])),
+  );
 }
 
 export function parseBooleanish(value: string) {
