@@ -51,6 +51,8 @@ type ImportExportPanelProps = {
   references: ImportExportReferenceData;
 };
 
+type SimpleImportKind = "categories" | "scopes" | "locations";
+
 type LabelImportPreviewState = {
   fileName: string;
   templateNames: string[];
@@ -576,7 +578,7 @@ function normalizeColorMode(value: string) {
   return normalized === "border" || normalized === "fill" || normalized === "none" ? normalized : null;
 }
 
-function buildSimpleValidation(kind: "categories" | "scopes" | "locations", state: ParsedImportState, references: ImportExportReferenceData): ValidationState {
+function buildSimpleValidation(kind: SimpleImportKind, state: ParsedImportState, references: ImportExportReferenceData): ValidationState {
   const globalErrors: string[] = [];
   const rowErrors: Array<{ rowNumber: number; messages: string[] }> = [];
   const rowWarnings: Array<{ rowNumber: number; messages: string[] }> = [];
@@ -753,7 +755,10 @@ function ImportCard({
     if (kind === "users") {
       return buildUserValidation(state, references, resolutionGroups, resolutionSelections);
     }
-    return buildSimpleValidation(kind, state, references);
+    if (kind === "categories" || kind === "scopes" || kind === "locations") {
+      return buildSimpleValidation(kind, state, references);
+    }
+    return null;
   }, [kind, references, resolutionGroups, resolutionSelections, state]);
 
   const requiredMappingRows = useMemo(() => {

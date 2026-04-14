@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 4050",
     "build": "prisma generate && next build",
+    "typecheck": "tsc --noEmit",
     "start": "next start -p 4050",
     "lint": "eslint . --ignore-pattern .next --ignore-pattern next-env.d.ts --ignore-pattern scripts/seed.js",
     "db:generate": "prisma generate",

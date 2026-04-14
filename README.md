@@ -165,6 +165,23 @@ docker compose exec it-assets npm run db:deploy
 
 If release notes or future changes require a new seed pass, run `npm run db:seed` again.
 
+## Validation Before Push
+
+The repository includes a lightweight GitHub Actions validation workflow that runs on pull requests and pushes to `main`.
+
+It checks:
+- dependency install with `npm ci`
+- TypeScript validation with `npm run typecheck`
+- a full production build with `npm run build`
+
+If you want to run the same checks locally before pushing:
+
+```bash
+npm ci
+npm run typecheck
+npm run build
+```
+
 ## Optional `.env.example`
 
 The repository includes [.env.example](./.env.example) as an optional reference for local development and custom deployments.

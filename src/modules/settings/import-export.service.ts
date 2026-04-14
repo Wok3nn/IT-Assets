@@ -666,6 +666,10 @@ export function buildExportFileResponse(payload: ExportPayload) {
   }
 
   if (payload.format === "xlsx") {
+    if (!payload.tabular) {
+      throw new Error("XLSX export requires tabular data.");
+    }
+
     const worksheet = xlsxUtils.aoa_to_sheet([payload.tabular.headers, ...payload.tabular.rows]);
     const workbook = xlsxUtils.book_new();
     xlsxUtils.book_append_sheet(workbook, worksheet, "Export");
@@ -677,8 +681,12 @@ export function buildExportFileResponse(payload: ExportPayload) {
     };
   }
 
+  if (!payload.tabular) {
+    throw new Error("CSV export requires tabular data.");
+  }
+
   return {
-    body: stringifyCsv(payload.tabular?.headers ?? [], payload.tabular?.rows ?? []),
+    body: stringifyCsv(payload.tabular.headers, payload.tabular.rows),
     contentType: "text/csv; charset=utf-8",
     fileName: `${payload.fileName}.csv`,
   };
