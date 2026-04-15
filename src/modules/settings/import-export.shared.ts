@@ -105,9 +105,12 @@ export const USER_IMPORT_FIELDS: ImportFieldDefinition[] = [
 ];
 
 export const CATEGORY_IMPORT_FIELDS: ImportFieldDefinition[] = [
-  { id: "path", label: "Category Path", required: true, aliases: ["category path", "path", "category", "full path"] },
-  { id: "name", label: "Category Name", required: false, aliases: ["name", "category name"] },
-  { id: "parentPath", label: "Parent Category", required: false, aliases: ["parent category", "parent path", "parent"] },
+  { id: "level1", label: "Level 1", required: true, aliases: ["level 1", "category level 1", "hierarchy level 1"] },
+  { id: "level2", label: "Level 2", required: false, aliases: ["level 2", "category level 2", "hierarchy level 2"] },
+  { id: "level3", label: "Level 3", required: false, aliases: ["level 3", "category level 3", "hierarchy level 3"] },
+  { id: "level4", label: "Level 4", required: false, aliases: ["level 4", "category level 4", "hierarchy level 4"] },
+  { id: "level5", label: "Level 5", required: false, aliases: ["level 5", "category level 5", "hierarchy level 5"] },
+  { id: "slug", label: "Category Slug", required: false, aliases: ["category slug", "slug"] },
   { id: "colorHex", label: "Color Hex", required: false, aliases: ["color", "hex", "color hex"] },
   { id: "colorMode", label: "Color Mode", required: false, aliases: ["color mode", "appearance"] },
 ];

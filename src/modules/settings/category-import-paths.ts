@@ -1,5 +1,9 @@
 import type { ImportResolutionAction, ImportResolutionEntry } from "@/modules/settings/import-export.shared";
 
+export const CATEGORY_HIERARCHY_MAX_DEPTH = 5;
+export const CATEGORY_LEVEL_LABELS = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"] as const;
+export const CATEGORY_LEVEL_FIELD_IDS = ["level1", "level2", "level3", "level4", "level5"] as const;
+
 export type CategoryImportReference = {
   id: string;
   name: string;
@@ -37,13 +41,49 @@ export function normalizeCategoryPathSegment(value: string) {
 
 export function splitCategoryPath(value: string) {
   return value
-    .split(">")
+    .split(/[>\/\\]+/g)
     .map((segment) => normalizeCategoryPathSegment(segment))
     .filter(Boolean);
 }
 
 export function buildCategoryPathLabel(segments: string[]) {
   return segments.map((segment) => normalizeCategoryPathSegment(segment)).filter(Boolean).join(" > ");
+}
+
+export function buildCategoryLevelColumns(segments: string[]) {
+  const normalizedSegments = segments.map((segment) => normalizeCategoryPathSegment(segment)).filter(Boolean);
+  if (normalizedSegments.length > CATEGORY_HIERARCHY_MAX_DEPTH) {
+    throw new Error(`Categories currently support a maximum of ${CATEGORY_HIERARCHY_MAX_DEPTH} levels.`);
+  }
+
+  return CATEGORY_LEVEL_LABELS.map((_, index) => normalizedSegments[index] ?? "");
+}
+
+export function parseCategoryHierarchyValues(values: Array<string | null | undefined>) {
+  const segments: string[] = [];
+  let firstBlankLevelIndex: number | null = null;
+
+  for (const [index, value] of values.slice(0, CATEGORY_HIERARCHY_MAX_DEPTH).entries()) {
+    const normalized = normalizeCategoryPathSegment(value ?? "");
+
+    if (!normalized) {
+      if (firstBlankLevelIndex === null) {
+        firstBlankLevelIndex = index;
+      }
+      continue;
+    }
+
+    if (firstBlankLevelIndex !== null) {
+      return {
+        segments: [] as string[],
+        error: `Category hierarchy is invalid: ${CATEGORY_LEVEL_LABELS[index]} is filled while ${CATEGORY_LEVEL_LABELS[firstBlankLevelIndex]} is blank.`,
+      };
+    }
+
+    segments.push(normalized);
+  }
+
+  return { segments, error: null as string | null };
 }
 
 export function normalizeCategoryPath(value: string) {

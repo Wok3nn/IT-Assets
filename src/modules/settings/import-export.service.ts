@@ -13,9 +13,16 @@ import {
   labelTemplateUnitSchema,
 } from "@/modules/labels/label-template.shared";
 import {
+  buildCategoryLevelColumns,
   buildCategoryDecisionMap,
+  buildCategoryPathLabel,
+  CATEGORY_LEVEL_FIELD_IDS,
+  CATEGORY_LEVEL_LABELS,
   buildCategoryReferenceLabel,
+  normalizeCategoryPath,
+  parseCategoryHierarchyValues,
   resolveCategoryPathForImport,
+  splitCategoryPath,
 } from "@/modules/settings/category-import-paths";
 import { ensureDefaultAssetStatuses, upsertAssetStatus } from "@/modules/settings/settings.service";
 import {
@@ -178,18 +185,19 @@ async function ensureCategoryPath(
   references: Array<{ id: string; label: string; name: string; parentId: string | null }>,
   leafAppearance?: { colorHex?: string; colorMode?: "border" | "fill" | "none" },
 ) {
-  const segments = splitPathSegments(pathLabel);
+  const segments = splitCategoryPath(pathLabel);
   if (segments.length === 0) {
     throw new Error("Category Path is required.");
   }
 
   let parentId: string | null = null;
-  let currentPath = "";
+  let currentPathSegments: string[] = [];
 
   for (const [index, segment] of segments.entries()) {
-    currentPath = currentPath ? `${currentPath} / ${segment}` : segment;
-    const normalizedPath = normalizeValue(currentPath);
-    let existing = references.find((item) => normalizeValue(item.label) === normalizedPath) ?? null;
+    currentPathSegments = [...currentPathSegments, segment];
+    const currentPath = buildCategoryPathLabel(currentPathSegments);
+    const normalizedPath = normalizeCategoryPath(currentPath);
+    let existing = references.find((item) => normalizeCategoryPath(item.label) === normalizedPath) ?? null;
 
     if (!existing) {
       const created = await createCategory({
@@ -211,7 +219,8 @@ async function ensureCategoryPath(
     parentId = existing.id;
   }
 
-  return references.find((item) => normalizeValue(item.label) === normalizeValue(currentPath)) ?? null;
+  const finalPath = buildCategoryPathLabel(currentPathSegments);
+  return references.find((item) => normalizeCategoryPath(item.label) === normalizeCategoryPath(finalPath)) ?? null;
 }
 
 async function ensureLocationPath(
@@ -517,27 +526,32 @@ async function buildCategoriesExportData(): Promise<TabularData> {
       id: true,
       name: true,
       parentId: true,
+      slug: true,
       colorHex: true,
       colorMode: true,
     },
     orderBy: [{ name: "asc" }],
   });
 
-  const headers = ["Category Path", "Category Name", "Parent Category", "Color Hex", "Color Mode"];
+  const headers = [...CATEGORY_LEVEL_LABELS, "Category Slug", "Color Hex", "Color Mode"];
   const rows = categories
     .map((category) => {
       const path = buildCategoryReferenceLabel(categories, category.id) ?? category.name;
-      const parentPath = category.parentId ? buildCategoryReferenceLabel(categories, category.parentId) ?? "" : "";
+      const segments = splitCategoryPath(path);
 
       return [
-        path,
-        category.name,
-        parentPath,
+        ...buildCategoryLevelColumns(segments),
+        category.slug,
         category.colorHex ?? "",
         category.colorMode ?? "none",
       ];
     })
-    .sort((left, right) => left[0].localeCompare(right[0]));
+    .sort((left, right) => {
+      const leftPath = buildCategoryPathLabel(left.slice(0, CATEGORY_LEVEL_LABELS.length).filter(Boolean));
+      const rightPath = buildCategoryPathLabel(right.slice(0, CATEGORY_LEVEL_LABELS.length).filter(Boolean));
+      const depthDifference = splitCategoryPath(leftPath).length - splitCategoryPath(rightPath).length;
+      return depthDifference !== 0 ? depthDifference : leftPath.localeCompare(rightPath);
+    });
 
   return { headers, rows };
 }
@@ -1047,8 +1061,8 @@ export async function importCategoriesFromRows(input: {
   validateUniqueMappings(input.columns);
 
   const mappedFieldIds = new Set(input.columns.filter((column) => column.fieldId).map((column) => column.fieldId as string));
-  if (!mappedFieldIds.has("path")) {
-    throw new Error("Missing required category import mapping: path");
+  if (!mappedFieldIds.has("level1")) {
+    throw new Error("Missing required category import mapping: level1");
   }
 
   const categories = await db.category.findMany({
@@ -1067,7 +1081,7 @@ export async function importCategoriesFromRows(input: {
     parentId: category.parentId,
   }));
 
-  const existingPaths = new Set(references.map((item) => normalizeValue(item.label)));
+  const existingPaths = new Set(references.map((item) => normalizeCategoryPath(item.label)));
   const seenPaths = new Set<string>();
   const nonBlankRows = input.rows.filter((row) => !isBlankRow(row));
   const summary: ImportSummary = {
@@ -1083,14 +1097,18 @@ export async function importCategoriesFromRows(input: {
   for (const [index, row] of nonBlankRows.entries()) {
     const rowNumber = index + 2;
     const mapped = getMappedValues(input.columns, row);
-    const path = buildPathLabelFromMappedValues(mapped.get("path") ?? "", mapped.get("name"), mapped.get("parentPath"));
-    const normalizedPath = normalizeValue(path);
+    const hierarchy = parseCategoryHierarchyValues(CATEGORY_LEVEL_FIELD_IDS.map((fieldId) => mapped.get(fieldId) ?? ""));
+    const path = buildCategoryPathLabel(hierarchy.segments);
+    const normalizedPath = normalizeCategoryPath(path);
     const colorHex = normalizeColorHex(mapped.get("colorHex") ?? "");
     const colorMode = normalizeColorMode(mapped.get("colorMode") ?? "");
     const messages: string[] = [];
 
-    if (!path) {
-      messages.push("Category Path is required.");
+    if (hierarchy.error) {
+      messages.push(hierarchy.error);
+    }
+    if (!hierarchy.error && hierarchy.segments.length === 0) {
+      messages.push(`${CATEGORY_LEVEL_LABELS[0]} is required.`);
     }
     if ((mapped.get("colorHex") ?? "").trim() && colorHex === null) {
       messages.push("Color Hex must be a valid #RRGGBB value.");

@@ -42,7 +42,12 @@ import {
 import { cardClass } from "@/modules/settings/components/import-export.styles";
 import {
   buildCategoryDecisionMapFromSelections,
+  buildCategoryPathLabel,
+  CATEGORY_LEVEL_FIELD_IDS,
+  CATEGORY_LEVEL_LABELS,
   collectMissingCategoryPaths,
+  normalizeCategoryPath,
+  parseCategoryHierarchyValues,
   previewResolvedCategoryPath,
   sortCategoryPathLabels,
 } from "@/modules/settings/category-import-paths";
@@ -593,13 +598,17 @@ function buildSimpleValidation(kind: SimpleImportKind, state: ParsedImportState,
     if (!fieldIds.includes("name")) {
       globalErrors.push("Department Name must be mapped before import can continue.");
     }
+  } else if (kind === "categories") {
+    if (!fieldIds.includes("level1")) {
+      globalErrors.push(`${CATEGORY_LEVEL_LABELS[0]} must be mapped before import can continue.`);
+    }
   } else if (!fieldIds.includes("path")) {
-    globalErrors.push(`${kind === "categories" ? "Category" : "Location"} Path must be mapped before import can continue.`);
+    globalErrors.push("Location Path must be mapped before import can continue.");
   }
 
   const existingKeys = new Set(
     kind === "categories"
-      ? references.categories.existingPaths.map((value) => normalizeValue(value))
+      ? references.categories.existingPaths.map((value) => normalizeCategoryPath(value))
       : kind === "locations"
         ? references.locations.existingPaths.map((value) => normalizeValue(value))
         : references.scopes.existingNames.map((value) => normalizeValue(value)),
@@ -613,16 +622,29 @@ function buildSimpleValidation(kind: SimpleImportKind, state: ParsedImportState,
     const mapped = getMappedValues(state.columns, row);
     const errors: string[] = [];
     const warnings: string[] = [];
+    const categoryHierarchy = kind === "categories"
+      ? parseCategoryHierarchyValues(CATEGORY_LEVEL_FIELD_IDS.map((fieldId) => mapped.get(fieldId) ?? ""))
+      : null;
 
     const dedupeKey = kind === "scopes"
       ? (mapped.get("name") ?? "").trim()
-      : buildPathLabel(mapped.get("path") ?? "", mapped.get("name"), mapped.get("parentPath"));
-    const normalizedKey = normalizeValue(dedupeKey);
+      : kind === "categories"
+        ? buildCategoryPathLabel(categoryHierarchy?.segments ?? [])
+        : buildPathLabel(mapped.get("path") ?? "", mapped.get("name"), mapped.get("parentPath"));
+    const normalizedKey = kind === "categories" ? normalizeCategoryPath(dedupeKey) : normalizeValue(dedupeKey);
     const colorHex = normalizeColorHex(mapped.get("colorHex") ?? "");
     const colorMode = normalizeColorMode(mapped.get("colorMode") ?? "");
 
+    if (kind === "categories" && categoryHierarchy?.error) {
+      errors.push(categoryHierarchy.error);
+    }
+
     if (!dedupeKey) {
-      errors.push(kind === "scopes" ? "Department Name is required." : `${kind === "categories" ? "Category" : "Location"} Path is required.`);
+      if (kind === "categories" && !categoryHierarchy?.error) {
+        errors.push(`${CATEGORY_LEVEL_LABELS[0]} is required.`);
+      } else if (kind !== "categories") {
+        errors.push(kind === "scopes" ? "Department Name is required." : "Location Path is required.");
+      }
     }
 
     if ((mapped.get("colorHex") ?? "").trim() && colorHex === null) {
@@ -1335,13 +1357,14 @@ export function ImportExportPanel({ references }: ImportExportPanelProps) {
         title="Users"
       />
       <ImportCard
-        description="Export category structure or import category paths with duplicate-safe skip behavior."
+        description="Export category structure or import category rows through explicit Level 1-5 hierarchy columns with duplicate-safe skip behavior."
         exportHref="/api/settings/export/categories"
         fields={CATEGORY_IMPORT_FIELDS}
-        formatGuidance="CSV/XLSX are best for editing hierarchical paths in a spreadsheet. JSON is available for structured exchange."
+        formatGuidance="CSV/XLSX use explicit Level 1-5 columns for deterministic spreadsheet round-trips. JSON remains available for structured exchange."
+        importNote="Populate category hierarchy left to right across Level 1 through Level 5. Trailing blanks are ignored, but hierarchy gaps such as Level 1 plus Level 3 fail validation."
         kind="categories"
         references={references}
-        skipNote="Existing category paths and repeated paths in the same file are skipped."
+        skipNote="Existing full category paths, repeated full paths in the same file, and invalid hierarchy-gap rows are skipped."
         title="Categories"
       />
       <ImportCard
