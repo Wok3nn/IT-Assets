@@ -5,10 +5,12 @@ import type { EntraAuthenticationConfig } from "@/modules/settings/authenticatio
 export const ENTRA_AUTH_STATE_COOKIE_NAME = "it_asset_tracker_entra_state";
 export const ENTRA_AUTH_NONCE_COOKIE_NAME = "it_asset_tracker_entra_nonce";
 
-const ENTRA_SCOPES = ["openid", "profile", "email"];
+const ENTRA_SCOPES = ["openid", "profile", "email", "User.Read"];
 const ENTRA_AUTHORITY_BASE_URL = "https://login.microsoftonline.com";
+const MICROSOFT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 
 type EntraTokenResponse = {
+  access_token?: string;
   id_token?: string;
   error?: string;
   error_description?: string;
@@ -34,6 +36,15 @@ type EntraJsonWebKey = NodeJsonWebKey & {
 
 type JsonWebKeySet = {
   keys?: EntraJsonWebKey[];
+};
+
+type MicrosoftGraphCollectionResponse<TValue> = {
+  "@odata.nextLink"?: string;
+  value?: TValue[];
+};
+
+type MicrosoftGraphGroupMembership = {
+  id?: string;
 };
 
 function base64UrlDecode(input: string) {
@@ -113,7 +124,10 @@ export async function exchangeEntraAuthorizationCode(input: {
     throw new Error(payload.error_description || payload.error || "Microsoft Entra token exchange failed.");
   }
 
-  return payload.id_token;
+  return {
+    accessToken: payload.access_token ?? "",
+    idToken: payload.id_token,
+  };
 }
 
 export async function verifyEntraIdToken(input: {
@@ -178,9 +192,58 @@ export async function verifyEntraIdToken(input: {
     throw new Error("Microsoft Entra did not return an email or username claim for this account.");
   }
 
+  const groupIds = Array.isArray(claims.groups)
+    ? claims.groups.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+
+  console.info("[entra-auth] token groups", {
+    email,
+    groupCount: groupIds.length,
+    hasgroups: claims.hasgroups === true,
+  });
+
   return {
     email,
-    groupIds: Array.isArray(claims.groups) ? claims.groups.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : [],
+    groupIds,
+    hasGroupsOverage: claims.hasgroups === true,
     name: claims.name ?? email,
   };
+}
+
+export async function listEntraUserTransitiveGroupIds(accessToken: string) {
+  if (!accessToken.trim()) {
+    throw new Error("Microsoft Entra did not return a Graph access token for group resolution.");
+  }
+
+  const groupIds = new Set<string>();
+  let nextUrl = `${MICROSOFT_GRAPH_BASE_URL}/me/transitiveMemberOf/microsoft.graph.group?$select=id`;
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const payload = await response.json() as MicrosoftGraphCollectionResponse<MicrosoftGraphGroupMembership> & {
+      error?: { message?: string };
+    };
+
+    if (!response.ok) {
+      throw new Error(payload.error?.message || "Microsoft Graph group lookup failed.");
+    }
+
+    for (const entry of payload.value ?? []) {
+      if (typeof entry.id === "string" && entry.id.trim()) {
+        groupIds.add(entry.id.trim());
+      }
+    }
+
+    nextUrl = payload["@odata.nextLink"] ?? "";
+  }
+
+  console.info("[entra-auth] graph groups", {
+    groupCount: groupIds.size,
+  });
+
+  return Array.from(groupIds);
 }

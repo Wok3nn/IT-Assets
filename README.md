@@ -131,6 +131,18 @@ https://assets.example.com/api/auth/entra/callback
 
 Use the same public base URL as `APP_URL`. Do not register an internal container hostname.
 
+For Entra group-to-role mapping to work reliably, especially when the ID token does not contain the `groups` claim because of group overage, the Entra app registration also needs Microsoft Graph delegated permission for signed-in user group lookup:
+
+- `User.Read`
+
+After adding the permission, grant tenant/admin consent if your Entra tenant requires it for this app. The app uses the signed-in user token to call:
+
+```text
+GET https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$select=id
+```
+
+Group mappings continue to match Entra group Object IDs from Settings > Authentication. If no mapped group is found, the app falls back to the user’s local stored role.
+
 ## Where Data Is Stored
 
 In the Docker flow above, persistent data is stored in the mounted host directory:

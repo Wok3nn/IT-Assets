@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   getEntraAuthenticationConfig,
+  getAuthenticationSettings,
   isEntraAuthenticationConfigured,
   resolveEntraMappedRoleKeys,
 } from "@/modules/settings/authentication-settings.service";
@@ -11,6 +12,7 @@ import {
   ENTRA_AUTH_NONCE_COOKIE_NAME,
   ENTRA_AUTH_STATE_COOKIE_NAME,
   exchangeEntraAuthorizationCode,
+  listEntraUserTransitiveGroupIds,
   verifyEntraIdToken,
 } from "@/services/entra-auth";
 import {
@@ -80,6 +82,10 @@ function parseStateCookie(value: string | undefined) {
   }
 }
 
+function normalizeGroupId(groupId: string) {
+  return groupId.trim().toLowerCase();
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const error = url.searchParams.get("error_description") || url.searchParams.get("error");
@@ -114,7 +120,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const idToken = await exchangeEntraAuthorizationCode({
+    const { accessToken, idToken } = await exchangeEntraAuthorizationCode({
       code,
       codeVerifier: stateCookie.codeVerifier,
       config,
@@ -131,7 +137,26 @@ export async function GET(request: Request) {
       return redirectToLogin(request, "no-matching-user");
     }
 
-    const effectiveRoleKeys = await resolveEntraMappedRoleKeys(identity.groupIds);
+    const shouldUseGraphFallback = identity.groupIds.length === 0 || identity.hasGroupsOverage;
+    const groupIds = shouldUseGraphFallback
+      ? await listEntraUserTransitiveGroupIds(accessToken)
+      : identity.groupIds;
+    const effectiveRoleKeys = await resolveEntraMappedRoleKeys(groupIds);
+    const authenticationSettings = await getAuthenticationSettings();
+    const normalizedGroupIds = new Set(groupIds.map(normalizeGroupId).filter(Boolean));
+    const matchedMappingGroups = authenticationSettings.groupMappings
+      .filter((mapping) => normalizedGroupIds.has(normalizeGroupId(mapping.groupId)))
+      .map((mapping) => ({
+        groupId: mapping.groupId,
+        roleKey: mapping.roleKey,
+      }));
+
+    console.info("[entra-auth] resolved effective roles", {
+      email: identity.email,
+      graphFallbackUsed: shouldUseGraphFallback,
+      matchedMappingGroups,
+      resolvedRoleKeys: effectiveRoleKeys,
+    });
 
     await db.user.update({
       where: {
