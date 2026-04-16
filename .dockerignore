@@ -1,0 +1,22 @@
+.git
+.github
+.next
+coverage
+data
+dist
+docker/docker-compose.example.yml
+docs
+IT-Assets Logo
+node_modules
+Screenshots
+screenshots
+.env
+.env.local
+.codex-chrome-profile
+.codex-dev*
+.codex-next-dev*
+.codex-start-*
+.tmp-next-*
+*.log
+progress.md
+tsconfig.tsbuildinfo
