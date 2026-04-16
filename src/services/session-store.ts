@@ -1,5 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
+import { Prisma } from "@prisma/client";
+
 import { getSessionTimeoutMinutes } from "@/modules/settings/settings.service";
 import { db } from "@/services/database";
 
@@ -30,6 +32,10 @@ function mapSession(session: {
   } satisfies StoredSession;
 }
 
+function isRecordMissingError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
+}
+
 export async function createSession(userId: string) {
   const timeoutMinutes = await getSessionTimeoutMinutes();
   const expiresAt = new Date(Date.now() + timeoutMinutes * MINUTE_MS);
@@ -58,7 +64,7 @@ export async function findSessionByToken(token: string) {
   }
 
   if (session.expiresAt.getTime() <= Date.now()) {
-    await db.session.delete({
+    await db.session.deleteMany({
       where: {
         id: session.id,
       },
@@ -68,16 +74,24 @@ export async function findSessionByToken(token: string) {
   }
 
   const timeoutMinutes = await getSessionTimeoutMinutes();
-  const refreshedSession = await db.session.update({
-    where: {
-      id: session.id,
-    },
-    data: {
-      expiresAt: new Date(Date.now() + timeoutMinutes * MINUTE_MS),
-    },
-  });
+  try {
+    const refreshedSession = await db.session.update({
+      where: {
+        id: session.id,
+      },
+      data: {
+        expiresAt: new Date(Date.now() + timeoutMinutes * MINUTE_MS),
+      },
+    });
 
-  return mapSession(refreshedSession);
+    return mapSession(refreshedSession);
+  } catch (error) {
+    if (isRecordMissingError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 export async function deleteSessionByToken(token: string) {

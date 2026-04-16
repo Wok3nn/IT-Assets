@@ -1,11 +1,12 @@
 import "server-only";
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 
-import { findSessionByToken, SESSION_COOKIE_NAME } from "@/services/session-store";
+import { deleteSessionByToken, findSessionByToken, SESSION_COOKIE_NAME } from "@/services/session-store";
 import { db } from "@/services/database";
 
-export async function getCurrentSession() {
+export const getCurrentSession = cache(async function getCurrentSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -14,23 +15,30 @@ export async function getCurrentSession() {
   }
 
   return findSessionByToken(token);
-}
+});
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const session = await getCurrentSession();
 
   if (!session) {
     return null;
   }
 
-  return db.user.findUnique({
+  const user = await db.user.findUnique({
     where: {
       id: session.userId,
     },
   });
-}
 
-export async function getCurrentUserRoleKeys() {
+  if (!user) {
+    await deleteSessionByToken(session.token);
+    return null;
+  }
+
+  return user;
+});
+
+export const getCurrentUserRoleKeys = cache(async function getCurrentUserRoleKeys() {
   const session = await getCurrentSession();
 
   if (!session) {
@@ -43,4 +51,4 @@ export async function getCurrentUserRoleKeys() {
   });
 
   return userRoles.map((userRole) => userRole.role.key);
-}
+});
