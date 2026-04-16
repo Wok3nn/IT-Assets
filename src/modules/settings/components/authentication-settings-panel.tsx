@@ -192,7 +192,7 @@ export function AuthenticationSettingsPanel({
               </span>
             </label>
             <div className={noteClassName}>
-              Initial setup and local admin login continue to use the existing hashed-password flow. This prevents accidental lockout while provider configuration is staged.
+              Initial setup and local admin login continue to use the existing hashed-password flow. Local password requirements still apply only to local sign-in users, which keeps the admin recovery path intact while Entra access is configured.
             </div>
           </div>
         </PanelCard>
@@ -265,6 +265,10 @@ export function AuthenticationSettingsPanel({
               </label>
             </div>
 
+            <div className={noteClassName}>
+              Users with login enabled can sign in through Entra without a local password when SSO is enabled. Local email/password sign-in still requires a real local password.
+            </div>
+
             <div className="grid gap-3 md:grid-cols-2">
               <FieldLabel>
                 <FieldLabelText>Tenant ID</FieldLabelText>
@@ -301,7 +305,7 @@ export function AuthenticationSettingsPanel({
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Group mapping</p>
             <h2 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-100">Entra groups to app roles</h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Prepare one optional Entra group mapping per app role. Enforcement can use these saved rows when Entra sign-in is connected later.
+              Prepare one optional Entra group mapping per app role. On Entra sign-in, a matching mapped group becomes the user’s effective app role for that session. If nothing matches, the stored local role remains the fallback.
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-[#34393c] dark:text-slate-300">{roles.length} roles</span>

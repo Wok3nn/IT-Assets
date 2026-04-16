@@ -41,6 +41,10 @@ export type AuthenticationSettings = {
   groupMappings: AuthenticationGroupRoleMapping[];
 };
 
+function normalizeGroupId(groupId: string) {
+  return groupId.trim().toLowerCase();
+}
+
 export type EntraAuthenticationConfig = {
   enabled: boolean;
   tenantId: string;
@@ -133,6 +137,21 @@ export async function getAuthenticationSettings() {
     entraRedirectUri: settingsByKey.get(AUTH_ENTRA_REDIRECT_URI_KEY) ?? "",
     groupMappings: parseGroupMappings(settingsByKey.get(AUTH_ENTRA_GROUP_MAPPINGS_KEY)),
   } satisfies AuthenticationSettings;
+}
+
+export async function resolveEntraMappedRoleKeys(groupIds: string[]) {
+  if (groupIds.length === 0) {
+    return [];
+  }
+
+  const settings = await getAuthenticationSettings();
+  const normalizedGroupIds = new Set(groupIds.map(normalizeGroupId).filter(Boolean));
+  const mappedRoleKeys = settings.groupMappings
+    .filter((mapping) => normalizedGroupIds.has(normalizeGroupId(mapping.groupId)))
+    .map((mapping) => mapping.roleKey.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(mappedRoleKeys));
 }
 
 export async function updateAuthenticationSettings(input: AuthenticationSettings) {

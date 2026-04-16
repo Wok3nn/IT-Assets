@@ -3,7 +3,13 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 
-import { deleteSessionByToken, findSessionByToken, SESSION_COOKIE_NAME } from "@/services/session-store";
+import {
+  deleteSessionByToken,
+  findSessionByToken,
+  readEffectiveRoleCookieValue,
+  SESSION_COOKIE_NAME,
+  SESSION_EFFECTIVE_ROLES_COOKIE_NAME,
+} from "@/services/session-store";
 import { db } from "@/services/database";
 
 export const getCurrentSession = cache(async function getCurrentSession() {
@@ -43,6 +49,16 @@ export const getCurrentUserRoleKeys = cache(async function getCurrentUserRoleKey
 
   if (!session) {
     return [];
+  }
+
+  const cookieStore = await cookies();
+  const effectiveRoleKeys = readEffectiveRoleCookieValue(
+    session.token,
+    cookieStore.get(SESSION_EFFECTIVE_ROLES_COOKIE_NAME)?.value,
+  );
+
+  if (effectiveRoleKeys.length > 0) {
+    return effectiveRoleKeys;
   }
 
   const userRoles = await db.userRole.findMany({

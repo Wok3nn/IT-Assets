@@ -18,6 +18,8 @@ type EntraIdTokenClaims = {
   aud?: string;
   email?: string;
   exp?: number;
+  groups?: string[];
+  hasgroups?: boolean;
   iss?: string;
   name?: string;
   nonce?: string;
@@ -178,6 +180,7 @@ export async function verifyEntraIdToken(input: {
 
   return {
     email,
+    groupIds: Array.isArray(claims.groups) ? claims.groups.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : [],
     name: claims.name ?? email,
   };
 }

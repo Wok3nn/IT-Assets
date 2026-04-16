@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { Prisma } from "@prisma/client";
 
@@ -6,6 +6,7 @@ import { getSessionTimeoutMinutes } from "@/modules/settings/settings.service";
 import { db } from "@/services/database";
 
 export const SESSION_COOKIE_NAME = "it_asset_tracker_session";
+export const SESSION_EFFECTIVE_ROLES_COOKIE_NAME = "it_asset_tracker_session_roles";
 const MINUTE_MS = 60 * 1000;
 
 export type StoredSession = {
@@ -34,6 +35,68 @@ function mapSession(session: {
 
 function isRecordMissingError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
+}
+
+function buildEffectiveRoleCookieSignature(payload: string) {
+  return createHmac("sha256", process.env.SESSION_SECRET ?? "change-me").update(payload).digest("base64url");
+}
+
+export function createEffectiveRoleCookieValue(sessionToken: string, roleKeys: string[]) {
+  const normalizedRoleKeys = Array.from(new Set(roleKeys.map((roleKey) => roleKey.trim()).filter(Boolean)));
+
+  if (normalizedRoleKeys.length === 0) {
+    return null;
+  }
+
+  const payload = Buffer.from(
+    JSON.stringify({
+      roleKeys: normalizedRoleKeys,
+      token: sessionToken,
+    }),
+    "utf8",
+  ).toString("base64url");
+  const signature = buildEffectiveRoleCookieSignature(payload);
+
+  return `${payload}.${signature}`;
+}
+
+export function readEffectiveRoleCookieValue(sessionToken: string, cookieValue: string | undefined) {
+  if (!cookieValue) {
+    return [];
+  }
+
+  const separatorIndex = cookieValue.lastIndexOf(".");
+
+  if (separatorIndex <= 0) {
+    return [];
+  }
+
+  const payload = cookieValue.slice(0, separatorIndex);
+  const signature = cookieValue.slice(separatorIndex + 1);
+  const expectedSignature = buildEffectiveRoleCookieSignature(payload);
+
+  if (signature.length !== expectedSignature.length) {
+    return [];
+  }
+
+  if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      roleKeys?: unknown;
+      token?: unknown;
+    };
+
+    if (parsed.token !== sessionToken || !Array.isArray(parsed.roleKeys)) {
+      return [];
+    }
+
+    return Array.from(new Set(parsed.roleKeys.filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
+  } catch {
+    return [];
+  }
 }
 
 export async function createSession(userId: string) {

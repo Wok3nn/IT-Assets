@@ -39,7 +39,7 @@ function getEntraErrorMessage(error?: string) {
   }
 
   if (error === "no-matching-user") {
-    return "Microsoft Entra authenticated you, but no active local user with login access matched that account.";
+    return "Microsoft Entra authenticated you, but no active local user with login access matched that email. Check the user record and Entra access settings.";
   }
 
   if (error === "invalid-state" || error === "missing-code") {
@@ -135,6 +135,11 @@ export function LoginPanel({ branding, entraError, entraSignInEnabled }: LoginPa
           ) : null}
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+            {entraSignInEnabled ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Use local sign-in only for accounts with a local password. Entra users should use Microsoft Entra above.
+              </p>
+            ) : null}
             <TextField
               placeholder="Admin email"
               type="email"

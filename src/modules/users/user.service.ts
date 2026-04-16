@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
-
 import { z } from "zod";
 
+import { getAuthenticationSettings } from "@/modules/settings/authentication-settings.service";
 import { db } from "@/services/database";
-import { hashPassword } from "@/services/password";
+import { buildDisabledLocalPasswordHash, hashPassword, hasLocalPasswordConfigured } from "@/services/password";
 
 const baseRoles = [
   { key: "SUPER_ADMIN", name: "Super Admin" },
@@ -23,15 +22,6 @@ const createUserSchema = z
     roleKey: z.string().trim().min(1),
     scopeIds: z.array(z.string().trim().min(1)).default([]),
     isActive: z.boolean().default(true),
-  })
-  .superRefine((input, ctx) => {
-    if (input.allowLogin && (!input.password || input.password.trim().length < 8)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["password"],
-        message: "A temporary password with at least 8 characters is required when login is enabled.",
-      });
-    }
   });
 
 const updateUserSchema = z.object({
@@ -67,12 +57,28 @@ function sanitizePassword(password?: string) {
   return trimmed ? trimmed : null;
 }
 
-function buildPasswordHash(allowLogin: boolean, password?: string | null) {
-  if (allowLogin && password) {
-    return hashPassword(password);
+function isValidLocalPassword(password?: string | null) {
+  return Boolean(password && password.trim().length >= 8);
+}
+
+function canUseEntraOnlyLogin() {
+  return getAuthenticationSettings().then((settings) => settings.entraEnabled && settings.entraSsoEnabled);
+}
+
+function buildPasswordHash(options: { allowLogin: boolean; password?: string | null; allowEntraOnlyLogin?: boolean }) {
+  if (options.allowLogin && options.password) {
+    return hashPassword(options.password);
   }
 
-  return hashPassword(randomUUID());
+  if (options.allowLogin && options.allowEntraOnlyLogin) {
+    return buildDisabledLocalPasswordHash();
+  }
+
+  if (!options.allowLogin) {
+    return buildDisabledLocalPasswordHash();
+  }
+
+  return buildDisabledLocalPasswordHash();
 }
 
 async function getRoleIdOrThrow(roleKey: string) {
@@ -255,13 +261,29 @@ export async function createUser(input: {
     scopeIds: Array.from(new Set(input.scopeIds ?? [])).filter(Boolean),
   });
 
-  const [roleId, scopeIds] = await Promise.all([getRoleIdOrThrow(parsed.roleKey), validateScopeIds(parsed.scopeIds)]);
+  const [roleId, scopeIds, allowEntraOnlyLogin] = await Promise.all([
+    getRoleIdOrThrow(parsed.roleKey),
+    validateScopeIds(parsed.scopeIds),
+    canUseEntraOnlyLogin(),
+  ]);
+
+  if (parsed.password && !isValidLocalPassword(parsed.password)) {
+    throw new Error("A temporary password with at least 8 characters is required for local login.");
+  }
+
+  if (parsed.allowLogin && !isValidLocalPassword(parsed.password) && !allowEntraOnlyLogin) {
+    throw new Error("A temporary password with at least 8 characters is required when login is enabled.");
+  }
 
   return db.user.create({
     data: {
       name: parsed.name,
       email: parsed.email,
-      passwordHash: buildPasswordHash(parsed.allowLogin, parsed.password),
+      passwordHash: buildPasswordHash({
+        allowLogin: parsed.allowLogin,
+        password: parsed.password,
+        allowEntraOnlyLogin,
+      }),
       canLogin: parsed.allowLogin,
       isActive: parsed.isActive,
       userRoles: {
@@ -311,6 +333,7 @@ export async function updateUser(input: {
     select: {
       id: true,
       canLogin: true,
+      passwordHash: true,
     },
   });
 
@@ -318,7 +341,14 @@ export async function updateUser(input: {
     throw new Error("User not found.");
   }
 
-  if (parsed.allowLogin && !existingUser.canLogin && (!parsed.password || parsed.password.length < 8)) {
+  const allowEntraOnlyLogin = await canUseEntraOnlyLogin();
+  const hasExistingLocalPassword = hasLocalPasswordConfigured(existingUser.passwordHash);
+
+  if (parsed.password && !isValidLocalPassword(parsed.password)) {
+    throw new Error("A temporary password with at least 8 characters is required for local login.");
+  }
+
+  if (parsed.allowLogin && !existingUser.canLogin && !isValidLocalPassword(parsed.password) && !allowEntraOnlyLogin) {
     throw new Error("Set a temporary password before enabling login for this user.");
   }
 
@@ -360,9 +390,13 @@ export async function updateUser(input: {
   };
 
   if (!parsed.allowLogin) {
-    nextData.passwordHash = buildPasswordHash(false);
+    nextData.passwordHash = buildPasswordHash({ allowLogin: false });
   } else if (parsed.password) {
-    nextData.passwordHash = buildPasswordHash(true, parsed.password);
+    nextData.passwordHash = buildPasswordHash({ allowLogin: true, password: parsed.password });
+  } else if (!existingUser.canLogin && allowEntraOnlyLogin) {
+    nextData.passwordHash = buildPasswordHash({ allowLogin: true, allowEntraOnlyLogin: true });
+  } else if (existingUser.canLogin && !hasExistingLocalPassword && allowEntraOnlyLogin) {
+    nextData.passwordHash = buildPasswordHash({ allowLogin: true, allowEntraOnlyLogin: true });
   }
 
   return db.user.update({

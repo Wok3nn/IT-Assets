@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { db } from "@/services/database";
 import { appConfig } from "@/services/config";
-import { createSession, SESSION_COOKIE_NAME } from "@/services/session-store";
+import { hasLocalPasswordConfigured } from "@/services/password";
+import { createSession, SESSION_COOKIE_NAME, SESSION_EFFECTIVE_ROLES_COOKIE_NAME } from "@/services/session-store";
 import { verifyPassword } from "@/services/password";
 import { readSetupState } from "@/services/setup-state";
 import { findUserByEmail } from "@/services/user-store";
@@ -41,7 +42,13 @@ export async function POST(request: Request) {
 
   const user = await findUserByEmail(parsed.data.email.toLowerCase());
 
-  if (!user || !user.isActive || !user.canLogin || !verifyPassword(parsed.data.password, user.passwordHash)) {
+  if (
+    !user ||
+    !user.isActive ||
+    !user.canLogin ||
+    !hasLocalPasswordConfigured(user.passwordHash) ||
+    !verifyPassword(parsed.data.password, user.passwordHash)
+  ) {
     return NextResponse.json(
       {
         ok: false,
@@ -70,6 +77,15 @@ export async function POST(request: Request) {
     sameSite: "lax",
     secure: appConfig.useSecureCookies,
     path: "/",
+  });
+  response.cookies.set({
+    name: SESSION_EFFECTIVE_ROLES_COOKIE_NAME,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: appConfig.useSecureCookies,
+    path: "/",
+    expires: new Date(0),
   });
 
   return response;

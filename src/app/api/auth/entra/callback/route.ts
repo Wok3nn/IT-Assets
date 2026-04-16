@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { getEntraAuthenticationConfig, isEntraAuthenticationConfigured } from "@/modules/settings/authentication-settings.service";
+import {
+  getEntraAuthenticationConfig,
+  isEntraAuthenticationConfigured,
+  resolveEntraMappedRoleKeys,
+} from "@/modules/settings/authentication-settings.service";
 import { appConfig, buildAppUrl } from "@/services/config";
 import { db } from "@/services/database";
 import {
@@ -9,7 +13,12 @@ import {
   exchangeEntraAuthorizationCode,
   verifyEntraIdToken,
 } from "@/services/entra-auth";
-import { createSession, SESSION_COOKIE_NAME } from "@/services/session-store";
+import {
+  createEffectiveRoleCookieValue,
+  createSession,
+  SESSION_COOKIE_NAME,
+  SESSION_EFFECTIVE_ROLES_COOKIE_NAME,
+} from "@/services/session-store";
 import { readSetupState } from "@/services/setup-state";
 import { findUserByEmail } from "@/services/user-store";
 
@@ -122,6 +131,8 @@ export async function GET(request: Request) {
       return redirectToLogin(request, "no-matching-user");
     }
 
+    const effectiveRoleKeys = await resolveEntraMappedRoleKeys(identity.groupIds);
+
     await db.user.update({
       where: {
         id: user.id,
@@ -141,6 +152,15 @@ export async function GET(request: Request) {
       sameSite: "lax",
       secure: appConfig.useSecureCookies,
       value: session.token,
+    });
+    response.cookies.set({
+      httpOnly: true,
+      name: SESSION_EFFECTIVE_ROLES_COOKIE_NAME,
+      path: "/",
+      sameSite: "lax",
+      secure: appConfig.useSecureCookies,
+      value: createEffectiveRoleCookieValue(session.token, effectiveRoleKeys) ?? "",
+      ...(effectiveRoleKeys.length === 0 ? { expires: new Date(0) } : {}),
     });
     clearEntraCookies(response);
 
