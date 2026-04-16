@@ -1,4 +1,6 @@
-export const cardClass = "rounded-3xl border border-[#ece7df] bg-[#f8f9fb] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-[#4b5255] dark:bg-[#2f3437]";
+export const cardClass = "rounded-3xl border border-[#ece7df] bg-[#f8f9fb] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_14px_30px_rgba(15,23,42,0.05)] dark:border-[#4b5255] dark:bg-[#2f3437] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_34px_rgba(0,0,0,0.18)] lg:p-6";
 export const fieldClass = "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-100 dark:focus:border-[#F69629]/70";
 export const exportLinkClass = "inline-flex items-center justify-center rounded-full bg-[#F69629] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#e5871e] hover:shadow-[0_12px_24px_rgba(246,150,41,0.28)] dark:text-[#2F3437] dark:hover:bg-[#ffab4b]";
 export const mappingRowClass = "grid gap-3 rounded-2xl border border-slate-200 bg-[#f8f9fb] p-3 dark:border-[#4b5255] dark:bg-[#2f3437] lg:grid-cols-[minmax(0,1fr)_minmax(220px,320px)_auto]";
+export const mappingListClass = "overflow-hidden rounded-2xl border border-slate-200 bg-[#f8f9fb] dark:border-[#4b5255] dark:bg-[#2f3437]";
+export const mappingListRowClass = "grid gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(240px,320px)_auto] md:items-end";

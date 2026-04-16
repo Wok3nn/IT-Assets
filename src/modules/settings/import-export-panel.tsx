@@ -54,6 +54,8 @@ import {
 
 type ImportExportPanelProps = {
   references: ImportExportReferenceData;
+  visibleKinds?: ImportKind[];
+  showResetShortcut?: boolean;
 };
 
 type SimpleImportKind = "categories" | "scopes" | "locations";
@@ -63,6 +65,10 @@ type LabelImportPreviewState = {
   templateNames: string[];
   payload: unknown;
 };
+
+function isSimpleImportKind(kind: ImportKind) {
+  return kind === "categories" || kind === "scopes" || kind === "locations";
+}
 
 function normalizeValue(value: string) {
   return value.trim().toLowerCase();
@@ -105,6 +111,20 @@ function buildRequiredDefaultColumns(headers: string[], fields: ImportFieldDefin
   }
 
   return columns;
+}
+
+function buildAutoMappedColumns(headers: string[], fields: ImportFieldDefinition[]) {
+  const usedFieldIds = new Set<string>();
+
+  return headers.map((header) => {
+    const suggestedFieldId = suggestFieldId(header, fields);
+    if (!suggestedFieldId || usedFieldIds.has(suggestedFieldId)) {
+      return { header, fieldId: null as string | null };
+    }
+
+    usedFieldIds.add(suggestedFieldId);
+    return { header, fieldId: suggestedFieldId };
+  });
 }
 
 function formatHeaderOptionLabel(header: string, index: number, columns: ImportColumnMapping[]) {
@@ -751,6 +771,7 @@ function ImportCard({
   const [showAddMapping, setShowAddMapping] = useState(false);
   const [selectedHeaderToAdd, setSelectedHeaderToAdd] = useState("");
   const [resolutionSelections, setResolutionSelections] = useState<ResolutionSelections>({});
+  const simpleImportKind = isSimpleImportKind(kind);
 
   const requiredFields = useMemo(() => fields.filter((field) => field.required), [fields]);
   const optionalFields = useMemo(() => fields.filter((field) => !field.required), [fields]);
@@ -869,7 +890,7 @@ function ImportCard({
     setState({
       fileName: file.name,
       rows: parsed.rows,
-      columns: buildRequiredDefaultColumns(parsed.headers, fields),
+      columns: simpleImportKind ? buildAutoMappedColumns(parsed.headers, fields) : buildRequiredDefaultColumns(parsed.headers, fields),
       visibleOptionalColumnIndexes: [],
     });
     setImportSummary(null);
@@ -1131,13 +1152,15 @@ function ImportCard({
       importNote={importNote}
       onFileChange={handleFileChange}
       skipNote={skipNote}
+      showDescription={false}
+      showSupportPanels={false}
       title={title}
     >
       {state ? (
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#4b5255] dark:bg-[#34393c]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Mapping {state.fileName}</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{simpleImportKind ? `Ready to process ${state.fileName}` : `Mapping ${state.fileName}`}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">{state.columns.length} column(s) detected, {nonBlankRows(state.rows).length} data row(s).</p>
             </div>
             <div className="flex flex-wrap items-center gap-3 justify-start lg:justify-end">
@@ -1145,23 +1168,46 @@ function ImportCard({
             </div>
           </div>
 
-          <MappingSection
-            addableHeaderOptions={addableHeaderOptions}
-            formatHeaderLabel={(index) => formatHeaderOptionLabel(state.columns[index]?.header ?? "", index, state.columns)}
-            getOptionalFieldOptions={getOptionalFieldOptions}
-            onAddOptionalMapping={addOptionalMapping}
-            onCancelAddMapping={() => { setShowAddMapping(false); setSelectedHeaderToAdd(""); }}
-            onRemoveOptionalMapping={removeOptionalMapping}
-            onSelectedHeaderToAddChange={setSelectedHeaderToAdd}
-            onToggleAddMapping={() => setShowAddMapping((current) => !current)}
-            onUpdateOptionalField={updateOptionalField}
-            onUpdateRequiredHeader={updateRequiredHeader}
-            requiredMappingRows={requiredMappingRows}
-            selectedHeaderToAdd={selectedHeaderToAdd}
-            showAddMapping={showAddMapping}
-            state={state}
-            visibleOptionalRows={visibleOptionalRows}
-          />
+          {simpleImportKind ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-[#f8f9fb] px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-300">
+                <p className="font-medium text-slate-900 dark:text-slate-100">Detected fields</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {state.columns.filter((column) => column.fieldId).map((column) => (
+                    <span
+                      className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-300"
+                      key={`${column.header}-${column.fieldId}`}
+                    >
+                      {fields.find((field) => field.id === column.fieldId)?.label ?? column.header}
+                    </span>
+                  ))}
+                  {state.columns.every((column) => !column.fieldId) ? <p>No supported import columns were detected.</p> : null}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-[#f8f9fb] px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-300">
+                <p className="font-medium text-slate-900 dark:text-slate-100">Import flow</p>
+                <p className="mt-1">This workflow auto-detects supported columns, skips existing records, creates missing records, and reports any rows that fail.</p>
+              </div>
+            </div>
+          ) : (
+            <MappingSection
+              addableHeaderOptions={addableHeaderOptions}
+              formatHeaderLabel={(index) => formatHeaderOptionLabel(state.columns[index]?.header ?? "", index, state.columns)}
+              getOptionalFieldOptions={getOptionalFieldOptions}
+              onAddOptionalMapping={addOptionalMapping}
+              onCancelAddMapping={() => { setShowAddMapping(false); setSelectedHeaderToAdd(""); }}
+              onRemoveOptionalMapping={removeOptionalMapping}
+              onSelectedHeaderToAddChange={setSelectedHeaderToAdd}
+              onToggleAddMapping={() => setShowAddMapping((current) => !current)}
+              onUpdateOptionalField={updateOptionalField}
+              onUpdateRequiredHeader={updateRequiredHeader}
+              requiredMappingRows={requiredMappingRows}
+              selectedHeaderToAdd={selectedHeaderToAdd}
+              showAddMapping={showAddMapping}
+              state={state}
+              visibleOptionalRows={visibleOptionalRows}
+            />
+          )}
 
           {validation && validation.resolutionGroups.length > 0 ? (
             <MissingResolutionSection
@@ -1178,10 +1224,10 @@ function ImportCard({
               actionBar={
                 <div className="sticky bottom-0 z-10 rounded-2xl border border-[#ece7df] bg-white/95 p-4 shadow-panel backdrop-blur dark:border-[#4b5255] dark:bg-[#2f3437]/95">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Import only creates new records. Existing matches and rows with blocking issues are skipped.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{simpleImportKind ? "Upload, review, then process. Existing matches are skipped automatically and missing records are created where valid." : "Import only creates new records. Existing matches and rows with blocking issues are skipped."}</p>
                     <div className="flex flex-wrap items-center gap-3">
-                      <Button className="min-w-36" onClick={resetMappings} type="button" variant="secondary">Reset mapping</Button>
-                      <Button disabled={isSubmitting || validation.globalErrors.length > 0 || validation.rowErrors.length > 0 || validation.validRows === 0 || validation.resolutionSummary.unresolvedCount > 0} onClick={handleImport} type="button">{isSubmitting ? "Importing..." : `Confirm import ${validation.validRows} row${validation.validRows === 1 ? "" : "s"}`}</Button>
+                      {simpleImportKind ? null : <Button className="min-w-36" onClick={resetMappings} type="button" variant="secondary">Reset mapping</Button>}
+                      <Button disabled={isSubmitting || validation.globalErrors.length > 0 || validation.rowErrors.length > 0 || validation.validRows === 0 || validation.resolutionSummary.unresolvedCount > 0} onClick={handleImport} type="button">{isSubmitting ? "Importing..." : `${simpleImportKind ? "Process" : "Confirm import"} ${validation.validRows} row${validation.validRows === 1 ? "" : "s"}`}</Button>
                     </div>
                   </div>
                 </div>
@@ -1279,6 +1325,7 @@ function LabelsImportCard({ references }: { references: ImportExportReferenceDat
       importNote="Labels use a JSON-first workflow so template sizing, orientation, enabled fields, and element definitions round-trip without losing fidelity."
       onFileChange={handleFileChange}
       skipNote="Existing label templates are skipped by normalized template name during import."
+      showSupportPanels={false}
       title="Labels"
     >
       {previewState ? (
@@ -1332,77 +1379,91 @@ function LabelsImportCard({ references }: { references: ImportExportReferenceDat
   );
 }
 
-export function ImportExportPanel({ references }: ImportExportPanelProps) {
+export function ImportExportPanel({ references, visibleKinds, showResetShortcut = true }: ImportExportPanelProps) {
+  const visibleKindSet = new Set(visibleKinds ?? ["assets", "users", "categories", "scopes", "locations", "labels"]);
+
   return (
     <div className="min-w-0 space-y-6">
-      <ImportCard
-        description="Export assets or import new assets through the existing header-mapping workflow with validation, preview, and confirmation."
-        exportHref="/api/settings/export/assets"
-        fields={ASSET_IMPORT_FIELDS}
-        formatGuidance="CSV/XLSX are best for spreadsheet cleanup and bulk edits. JSON is useful when you want a portable structured export."
-        importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically."
-        kind="assets"
-        references={references}
-        skipNote="Existing asset tags, duplicate rows, and rows with blocking issues are skipped."
-        title="Assets"
-      />
-      <ImportCard
-        description="Export users or import new users with role and department mapping before confirmation."
-        exportHref="/api/settings/export/users"
-        fields={USER_IMPORT_FIELDS}
-        formatGuidance="CSV/XLSX are best for spreadsheet administration. JSON is available when you want a structured handoff."
-        kind="users"
-        references={references}
-        skipNote="Existing emails, duplicate rows, and rows with blocking issues are skipped."
-        title="Users"
-      />
-      <ImportCard
-        description="Export category structure or import category rows through explicit Level 1-5 hierarchy columns with duplicate-safe skip behavior."
-        exportHref="/api/settings/export/categories"
-        fields={CATEGORY_IMPORT_FIELDS}
-        formatGuidance="CSV/XLSX use explicit Level 1-5 columns for deterministic spreadsheet round-trips. JSON remains available for structured exchange."
-        importNote="Populate category hierarchy left to right across Level 1 through Level 5. Trailing blanks are ignored, but hierarchy gaps such as Level 1 plus Level 3 fail validation."
-        kind="categories"
-        references={references}
-        skipNote="Existing full category paths, repeated full paths in the same file, and invalid hierarchy-gap rows are skipped."
-        title="Categories"
-      />
-      <ImportCard
-        description="Export departments or import department records with duplicate-safe skip behavior."
-        exportHref="/api/settings/export/scopes"
-        fields={SCOPE_IMPORT_FIELDS}
-        formatGuidance="CSV/XLSX are best for spreadsheet editing. JSON is available when you need a structured export."
-        kind="scopes"
-        references={references}
-        skipNote="Existing department names and repeated names in the same file are skipped."
-        title="Departments"
-      />
-      <ImportCard
-        description="Export location structure or import location paths with duplicate-safe skip behavior."
-        exportHref="/api/settings/export/locations"
-        fields={LOCATION_IMPORT_FIELDS}
-        formatGuidance="CSV/XLSX are best for editing nested location paths in a spreadsheet. JSON is available for structured exchange."
-        kind="locations"
-        references={references}
-        skipNote="Existing location paths and repeated paths in the same file are skipped."
-        title="Locations"
-      />
-      <LabelsImportCard references={references} />
+      {visibleKindSet.has("assets") ? (
+        <ImportCard
+          description="Export assets or import new assets through the existing header-mapping workflow with validation, preview, and confirmation."
+          exportHref="/api/settings/export/assets"
+          fields={ASSET_IMPORT_FIELDS}
+          formatGuidance="CSV/XLSX are best for spreadsheet cleanup and bulk edits. JSON is useful when you want a portable structured export."
+          importNote="For best results, import users before importing assets so asset-to-user assignments can be matched automatically."
+          kind="assets"
+          references={references}
+          skipNote="Existing asset tags, duplicate rows, and rows with blocking issues are skipped."
+          title="Assets"
+        />
+      ) : null}
+      {visibleKindSet.has("users") ? (
+        <ImportCard
+          description="Export users or import new users with role and department mapping before confirmation."
+          exportHref="/api/settings/export/users"
+          fields={USER_IMPORT_FIELDS}
+          formatGuidance="CSV/XLSX are best for spreadsheet administration. JSON is available when you want a structured handoff."
+          kind="users"
+          references={references}
+          skipNote="Existing emails, duplicate rows, and rows with blocking issues are skipped."
+          title="Users"
+        />
+      ) : null}
+      {visibleKindSet.has("categories") ? (
+        <ImportCard
+          description="Export category structure or import category rows through explicit Level 1-5 hierarchy columns with duplicate-safe skip behavior."
+          exportHref="/api/settings/export/categories"
+          fields={CATEGORY_IMPORT_FIELDS}
+          formatGuidance="CSV/XLSX use explicit Level 1-5 columns for deterministic spreadsheet round-trips. JSON remains available for structured exchange."
+          importNote="Populate category hierarchy left to right across Level 1 through Level 5. Trailing blanks are ignored, but hierarchy gaps such as Level 1 plus Level 3 fail validation."
+          kind="categories"
+          references={references}
+          skipNote="Existing full category paths, repeated full paths in the same file, and invalid hierarchy-gap rows are skipped."
+          title="Categories"
+        />
+      ) : null}
+      {visibleKindSet.has("scopes") ? (
+        <ImportCard
+          description="Export departments or import department records with duplicate-safe skip behavior."
+          exportHref="/api/settings/export/scopes"
+          fields={SCOPE_IMPORT_FIELDS}
+          formatGuidance="CSV/XLSX are best for spreadsheet editing. JSON is available when you need a structured export."
+          kind="scopes"
+          references={references}
+          skipNote="Existing department names and repeated names in the same file are skipped."
+          title="Departments"
+        />
+      ) : null}
+      {visibleKindSet.has("locations") ? (
+        <ImportCard
+          description="Export location structure or import location paths with duplicate-safe skip behavior."
+          exportHref="/api/settings/export/locations"
+          fields={LOCATION_IMPORT_FIELDS}
+          formatGuidance="CSV/XLSX are best for editing nested location paths in a spreadsheet. JSON is available for structured exchange."
+          kind="locations"
+          references={references}
+          skipNote="Existing location paths and repeated paths in the same file are skipped."
+          title="Locations"
+        />
+      ) : null}
+      {visibleKindSet.has("labels") ? <LabelsImportCard references={references} /> : null}
 
-      <Link className={`${cardClass} block transition hover:-translate-y-0.5 hover:border-[#f0c48d] hover:shadow-[0_22px_42px_rgba(246,150,41,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F69629]/40 dark:hover:border-[#f0a853] dark:hover:shadow-[0_18px_34px_rgba(0,0,0,0.22)]`} href="/settings/reset">
-        <section>
-          <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">Settings shortcut</p>
-            <h3 className="mt-3 text-lg font-semibold text-slate-950 dark:text-slate-100">Reset / Administrative Actions</h3>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Manage destructive administrative actions such as clearing assets, users, categories, and other system data.</p>
-          </div>
-          <div className="mt-5">
-            <span className="inline-flex rounded-full bg-[rgba(246,150,41,0.12)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#b56613] dark:bg-[rgba(246,150,41,0.18)] dark:text-[#ffd1a0]">
-              Open Reset
-            </span>
-          </div>
-        </section>
-      </Link>
+      {showResetShortcut ? (
+        <Link className={`${cardClass} block transition hover:-translate-y-0.5 hover:border-[#f0c48d] hover:shadow-[0_22px_42px_rgba(246,150,41,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F69629]/40 dark:hover:border-[#f0a853] dark:hover:shadow-[0_18px_34px_rgba(0,0,0,0.22)]`} href="/settings/reset">
+          <section>
+            <div>
+              <p className="text-sm uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">Settings shortcut</p>
+              <h3 className="mt-3 text-lg font-semibold text-slate-950 dark:text-slate-100">Reset / Administrative Actions</h3>
+              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Manage destructive administrative actions such as clearing assets, users, categories, and other system data.</p>
+            </div>
+            <div className="mt-5">
+              <span className="inline-flex rounded-full bg-[rgba(246,150,41,0.12)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#b56613] dark:bg-[rgba(246,150,41,0.18)] dark:text-[#ffd1a0]">
+                Open Reset
+              </span>
+            </div>
+          </section>
+        </Link>
+      ) : null}
     </div>
   );
 }

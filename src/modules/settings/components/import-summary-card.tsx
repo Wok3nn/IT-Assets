@@ -9,12 +9,21 @@ type ImportSummaryCardProps = {
 
 export function ImportSummaryCard({ kind, importSummary }: ImportSummaryCardProps) {
   const resultLabel = kind === "labels" ? "Templates read" : "Rows read";
+  const lightweightKind = kind === "categories" || kind === "scopes" || kind === "locations" || kind === "labels";
+  const detailRows = (
+    lightweightKind
+      ? [
+          ...importSummary.rowResults.filter((result) => result.status === "failed"),
+          ...importSummary.rowResults.filter((result) => result.status === "skipped"),
+        ]
+      : importSummary.rowResults
+  ).slice(0, 20);
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#4b5255] dark:bg-[#34393c]">
       <div>
         <h4 className="text-base font-semibold text-slate-950 dark:text-slate-100">Import summary</h4>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Review created, skipped, and failed items before uploading another file.</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Review created, skipped, and failed rows before uploading another file.</p>
       </div>
       <div className="grid gap-3 md:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-[#f8f9fb] px-4 py-3 text-sm dark:border-[#4b5255] dark:bg-[#2f3437]"><span className="text-slate-500 dark:text-slate-400">{resultLabel}</span><p className="mt-1 text-lg font-semibold text-slate-950 dark:text-slate-100">{importSummary.totalRowsRead}</p></div>
@@ -27,7 +36,8 @@ export function ImportSummaryCard({ kind, importSummary }: ImportSummaryCardProp
       <div className="rounded-2xl border border-slate-200 bg-white/75 px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-300">
         <p className="font-medium text-slate-900 dark:text-slate-100">Result details</p>
         <div className="mt-2 space-y-2">
-          {importSummary.rowResults.slice(0, 12).map((result, index) => <p key={`${result.status}-${result.rowNumber}-${index}`}>Item {result.rowNumber} [{result.status}]: {result.messages.join(" ")}</p>)}
+          {detailRows.length > 0 ? detailRows.map((result, index) => <p key={`${result.status}-${result.rowNumber}-${index}`}>Row {result.rowNumber} [{result.status}]: {result.messages.join(" ")}</p>) : <p>No row-level issues were reported.</p>}
+          {((lightweightKind ? importSummary.rowResults.filter((result) => result.status === "failed" || result.status === "skipped") : importSummary.rowResults).length) > detailRows.length ? <p>+ {(lightweightKind ? importSummary.rowResults.filter((result) => result.status === "failed" || result.status === "skipped") : importSummary.rowResults).length - detailRows.length} more row result(s)</p> : null}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { IGNORE_FIELD_ID, type ImportColumnMapping, type ImportFieldDefinition } from "@/modules/settings/import-export.shared";
 
-import { fieldClass, mappingRowClass } from "./import-export.styles";
+import { fieldClass, mappingListClass, mappingListRowClass, mappingRowClass } from "./import-export.styles";
 import type { ParsedImportState } from "./import-export.types";
 
 type MappingSectionProps = {
@@ -118,12 +118,15 @@ export function MappingSection({
             No field mappings added yet. Click `Add Field Mapping` to begin.
           </div>
         ) : (
-          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+          <div className={mappingListClass}>
             {visibleOptionalRows.map(({ columnIndex, column, mappedField }) => (
-              <div key={`${column.header}-${columnIndex}`} className={mappingRowClass}>
+              <div
+                className={`${mappingListRowClass} ${columnIndex === visibleOptionalRows[visibleOptionalRows.length - 1]?.columnIndex ? "" : "border-b border-slate-200 dark:border-[#4b5255]"}`}
+                key={`${column.header}-${columnIndex}`}
+              >
                 <div>
                   <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{formatHeaderLabel(columnIndex)}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">CSV field</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">CSV field</p>
                 </div>
                 <label className="block space-y-2">
                   <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Map to app field</span>
@@ -133,7 +136,7 @@ export function MappingSection({
                   </select>
                   {mappedField ? <p className="text-xs text-slate-500 dark:text-slate-400">{mappedField.label} selected</p> : <p className="text-xs text-slate-500 dark:text-slate-400">Choose the app field this CSV column should populate.</p>}
                 </label>
-                <div className="flex items-end lg:justify-end">
+                <div className="flex items-end md:justify-end">
                   <Button onClick={() => onRemoveOptionalMapping(columnIndex)} type="button" variant="ghost">Remove</Button>
                 </div>
               </div>

@@ -21,6 +21,7 @@ import {
   buildCategoryReferenceLabel,
   normalizeCategoryPath,
   parseCategoryHierarchyValues,
+  previewResolvedCategoryPath,
   resolveCategoryPathForImport,
   splitCategoryPath,
 } from "@/modules/settings/category-import-paths";
@@ -114,6 +115,26 @@ const labelTemplateImportFileSchema = z.union([
   }),
 ]);
 
+const importedNameSchema = z.string().trim().min(2).max(80);
+const assetFieldLabels: Record<string, string> = {
+  name: "Asset Name",
+  assetTag: "Asset Tag",
+  make: "Make",
+  model: "Model",
+  serialNumber: "Serial Number",
+  notes: "Notes",
+  purchaseDate: "Purchase Date",
+  warrantyExpiry: "Warranty Expiry",
+  category: "Category",
+  categoryId: "Category",
+  status: "Status",
+  statusId: "Status",
+  assignedUserId: "Assigned User",
+  assignedLocationId: "Location",
+  location: "Location",
+  scopeIds: "Departments",
+};
+
 
 function buildTreeLabel(items: Array<{ id: string; name: string; parentId: string | null }>, itemId: string | null | undefined) {
   if (!itemId) {
@@ -178,6 +199,64 @@ function normalizeColorHex(value: string) {
   const trimmed = value.trim().toUpperCase();
   if (!trimmed) return "";
   return /^#(?:[0-9A-F]{6})$/.test(trimmed) ? trimmed : null;
+}
+
+function formatImportFieldLabel(path: Array<string | number>, fieldLabels?: Record<string, string>) {
+  const first = typeof path[0] === "string" ? path[0] : "";
+  if (!first) {
+    return "Field";
+  }
+
+  if (fieldLabels?.[first]) {
+    return fieldLabels[first];
+  }
+
+  return first
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatZodIssues(error: z.ZodError, fieldLabels?: Record<string, string>) {
+  return error.issues.map((issue) => {
+    const fieldLabel = formatImportFieldLabel(issue.path, fieldLabels);
+    return `${fieldLabel}: ${issue.message}`;
+  });
+}
+
+function formatImportError(error: unknown, fieldLabels?: Record<string, string>) {
+  if (error instanceof z.ZodError) {
+    return formatZodIssues(error, fieldLabels);
+  }
+
+  if (error instanceof Error) {
+    try {
+      const parsed = JSON.parse(error.message) as unknown;
+      if (Array.isArray(parsed)) {
+        const parsedIssues = z.array(
+          z.object({
+            path: z.array(z.union([z.string(), z.number()])),
+            message: z.string(),
+          }),
+        ).safeParse(parsed);
+
+        if (parsedIssues.success) {
+          return parsedIssues.data.map((issue) => `${formatImportFieldLabel(issue.path, fieldLabels)}: ${issue.message}`);
+        }
+      }
+    } catch {
+      // Ignore JSON parse errors and fall back to the plain error message.
+    }
+
+    return [error.message];
+  }
+
+  return ["Unexpected import error."];
+}
+
+function validateImportedName(value: string, fieldLabel: string) {
+  const parsed = importedNameSchema.safeParse(value);
+  return parsed.success ? null : `${fieldLabel}: ${parsed.error.issues[0]?.message ?? "Invalid value."}`;
 }
 
 async function ensureCategoryPath(
@@ -728,6 +807,11 @@ export async function importAssetsFromRows(input: {
     const normalized = normalizeValue(entry.sourceValue);
     if (entry.action !== "create" || !normalized) continue;
     if (references.assets.statuses.some((item) => normalizeValue(item.label) === normalized)) continue;
+    const nameValidation = validateImportedName(entry.sourceValue, "Status");
+    if (nameValidation) {
+      throw new Error(nameValidation);
+    }
+
     const created = await upsertAssetStatus({ name: entry.sourceValue.trim(), color: "#94A3B8" });
     references.assets.statuses.push({ id: created.id, label: created.name });
   }
@@ -736,6 +820,11 @@ export async function importAssetsFromRows(input: {
     const normalized = normalizeValue(entry.sourceValue);
     if (entry.action !== "create" || !normalized) continue;
     if (references.assets.departments.some((item) => normalizeValue(item.label) === normalized)) continue;
+    const nameValidation = validateImportedName(entry.sourceValue, "Department");
+    if (nameValidation) {
+      throw new Error(nameValidation);
+    }
+
     const created = await createScope({ name: entry.sourceValue.trim() });
     references.assets.departments.push({ id: created.id, label: created.name });
   }
@@ -801,17 +890,27 @@ export async function importAssetsFromRows(input: {
     }
 
     const categoryValue = mapped.get("category") ?? "";
-    const categoryResult = await resolveCategoryPathForImport(
-      categoryValue,
-      references.assets.categories,
-      categoryResolutionMap,
-      async ({ name, parentId }) => createCategory({ name, parentId: parentId ?? undefined }),
-    );
-    const category = categoryResult.status === "resolved" ? categoryResult.category : null;
-    if (categoryValue && categoryResult.status === "skipped") {
-      messages.push(`Warning: category skipped (${categoryResult.skippedPath}).`);
-    } else if (categoryValue && categoryResult.status === "unresolved") {
-      messages.push(`Category not found: ${categoryResult.missingPath}`);
+    const categoryPreview = previewResolvedCategoryPath(categoryValue, references.assets.categories, categoryResolutionMap);
+    if (categoryValue && categoryPreview.status === "skipped") {
+      messages.push(`Warning: category skipped (${categoryPreview.skippedPath}).`);
+    } else if (categoryValue && categoryPreview.status === "unresolved") {
+      messages.push(`Category not found: ${categoryPreview.missingPath}`);
+    }
+
+    if (categoryValue) {
+      const categorySegments = splitCategoryPath(categoryValue);
+      const currentSegments: string[] = [];
+      for (const segment of categorySegments) {
+        currentSegments.push(segment);
+        const currentPath = buildCategoryPathLabel(currentSegments);
+        const decision = categoryResolutionMap.get(normalizeCategoryPath(currentPath));
+        if (decision?.action === "create") {
+          const nameValidation = validateImportedName(segment, "Category");
+          if (nameValidation) {
+            messages.push(`${nameValidation} (${currentPath})`);
+          }
+        }
+      }
     }
 
     const statusValue = mapped.get("status") ?? "";
@@ -871,6 +970,19 @@ export async function importAssetsFromRows(input: {
     summary.rowsValid += 1;
 
     try {
+      const categoryResult = await resolveCategoryPathForImport(
+        categoryValue,
+        references.assets.categories,
+        categoryResolutionMap,
+        async ({ name, parentId }) => createCategory({ name, parentId: parentId ?? undefined }),
+      );
+      const category = categoryResult.status === "resolved" ? categoryResult.category : null;
+      if (categoryValue && categoryResult.status === "skipped") {
+        messages.push(`Warning: category skipped (${categoryResult.skippedPath}).`);
+      } else if (categoryValue && categoryResult.status === "unresolved") {
+        throw new Error(`Category not found: ${categoryResult.missingPath}`);
+      }
+
       await createAsset({
         name,
         make,
@@ -900,13 +1012,20 @@ export async function importAssetsFromRows(input: {
       summary.rowResults.push({ rowNumber, status: "imported", messages: messages.length > 0 ? messages : ["Imported successfully."] });
     } catch (error) {
       summary.rowsFailed += 1;
-      const message = error instanceof Error ? error.message : "Unexpected import error.";
-      summary.rowResults.push({ rowNumber, status: "failed", messages: [message, ...messages] });
+      summary.rowResults.push({
+        rowNumber,
+        status: "failed",
+        messages: [...formatImportError(error, assetFieldLabels), ...messages],
+      });
     }
   }
 
   if ((summary.assetsLeftUnassigned ?? 0) > 0) {
     summary.warnings.push(`${summary.assetsLeftUnassigned} asset(s) were left unassigned because matching users could not be found.`);
+  }
+
+  if (summary.rowsFailed > 0 || summary.rowsSkipped > 0) {
+    summary.warnings.push("Asset import is partial by design: valid rows were imported, while skipped and failed rows are listed below with their source row numbers.");
   }
 
   return summary;
