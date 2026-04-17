@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { requireBootstrapPage } from "@/lib/bootstrap.server";
 import { buildAssetLookupPath } from "@/modules/assets/assets-routing";
 import { getAssetById } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
@@ -26,6 +27,8 @@ function LookupField({
 }
 
 export default async function AssetLookupPage({ params }: AssetLookupPageProps) {
+  await requireBootstrapPage();
+
   const { assetId } = await params;
   const [setupState, asset] = await Promise.all([readSetupState(), getAssetById(assetId)]);
 

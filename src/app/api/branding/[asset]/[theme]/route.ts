@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import { getBrandingSettings } from "@/modules/settings/settings.service";
 import { appConfig } from "@/services/config";
 
@@ -11,6 +12,12 @@ type BrandingAssetRouteParams = {
 };
 
 export async function GET(request: NextRequest, { params }: BrandingAssetRouteParams) {
+  const bootstrapResponse = await getBootstrapRedirectResponse();
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
   const { asset, theme } = await params;
   const branding = await getBrandingSettings();
 

@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 
+import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
 import { buildExportFileResponse, exportData } from "@/modules/settings/import-export.service";
 import { readSetupState } from "@/services/setup-state";
 
 export async function GET() {
+  const bootstrapResponse = await getBootstrapRedirectResponse();
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),

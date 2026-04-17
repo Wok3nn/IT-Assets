@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import {
   getEntraAuthenticationConfig,
   isEntraAuthenticationConfigured,
@@ -10,6 +11,7 @@ import {
   ENTRA_AUTH_NONCE_COOKIE_NAME,
   ENTRA_AUTH_STATE_COOKIE_NAME,
 } from "@/services/entra-auth";
+import { logger } from "@/services/logger";
 import { readSetupState } from "@/services/setup-state";
 
 function encodeStateCookie(input: {
@@ -21,13 +23,35 @@ function encodeStateCookie(input: {
 }
 
 export async function GET() {
-  const setupState = await readSetupState();
+  const bootstrapResponse = await getBootstrapRedirectResponse();
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
+  let setupState: Awaited<ReturnType<typeof readSetupState>>;
+
+  try {
+    setupState = await readSetupState();
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to read setup state during Entra start.", error);
+    logger.info("Routing to DB setup");
+    return NextResponse.redirect(buildAppUrl("/setup/db"));
+  }
 
   if (!setupState?.isCompleted) {
     return NextResponse.redirect(buildAppUrl("/setup"));
   }
 
-  const config = await getEntraAuthenticationConfig();
+  let config: Awaited<ReturnType<typeof getEntraAuthenticationConfig>>;
+
+  try {
+    config = await getEntraAuthenticationConfig();
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to load Entra configuration.", error);
+    logger.info("Routing to DB setup");
+    return NextResponse.redirect(buildAppUrl("/setup/db"));
+  }
 
   if (!isEntraAuthenticationConfigured(config)) {
     return NextResponse.redirect(buildAppUrl("/login?entraError=not-configured"));

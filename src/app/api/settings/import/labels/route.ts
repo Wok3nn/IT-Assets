@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 
+import { getBootstrapJsonResponse } from "@/lib/bootstrap.server";
 import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
 import { importLabelTemplatesFromJson } from "@/modules/settings/import-export.service";
 import { readSetupState } from "@/services/setup-state";
 
 export async function POST(request: Request) {
+  const bootstrapResponse = await getBootstrapJsonResponse();
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),

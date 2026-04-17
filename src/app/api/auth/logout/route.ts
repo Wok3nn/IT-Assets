@@ -1,9 +1,29 @@
 import { NextResponse } from "next/server";
 
+import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import { buildAppUrl } from "@/services/config";
 import { deleteSessionByToken, SESSION_COOKIE_NAME, SESSION_EFFECTIVE_ROLES_COOKIE_NAME } from "@/services/session-store";
 
 export async function POST(request: Request) {
+  const bootstrapResponse = await getBootstrapRedirectResponse();
+
+  if (bootstrapResponse) {
+    const response = bootstrapResponse;
+    response.cookies.set({
+      name: SESSION_COOKIE_NAME,
+      value: "",
+      path: "/",
+      expires: new Date(0),
+    });
+    response.cookies.set({
+      name: SESSION_EFFECTIVE_ROLES_COOKIE_NAME,
+      value: "",
+      path: "/",
+      expires: new Date(0),
+    });
+    return response;
+  }
+
   const token = request.headers
     .get("cookie")
     ?.split(";")

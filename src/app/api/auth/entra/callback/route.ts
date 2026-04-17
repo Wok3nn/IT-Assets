@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import {
   getEntraAuthenticationConfig,
   getAuthenticationSettings,
@@ -21,6 +22,7 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_EFFECTIVE_ROLES_COOKIE_NAME,
 } from "@/services/session-store";
+import { logger } from "@/services/logger";
 import { readSetupState } from "@/services/setup-state";
 import { findUserByEmail } from "@/services/user-store";
 
@@ -100,7 +102,21 @@ export async function GET(request: Request) {
     return redirectToLogin(request, "missing-code");
   }
 
-  const setupState = await readSetupState();
+  const bootstrapResponse = await getBootstrapRedirectResponse();
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
+  let setupState: Awaited<ReturnType<typeof readSetupState>>;
+
+  try {
+    setupState = await readSetupState();
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to read setup state during Entra callback.", error);
+    logger.info("Routing to DB setup");
+    return NextResponse.redirect(buildAppUrl("/setup/db"));
+  }
 
   if (!setupState?.isCompleted) {
     return NextResponse.redirect(buildAppUrl("/setup"));
@@ -113,7 +129,15 @@ export async function GET(request: Request) {
     return redirectToLogin(request, "invalid-state");
   }
 
-  const config = await getEntraAuthenticationConfig();
+  let config: Awaited<ReturnType<typeof getEntraAuthenticationConfig>>;
+
+  try {
+    config = await getEntraAuthenticationConfig();
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to load Entra configuration during callback.", error);
+    logger.info("Routing to DB setup");
+    return NextResponse.redirect(buildAppUrl("/setup/db"));
+  }
 
   if (!isEntraAuthenticationConfigured(config)) {
     return redirectToLogin(request, "not-configured");
@@ -191,6 +215,7 @@ export async function GET(request: Request) {
 
     return response;
   } catch (caughtError) {
+    logger.warn("[bootstrap] Entra callback failed.", caughtError);
     const message = caughtError instanceof Error ? caughtError.message : "entra-sign-in-failed";
 
     return redirectToLogin(request, message);

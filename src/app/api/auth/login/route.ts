@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getBootstrapJsonResponse } from "@/lib/bootstrap.server";
 import { db } from "@/services/database";
 import { appConfig } from "@/services/config";
+import { logger } from "@/services/logger";
 import { hasLocalPasswordConfigured } from "@/services/password";
 import { createSession, SESSION_COOKIE_NAME, SESSION_EFFECTIVE_ROLES_COOKIE_NAME } from "@/services/session-store";
 import { verifyPassword } from "@/services/password";
@@ -15,6 +17,15 @@ const loginSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const bootstrapResponse = await getBootstrapJsonResponse(
+    "Database setup is required before sign-in is available.",
+    409,
+  );
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
   const body = await request.json();
   const parsed = loginSchema.safeParse(body);
 
@@ -28,7 +39,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const setupState = await readSetupState();
+  let setupState: Awaited<ReturnType<typeof readSetupState>>;
+
+  try {
+    setupState = await readSetupState();
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to read setup state during local sign-in.", error);
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Database setup is required before sign-in is available.",
+      },
+      { status: 503 },
+    );
+  }
 
   if (!setupState?.isCompleted) {
     return NextResponse.json(
@@ -40,7 +64,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await findUserByEmail(parsed.data.email.toLowerCase());
+  let user: Awaited<ReturnType<typeof findUserByEmail>>;
+
+  try {
+    user = await findUserByEmail(parsed.data.email.toLowerCase());
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to load user during local sign-in.", error);
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Database setup is required before sign-in is available.",
+      },
+      { status: 503 },
+    );
+  }
 
   if (
     !user ||
@@ -58,16 +95,30 @@ export async function POST(request: Request) {
     );
   }
 
-  await db.user.update({
-    where: {
-      id: user.id,
-    },
-    data: {
-      lastLoginAt: new Date(),
-    },
-  });
+  let session: Awaited<ReturnType<typeof createSession>>;
 
-  const session = await createSession(user.id);
+  try {
+    await db.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        lastLoginAt: new Date(),
+      },
+    });
+
+    session = await createSession(user.id);
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to finalize local sign-in.", error);
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Database setup is required before sign-in is available.",
+      },
+      { status: 503 },
+    );
+  }
+
   const response = NextResponse.json({ ok: true, redirectTo: "/dashboard" });
 
   response.cookies.set({

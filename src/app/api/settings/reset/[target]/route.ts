@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getBootstrapJsonResponse } from "@/lib/bootstrap.server";
 import { canManageSettings } from "@/lib/permissions";
 import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser, getCurrentUserRoleKeys } from "@/lib/session.server";
@@ -10,6 +11,12 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ target: string }> },
 ) {
+  const bootstrapResponse = await getBootstrapJsonResponse();
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
   const { target } = await context.params;
   const [setupState, currentUser, roleKeys, permissionContext] = await Promise.all([
     readSetupState(),

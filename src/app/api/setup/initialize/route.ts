@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getBootstrapJsonResponse } from "@/lib/bootstrap.server";
 import { hashPassword } from "@/services/password";
+import { logger } from "@/services/logger";
 import { readSetupState, writeSetupState } from "@/services/setup-state";
 import { createInitialAdmin } from "@/services/user-store";
 
@@ -18,6 +20,15 @@ const setupSchema = z
   });
 
 export async function POST(request: Request) {
+  const bootstrapResponse = await getBootstrapJsonResponse(
+    "Database setup is required before workspace initialization can continue.",
+    409,
+  );
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
   const body = await request.json();
   const parsed = setupSchema.safeParse(body);
 
@@ -31,7 +42,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const existingSetup = await readSetupState();
+  let existingSetup: Awaited<ReturnType<typeof readSetupState>>;
+
+  try {
+    existingSetup = await readSetupState();
+  } catch (error) {
+    logger.warn("[bootstrap] Failed to read setup state during workspace initialization.", error);
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Database setup is required before workspace initialization can continue.",
+      },
+      { status: 503 },
+    );
+  }
 
   if (existingSetup?.isCompleted) {
     return NextResponse.json(

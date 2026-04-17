@@ -1,0 +1,251 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SetupState {
+  id            String    @id @default(cuid())
+  isCompleted   Boolean   @default(false)
+  siteName      String?
+  initializedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model User {
+  id           String         @id @default(cuid())
+  name         String
+  email        String         @unique
+  passwordHash String
+  canLogin     Boolean        @default(true)
+  isActive     Boolean        @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  sessions     Session[]
+  userRoles    UserRole[]
+  userScopes   UserScope[]
+  assets       Asset[]        @relation("AssignedUserAssets")
+  auditEntries AuditLog[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Role {
+  id        String     @id @default(cuid())
+  key       String     @unique
+  name      String
+  createdAt DateTime   @default(now())
+  userRoles UserRole[]
+}
+
+model Scope {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  description String?
+  colorHex    String?
+  colorMode   String?
+  isSystem    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userScopes  UserScope[]
+  assetScopes AssetScope[]
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model UserScope {
+  id      String @id @default(cuid())
+  userId  String
+  scopeId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope   Scope  @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scopeId])
+}
+
+model Category {
+  id                     String         @id @default(cuid())
+  name                   String
+  slug                   String         @unique
+  parentId               String?
+  colorHex               String?
+  colorMode              String?
+  sortOrder              Int            @default(0)
+  defaultLabelTemplateId String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  parent                 Category?      @relation("CategoryTree", fields: [parentId], references: [id])
+  children               Category[]     @relation("CategoryTree")
+  assets                 Asset[]
+  defaultLabelTemplate   LabelTemplate? @relation("CategoryDefaultLabelTemplate", fields: [defaultLabelTemplateId], references: [id])
+}
+
+model Location {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  parentId    String?
+  colorHex    String?
+  colorMode   String?
+  code        String?     @unique
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  parent      Location?   @relation("LocationTree", fields: [parentId], references: [id])
+  children    Location[]  @relation("LocationTree")
+  assets      Asset[]     @relation("AssignedLocationAssets")
+}
+
+model AssetStatus {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+  assets    Asset[]
+}
+
+model Asset {
+  id                 String          @id @default(cuid())
+  name               String
+  make               String?
+  model              String?
+  assetTag           String          @unique
+  serialNumber       String?
+  notes              String?
+  purchaseDate       DateTime?
+  warrantyExpiry     DateTime?
+  categoryId         String?
+  statusId           String?
+  assignedUserId     String?
+  assignedLocationId String?
+  labelTemplateId    String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  category           Category?       @relation(fields: [categoryId], references: [id])
+  status             AssetStatus?    @relation(fields: [statusId], references: [id])
+  assignedUser       User?           @relation("AssignedUserAssets", fields: [assignedUserId], references: [id])
+  assignedLocation   Location?       @relation("AssignedLocationAssets", fields: [assignedLocationId], references: [id])
+  labelTemplate      LabelTemplate?  @relation(fields: [labelTemplateId], references: [id])
+  scopes             AssetScope[]
+}
+
+model AssetScope {
+  id      String @id @default(cuid())
+  assetId String
+  scopeId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  scope   Scope  @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, scopeId])
+}
+
+model LabelTemplate {
+  id                String                 @id @default(cuid())
+  name              String
+  slug              String                 @unique
+  description       String?
+  width             Float                  @map("widthMm")
+  height            Float                  @map("heightMm")
+  unit              String                 @default("millimeters")
+  orientation       String                 @default("portrait")
+  marginTop         Float                  @default(1) @map("marginTopMm")
+  marginRight       Float                  @default(1) @map("marginRightMm")
+  marginBottom      Float                  @default(1) @map("marginBottomMm")
+  marginLeft        Float                  @default(1) @map("marginLeftMm")
+  isEnabled         Boolean                @default(true)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  elements          LabelTemplateElement[]
+  assets            Asset[]
+  defaultCategories Category[]             @relation("CategoryDefaultLabelTemplate")
+
+  @@map("LabelTemplate")
+}
+
+model LabelTemplateElement {
+  id          String        @id @default(cuid())
+  templateId  String
+  type        String        @default("text")
+  fieldKey    String
+  displayName String?       @map("label")
+  isVisible   Boolean       @default(true)
+  x           Float         @map("posX")
+  y           Float         @map("posY")
+  width       Float
+  height      Float
+  fontSize    Int?
+  fontWeight  String        @default("normal")
+  italic      Boolean       @default(false)
+  textAlign   String        @default("left") @map("alignment")
+  rotation    Float         @default(0)
+  zIndex      Int           @default(0)
+  template    LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, zIndex])
+  @@map("LabelTemplateField")
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  category  String
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BrandingAsset {
+  id        String   @id @default(cuid())
+  kind      String
+  fileName  String
+  filePath  String
+  mimeType  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuthProviderConfig {
+  id          String   @id @default(cuid())
+  providerKey String   @unique
+  isEnabled   Boolean  @default(false)
+  configJson  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  summary     String
+  payloadJson String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+}
+

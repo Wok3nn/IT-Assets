@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
 import { buildExportFileResponse, exportData } from "@/modules/settings/import-export.service";
@@ -11,6 +12,12 @@ function getFormat(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const bootstrapResponse = await getBootstrapRedirectResponse();
+
+  if (bootstrapResponse) {
+    return bootstrapResponse;
+  }
+
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
     getCurrentUser(),

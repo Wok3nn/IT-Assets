@@ -1,0 +1,41 @@
+services:
+  postgres:
+    container_name: IT-Assets-Postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: it_assets
+      POSTGRES_USER: it_assets
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  it-assets:
+    container_name: IT-Assets
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4050:4050"
+    environment:
+      PORT: 4050
+      # Use the externally reachable app URL here. Do not use the internal Docker service hostname.
+      APP_URL: http://your-hostname-or-ip:4050
+      SESSION_SECRET: change-me
+      DB_MODE: local
+      DB_PROVIDER: postgresql
+      DATABASE_URL: postgresql://it_assets:change-me@postgres:5432/it_assets?schema=public
+      APP_DATA_DIR: /data
+    volumes:
+      - ../data:/data
+    # Local Mode does not use the DB setup wizard. The app waits for Postgres, runs migrations, then continues into the normal app setup flow.
+
+volumes:
+  postgres_data:
