@@ -29,7 +29,7 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma/providers ./prisma/providers
 COPY --from=builder /app/prisma/data ./prisma/data
-COPY --from=builder /app/prisma/migrations/${DB_PROVIDER}/ ./prisma/migrations/
+COPY --from=builder /app/prisma/migrations ./prisma/migrations
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 RUN mkdir -p /data/db /data/state /data/uploads

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { mkdir } from "node:fs/promises";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertScriptDatabaseSelection, resolveDatabaseConnectionInfo } from "./database-selection.mjs";
@@ -10,6 +10,7 @@ const databaseSelection = assertScriptDatabaseSelection({ workspaceDir });
 const databaseConnectionInfo = resolveDatabaseConnectionInfo();
 const appDataDir = (process.env.APP_DATA_DIR ?? "/data").trim() || "/data";
 const databaseUrl = (process.env.DATABASE_URL ?? "file:/data/db/app.db").trim() || "file:/data/db/app.db";
+const prismaMigrationsRoot = path.join(workspaceDir, "prisma", "migrations");
 
 function resolveSqliteDatabasePath(url) {
   if (!url.startsWith("file:")) return null;
@@ -31,6 +32,35 @@ async function ensureStartupDirectories() {
   if (sqlitePath) {
     await mkdir(path.dirname(sqlitePath), { recursive: true });
   }
+}
+
+async function prepareProviderMigrations() {
+  const providerMigrationsPath = path.join(prismaMigrationsRoot, databaseSelection.provider);
+  const providerEntries = await readdir(providerMigrationsPath);
+
+  if (providerEntries.length === 0) {
+    throw new Error(`No Prisma migrations found for provider "${databaseSelection.provider}" in ${providerMigrationsPath}.`);
+  }
+
+  const rootEntries = await readdir(prismaMigrationsRoot);
+
+  await Promise.all(
+    rootEntries
+      .filter((entry) => entry !== databaseSelection.provider)
+      .map((entry) => rm(path.join(prismaMigrationsRoot, entry), { recursive: true, force: true })),
+  );
+
+  await Promise.all(
+    providerEntries.map((entry) =>
+      cp(path.join(providerMigrationsPath, entry), path.join(prismaMigrationsRoot, entry), {
+        recursive: true,
+        force: true,
+      }),
+    ),
+  );
+
+  await rm(providerMigrationsPath, { recursive: true, force: true });
+  console.log(`Prepared Prisma migrations for provider "${databaseSelection.provider}" in ${prismaMigrationsRoot}.`);
 }
 
 function runNodeCommand(args, label) {
@@ -118,6 +148,7 @@ async function main() {
   await ensureStartupDirectories();
   await runNodeCommand([path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "generate"], "Prisma generate");
   await waitForDatabaseAvailability();
+  await prepareProviderMigrations();
 
   await runNodeCommand(
     [path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "migrate", "deploy"],
