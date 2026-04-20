@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
+import { getBootstrapFailurePath, getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import {
   getEntraAuthenticationConfig,
   getAuthenticationSettings,
@@ -114,8 +114,9 @@ export async function GET(request: Request) {
     setupState = await readSetupState();
   } catch (error) {
     logger.warn("[bootstrap] Failed to read setup state during Entra callback.", error);
-    logger.info("Routing to DB setup");
-    return NextResponse.redirect(buildAppUrl("/setup/db"));
+    const fallbackPath = getBootstrapFailurePath();
+    logger.info(`Routing to ${fallbackPath}`);
+    return NextResponse.redirect(buildAppUrl(fallbackPath));
   }
 
   if (!setupState?.isCompleted) {
@@ -135,8 +136,9 @@ export async function GET(request: Request) {
     config = await getEntraAuthenticationConfig();
   } catch (error) {
     logger.warn("[bootstrap] Failed to load Entra configuration during callback.", error);
-    logger.info("Routing to DB setup");
-    return NextResponse.redirect(buildAppUrl("/setup/db"));
+    const fallbackPath = getBootstrapFailurePath();
+    logger.info(`Routing to ${fallbackPath}`);
+    return NextResponse.redirect(buildAppUrl(fallbackPath));
   }
 
   if (!isEntraAuthenticationConfigured(config)) {

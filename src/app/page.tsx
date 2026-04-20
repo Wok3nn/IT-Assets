@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 
-import { requireBootstrapPage } from "@/lib/bootstrap.server";
+import { getBootstrapFailurePath, requireBootstrapPage } from "@/lib/bootstrap.server";
 import { getCurrentUser } from "@/lib/session.server";
 import { logger } from "@/services/logger";
 import { readSetupState } from "@/services/setup-state";
+
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   await requireBootstrapPage();
@@ -14,8 +16,9 @@ export default async function HomePage() {
     setupState = await readSetupState();
   } catch (error) {
     logger.warn("[bootstrap] Failed to read application setup state from Prisma.", error);
-    logger.info("Routing to DB setup");
-    redirect("/setup/db");
+    const fallbackPath = getBootstrapFailurePath();
+    logger.info(`Routing to ${fallbackPath}`);
+    redirect(fallbackPath);
   }
 
   if (!setupState?.isCompleted) {
@@ -28,8 +31,9 @@ export default async function HomePage() {
     currentUser = await getCurrentUser();
   } catch (error) {
     logger.warn("[bootstrap] Failed to resolve current user during root routing.", error);
-    logger.info("Routing to DB setup");
-    redirect("/setup/db");
+    const fallbackPath = getBootstrapFailurePath();
+    logger.info(`Routing to ${fallbackPath}`);
+    redirect(fallbackPath);
   }
 
   if (currentUser) {

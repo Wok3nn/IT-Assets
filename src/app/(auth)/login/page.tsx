@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { requireBootstrapPage } from "@/lib/bootstrap.server";
+import { getBootstrapFailurePath, requireBootstrapPage } from "@/lib/bootstrap.server";
 import {
   getEntraAuthenticationConfig,
   isEntraAuthenticationConfigured,
@@ -32,8 +32,9 @@ export default async function LoginPage({
     ]);
   } catch (error) {
     logger.warn("[bootstrap] Failed to load login page settings from Prisma.", error);
-    logger.info("Routing to DB setup");
-    redirect("/setup/db");
+    const fallbackPath = getBootstrapFailurePath();
+    logger.info(`Routing to ${fallbackPath}`);
+    redirect(fallbackPath);
   }
 
   return (
