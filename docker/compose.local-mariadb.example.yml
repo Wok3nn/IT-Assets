@@ -1,0 +1,44 @@
+services:
+  mariadb:
+    container_name: IT-Assets-MariaDB
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: it_assets
+      MARIADB_USER: it_assets
+      MARIADB_PASSWORD: change-me
+      MARIADB_ROOT_PASSWORD: change-me-root
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  it-assets:
+    container_name: IT-Assets
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        DB_PROVIDER: mariadb
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "4050:4050"
+    environment:
+      PORT: 4050
+      # Use the externally reachable app URL here. Do not use the internal Docker service hostname.
+      APP_URL: http://your-hostname-or-ip:4050
+      SESSION_SECRET: change-me
+      DB_MODE: local
+      DB_PROVIDER: mariadb
+      DATABASE_URL: mysql://it_assets:change-me@mariadb:3306/it_assets
+      APP_DATA_DIR: /data
+    volumes:
+      - ../data:/data
+    # Local Mode does not use the DB setup wizard. The app waits for MariaDB, runs migrations, then continues into the normal app setup flow.
+
+volumes:
+  mariadb_data:

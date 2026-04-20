@@ -82,7 +82,9 @@ export async function isBootstrapComplete() {
   if (
     databaseConfig.isSupportedCombination &&
     databaseConfig.mode === "local" &&
-    (databaseConfig.provider === "sqlite" || databaseConfig.provider === "postgresql")
+    (databaseConfig.provider === "sqlite" ||
+      databaseConfig.provider === "postgresql" ||
+      databaseConfig.provider === "mariadb")
   ) {
     return true;
   }

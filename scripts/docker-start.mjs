@@ -99,9 +99,9 @@ async function prepareProviderMigrations() {
     throw new Error(`Prepared Prisma migrations target has no migration directories in ${providerMigrationsTargetPath}.`);
   }
 
-  if (preparedMigrationLockProvider !== databaseSelection.provider) {
+  if (preparedMigrationLockProvider !== databaseSelection.prismaProviderName) {
     throw new Error(
-      `Prepared Prisma migrations target has provider "${preparedMigrationLockProvider}" in migration_lock.toml, expected "${databaseSelection.provider}".`,
+      `Prepared Prisma migrations target has provider "${preparedMigrationLockProvider}" in migration_lock.toml, expected "${databaseSelection.prismaProviderName}".`,
     );
   }
 

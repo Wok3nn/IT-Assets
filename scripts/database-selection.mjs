@@ -10,12 +10,18 @@ const allowedCombinations = new Set([
   "external:sqlserver",
   "local:sqlite",
 ]);
-const currentScriptProviders = new Set(["sqlite", "postgresql"]);
+const currentScriptProviders = new Set(["sqlite", "postgresql", "mariadb"]);
 const providerDefaultPorts = {
   sqlite: null,
   postgresql: 5432,
   mariadb: 3306,
   sqlserver: 1433,
+};
+const prismaProviderNames = {
+  sqlite: "sqlite",
+  postgresql: "postgresql",
+  mariadb: "mysql",
+  sqlserver: "sqlserver",
 };
 
 function normalizeEnvValue(value) {
@@ -69,6 +75,7 @@ export function resolveDatabaseSelection({ env = process.env, workspaceDir = pro
     schemaPath: path.join(workspaceDir, "prisma", "providers", config.provider, "schema.prisma"),
     providerMigrationsPath: path.join(workspaceDir, "prisma", "migrations", config.provider),
     migrationsRootPath: path.join(workspaceDir, "prisma", "migrations"),
+    prismaProviderName: prismaProviderNames[config.provider],
     isCurrentScriptProvider: currentScriptProviders.has(config.provider),
   };
 }
