@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { assertScriptDatabaseSelection, resolveDatabaseConnectionInfo } from "./database-selection.mjs";
@@ -43,7 +43,7 @@ async function prepareProviderMigrations() {
   }
 
   const hasMigrationLock = providerEntries.some((entry) => entry.isFile() && entry.name === "migration_lock.toml");
-  const migrationDirectoryNames = providerEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  const migrationDirectoryNames = providerEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
 
   if (!hasMigrationLock) {
     throw new Error(
@@ -67,25 +67,34 @@ async function prepareProviderMigrations() {
 
   await mkdir(prismaMigrationsRoot, { recursive: true });
 
+  await copyFile(path.join(providerMigrationsPath, "migration_lock.toml"), path.join(prismaMigrationsRoot, "migration_lock.toml"));
+
   await Promise.all(
-    providerEntries.map((entry) =>
-      cp(path.join(providerMigrationsPath, entry.name), path.join(prismaMigrationsRoot, entry.name), {
+    migrationDirectoryNames.map((directoryName) =>
+      cp(path.join(providerMigrationsPath, directoryName), path.join(prismaMigrationsRoot, directoryName), {
         recursive: true,
         force: true,
       }),
     ),
   );
 
-  await rm(providerMigrationsPath, { recursive: true, force: true });
+  await Promise.all(
+    ["sqlite", "postgresql", "mariadb", "sqlserver"].map((providerName) =>
+      rm(path.join(prismaMigrationsRoot, providerName), { recursive: true, force: true }),
+    ),
+  );
 
   const preparedEntries = await readdir(prismaMigrationsRoot, { withFileTypes: true });
   const preparedNames = preparedEntries.map((entry) => entry.name).sort();
   const preparedHasMigrationLock = preparedEntries.some((entry) => entry.isFile() && entry.name === "migration_lock.toml");
   const preparedMigrationDirectories = preparedEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  const preparedMigrationLockContents = await readFile(path.join(prismaMigrationsRoot, "migration_lock.toml"), "utf8");
+  const preparedMigrationLockProvider = preparedMigrationLockContents.match(/provider\s*=\s*"([^"]+)"/)?.[1] ?? "unknown";
 
   console.log(`Prepared Prisma migrations for provider "${databaseSelection.provider}" in ${prismaMigrationsRoot}.`);
   console.log(`Prisma migrations root contents: ${preparedNames.join(", ") || "(empty)"}`);
   console.log(`Prisma migration_lock.toml present: ${preparedHasMigrationLock ? "yes" : "no"}`);
+  console.log(`Prisma migration_lock.toml provider: ${preparedMigrationLockProvider}`);
   console.log(
     `Prisma migration directories present: ${preparedMigrationDirectories.join(", ") || "(none)"}`,
   );
@@ -96,6 +105,21 @@ async function prepareProviderMigrations() {
 
   if (preparedMigrationDirectories.length === 0) {
     throw new Error(`Prepared Prisma migrations root has no migration directories in ${prismaMigrationsRoot}.`);
+  }
+
+  if (preparedMigrationLockProvider !== databaseSelection.provider) {
+    throw new Error(
+      `Prepared Prisma migrations root has provider "${preparedMigrationLockProvider}" in migration_lock.toml, expected "${databaseSelection.provider}".`,
+    );
+  }
+
+  if (
+    preparedMigrationDirectories.length !== migrationDirectoryNames.length ||
+    preparedMigrationDirectories.some((directoryName, index) => directoryName !== migrationDirectoryNames[index])
+  ) {
+    throw new Error(
+      `Prepared Prisma migrations root directories do not match provider "${databaseSelection.provider}" migrations. Expected ${migrationDirectoryNames.join(", ")}, received ${preparedMigrationDirectories.join(", ")}.`,
+    );
   }
 
   const preparedMigrationStats = await Promise.all(
