@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { assertScriptDatabaseSelection, resolveDatabaseConnectionInfo } from "./database-selection.mjs";
@@ -36,23 +36,40 @@ async function ensureStartupDirectories() {
 
 async function prepareProviderMigrations() {
   const providerMigrationsPath = path.join(prismaMigrationsRoot, databaseSelection.provider);
-  const providerEntries = await readdir(providerMigrationsPath);
+  const providerEntries = await readdir(providerMigrationsPath, { withFileTypes: true });
 
   if (providerEntries.length === 0) {
     throw new Error(`No Prisma migrations found for provider "${databaseSelection.provider}" in ${providerMigrationsPath}.`);
   }
 
-  const rootEntries = await readdir(prismaMigrationsRoot);
+  const hasMigrationLock = providerEntries.some((entry) => entry.isFile() && entry.name === "migration_lock.toml");
+  const migrationDirectoryNames = providerEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+
+  if (!hasMigrationLock) {
+    throw new Error(
+      `Prisma provider migrations for "${databaseSelection.provider}" are missing migration_lock.toml in ${providerMigrationsPath}.`,
+    );
+  }
+
+  if (migrationDirectoryNames.length === 0) {
+    throw new Error(
+      `Prisma provider migrations for "${databaseSelection.provider}" do not include any migration directories in ${providerMigrationsPath}.`,
+    );
+  }
+
+  const rootEntries = await readdir(prismaMigrationsRoot, { withFileTypes: true });
 
   await Promise.all(
     rootEntries
-      .filter((entry) => entry !== databaseSelection.provider)
-      .map((entry) => rm(path.join(prismaMigrationsRoot, entry), { recursive: true, force: true })),
+      .filter((entry) => entry.name !== databaseSelection.provider)
+      .map((entry) => rm(path.join(prismaMigrationsRoot, entry.name), { recursive: true, force: true })),
   );
+
+  await mkdir(prismaMigrationsRoot, { recursive: true });
 
   await Promise.all(
     providerEntries.map((entry) =>
-      cp(path.join(providerMigrationsPath, entry), path.join(prismaMigrationsRoot, entry), {
+      cp(path.join(providerMigrationsPath, entry.name), path.join(prismaMigrationsRoot, entry.name), {
         recursive: true,
         force: true,
       }),
@@ -60,7 +77,37 @@ async function prepareProviderMigrations() {
   );
 
   await rm(providerMigrationsPath, { recursive: true, force: true });
+
+  const preparedEntries = await readdir(prismaMigrationsRoot, { withFileTypes: true });
+  const preparedNames = preparedEntries.map((entry) => entry.name).sort();
+  const preparedHasMigrationLock = preparedEntries.some((entry) => entry.isFile() && entry.name === "migration_lock.toml");
+  const preparedMigrationDirectories = preparedEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+
   console.log(`Prepared Prisma migrations for provider "${databaseSelection.provider}" in ${prismaMigrationsRoot}.`);
+  console.log(`Prisma migrations root contents: ${preparedNames.join(", ") || "(empty)"}`);
+  console.log(`Prisma migration_lock.toml present: ${preparedHasMigrationLock ? "yes" : "no"}`);
+  console.log(
+    `Prisma migration directories present: ${preparedMigrationDirectories.join(", ") || "(none)"}`,
+  );
+
+  if (!preparedHasMigrationLock) {
+    throw new Error(`Prepared Prisma migrations root is missing migration_lock.toml in ${prismaMigrationsRoot}.`);
+  }
+
+  if (preparedMigrationDirectories.length === 0) {
+    throw new Error(`Prepared Prisma migrations root has no migration directories in ${prismaMigrationsRoot}.`);
+  }
+
+  const preparedMigrationStats = await Promise.all(
+    preparedMigrationDirectories.map(async (directoryName) => ({
+      directoryName,
+      stats: await stat(path.join(prismaMigrationsRoot, directoryName)),
+    })),
+  );
+
+  if (preparedMigrationStats.some(({ stats }) => !stats.isDirectory())) {
+    throw new Error(`Prepared Prisma migrations root contains a non-directory migration entry in ${prismaMigrationsRoot}.`);
+  }
 }
 
 function runNodeCommand(args, label) {
