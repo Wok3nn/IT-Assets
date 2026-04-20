@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { mkdir, readdir, rm, copyFile, cp } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { assertScriptDatabaseSelection, resolveDatabaseConnectionInfo } from "./database-selection.mjs";
@@ -10,7 +10,6 @@ const databaseSelection = assertScriptDatabaseSelection({ workspaceDir });
 const databaseConnectionInfo = resolveDatabaseConnectionInfo();
 const appDataDir = (process.env.APP_DATA_DIR ?? "/data").trim() || "/data";
 const databaseUrl = (process.env.DATABASE_URL ?? "file:/data/db/app.db").trim() || "file:/data/db/app.db";
-const runtimeMigrationsStagePath = path.join(appDataDir, "state", `runtime-migrations-${databaseSelection.provider}`);
 
 function resolveSqliteDatabasePath(url) {
   if (!url.startsWith("file:")) return null;
@@ -31,35 +30,6 @@ async function ensureStartupDirectories() {
 
   if (sqlitePath) {
     await mkdir(path.dirname(sqlitePath), { recursive: true });
-  }
-}
-
-async function prepareRuntimeMigrationsRoot() {
-  const providerMigrationsPath = databaseSelection.providerMigrationsPath;
-  const runtimeMigrationsRoot = databaseSelection.migrationsRootPath;
-
-  await rm(runtimeMigrationsStagePath, { recursive: true, force: true });
-  await cp(providerMigrationsPath, runtimeMigrationsStagePath, { recursive: true });
-
-  await rm(runtimeMigrationsRoot, { recursive: true, force: true });
-  await mkdir(runtimeMigrationsRoot, { recursive: true });
-
-  const stagedEntries = await readdir(runtimeMigrationsStagePath, { withFileTypes: true });
-
-  for (const entry of stagedEntries) {
-    if (entry.name === ".gitkeep") {
-      continue;
-    }
-
-    const sourcePath = path.join(runtimeMigrationsStagePath, entry.name);
-    const targetPath = path.join(runtimeMigrationsRoot, entry.name);
-
-    if (entry.isDirectory()) {
-      await cp(sourcePath, targetPath, { recursive: true });
-      continue;
-    }
-
-    await copyFile(sourcePath, targetPath);
   }
 }
 
@@ -148,7 +118,6 @@ async function main() {
   await ensureStartupDirectories();
   await runNodeCommand([path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "generate"], "Prisma generate");
   await waitForDatabaseAvailability();
-  await prepareRuntimeMigrationsRoot();
 
   await runNodeCommand(
     [path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "migrate", "deploy"],
