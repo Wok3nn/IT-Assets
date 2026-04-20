@@ -47,6 +47,6 @@ const provider = rawDbProvider || "sqlite";
 export default defineConfig({
   schema: `prisma/providers/${provider}/schema.prisma`,
   migrations: {
-    path: `prisma/migrations/${provider}`,
+    path: "prisma/migrations",
   },
 });
