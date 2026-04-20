@@ -41,9 +41,12 @@ function loadDotEnvFile(envPath: string) {
 
 loadDotEnvFile(path.resolve(process.cwd(), ".env"));
 
+const rawDbProvider = process.env.DB_PROVIDER?.trim().toLowerCase();
+const provider = rawDbProvider || "sqlite";
+
 export default defineConfig({
-  schema: "prisma/providers/sqlite/schema.prisma",
+  schema: `prisma/providers/${provider}/schema.prisma`,
   migrations: {
-    path: "prisma/migrations/sqlite",
+    path: `prisma/migrations/${provider}`,
   },
 });
