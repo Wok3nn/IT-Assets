@@ -9,7 +9,7 @@ export type DatabaseConfig = {
 };
 
 const defaultDatabaseMode: DatabaseMode = "local";
-const defaultDatabaseProvider: DatabaseProvider = "sqlite";
+const defaultDatabaseProvider: DatabaseProvider = "mariadb";
 
 const databaseModes = new Set<DatabaseMode>(["local", "external"]);
 const databaseProviders = new Set<DatabaseProvider>(["sqlite", "postgresql", "mariadb", "sqlserver"]);

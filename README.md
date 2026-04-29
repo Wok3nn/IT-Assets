@@ -20,7 +20,7 @@ It is designed for small to mid-sized internal environments that want:
 - a clean browser-based inventory system
 - local admin setup and optional Microsoft Entra sign-in
 - printable asset labels with reusable templates
-- Docker-friendly deployment with SQLite-backed persistence
+- Docker Compose deployment with MariaDB-backed persistence
 
 ## What It Does
 
@@ -32,35 +32,72 @@ The app currently includes:
 - label template creation, preview, and print workflows
 - theme-aware branding and a Docker-ready deployment path
 
-## Quick Start With Docker Compose
+## Recommended Docker Compose Deployment
 
-The example below is the documented baseline:
+The supported production deployment path is Docker Compose with two containers:
+- `IT-Assets` for the app
+- `IT-Assets-MariaDB` for the database
+
+Use the main Compose file in this repository:
+
+```bash
+docker compose -f docker/docker-compose.example.yml up -d --build
+```
+
+That file is equivalent to this deployment shape:
 
 ```yaml
 services:
+  mariadb:
+    container_name: IT-Assets-MariaDB
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: it_assets
+      MARIADB_USER: it_assets
+      MARIADB_PASSWORD: change-me
+      MARIADB_ROOT_PASSWORD: change-me-root
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   it-assets:
     container_name: IT-Assets
     build:
       context: ../apps/IT-Assets
       dockerfile: docker/Dockerfile
+      args:
+        DB_PROVIDER: mariadb
+    depends_on:
+      mariadb:
+        condition: service_healthy
     ports:
       - "4050:4050"
     environment:
       PORT: 4050
       APP_URL: http://localhost:4050
       SESSION_SECRET: SECRET_SESSION_KEY_CHANGE_ME
-      DATABASE_URL: file:/data/db/app.db
+      SESSION_COOKIE_SECURE: auto
+      DB_MODE: local
+      DB_PROVIDER: mariadb
+      DATABASE_URL: mysql://it_assets:change-me@mariadb:3306/it_assets
       APP_DATA_DIR: /data
     volumes:
       - /opt/docker/data/it-assets:/data
     restart: unless-stopped
+
+volumes:
+  mariadb_data:
 ```
 
 Basic startup flow:
 
 1. Clone the repository.
-2. Create a Compose file using the example above.
-3. Create the host data directory:
+2. Review `docker/docker-compose.example.yml` and change `APP_URL`, `SESSION_SECRET`, and database passwords.
+3. Create the host app data directory if you use the default bind mount:
 
 ```bash
 mkdir -p /opt/docker/data/it-assets
@@ -69,14 +106,15 @@ mkdir -p /opt/docker/data/it-assets
 4. Build and start the container:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker/docker-compose.example.yml up -d --build
 ```
 
 5. Open `http://localhost:4050` and complete the first-run setup wizard.
 
-On container startup, the app now automatically:
-- creates its internal `/data/db`, `/data/state`, and `/data/uploads` folders if they do not exist
-- initializes the SQLite database schema automatically on first startup
+On container startup, the app automatically:
+- waits for MariaDB to become healthy
+- creates its internal `/data/state` and `/data/uploads` folders if they do not exist
+- applies MariaDB Prisma migrations automatically on first startup and later updates
 - bootstraps missing default roles and asset statuses without overwriting existing records
 
 You should not need to run `npx prisma ...` inside the container.
@@ -103,7 +141,9 @@ These are the main environment values most deployments need:
 - `APP_URL`: the public base URL used for redirects, logout, and authentication callbacks.
 - `SESSION_SECRET`: the secret used to sign session data. Change this before production use.
 - `SESSION_COOKIE_SECURE`: optional. `auto` works well for most deployments and turns on secure cookies automatically when `APP_URL` uses `https`.
-- `DATABASE_URL`: Prisma database connection string. For Docker, the normal SQLite path is `file:/data/db/app.db`.
+- `DB_MODE`: should be `local` for the supported Docker Compose deployment.
+- `DB_PROVIDER`: should be `mariadb` for the supported Docker Compose deployment.
+- `DATABASE_URL`: Prisma database connection string. For Docker Compose, use the MariaDB service hostname, for example `mysql://it_assets:change-me@mariadb:3306/it_assets`.
 - `APP_DATA_DIR`: root directory for runtime app data such as state files. In Docker, this should normally be `/data`.
 
 ## APP_URL Guidance
@@ -152,12 +192,14 @@ In the Docker flow above, persistent data is stored in the mounted host director
 ```
 
 Inside the container, the app uses:
-- `/data/db/app.db` for the SQLite database
 - `/data/state` for app state files
+- `/data/uploads` for uploaded app files
 
-***Future Updates inlcude external DB options***
+MariaDB stores database files in the Compose-managed `mariadb_data` volume by default. You can replace that volume with a bind mount if your host backup strategy requires a specific path.
 
-If you change the mounted volume path, keep `DATABASE_URL` and `APP_DATA_DIR` aligned with that layout.
+SQLite is not the supported production deployment path. It can remain useful for local development or targeted tests, but production Docker deployments should use MariaDB.
+
+SQL Server external mode is experimental and paused. The related code may remain in the repository for future work, but it is not the recommended deployment path and the normal Docker Compose flow should not route through `/setup/db`.
 
 ## Updating The App
 
@@ -172,7 +214,7 @@ git pull
 2. Rebuild and restart:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker/docker-compose.example.yml up -d --build
 ```
 
 3. Let the container restart normally. It applies pending migrations automatically on startup before the app server begins accepting requests.
@@ -220,6 +262,8 @@ If you want to run the app without Docker:
 
 ## Notes
 
-- The app currently uses SQLite by default.
+- The supported production database is MariaDB through Docker Compose.
+- SQLite is not the production deployment path.
+- SQL Server external mode is experimental and paused.
 - Labels are fully implemented and support preview and print workflows.
 - Import/Export supports assets, users, categories, departments, locations, and labels, with labels using JSON as the full-fidelity format.

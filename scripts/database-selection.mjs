@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const defaultDatabaseMode = "local";
-const defaultDatabaseProvider = "sqlite";
+const defaultDatabaseProvider = "mariadb";
 const validModes = new Set(["local", "external"]);
 const validProviders = new Set(["sqlite", "postgresql", "mariadb", "sqlserver"]);
 const allowedCombinations = new Set([
@@ -23,6 +23,9 @@ const prismaProviderNames = {
   postgresql: "postgresql",
   mariadb: "mysql",
   sqlserver: "sqlserver",
+};
+const defaultLocalDatabaseUrls = {
+  mariadb: "mysql://it_assets:change-me@mariadb:3306/it_assets",
 };
 
 function normalizeEnvValue(value) {
@@ -126,6 +129,10 @@ export function resolveEffectiveDatabaseUrl({ env = process.env, workspaceDir = 
 
   if (envDatabaseUrl) {
     return envDatabaseUrl;
+  }
+
+  if (config.mode === "local" && config.provider in defaultLocalDatabaseUrls) {
+    return defaultLocalDatabaseUrls[config.provider];
   }
 
   if (config.mode !== "external" || config.provider !== "sqlserver") {

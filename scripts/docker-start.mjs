@@ -14,7 +14,8 @@ const workspaceDir = process.cwd();
 const databaseSelection = assertScriptDatabaseSelection({ workspaceDir });
 const databaseConnectionInfo = resolveDatabaseConnectionInfo({ workspaceDir });
 const appDataDir = (process.env.APP_DATA_DIR ?? "/data").trim() || "/data";
-const databaseUrl = (process.env.DATABASE_URL ?? "file:/data/db/app.db").trim() || "file:/data/db/app.db";
+const defaultMariaDbUrl = "mysql://it_assets:change-me@mariadb:3306/it_assets";
+const databaseUrl = (process.env.DATABASE_URL ?? defaultMariaDbUrl).trim() || defaultMariaDbUrl;
 const prismaMigrationsSourceRoot = path.join(workspaceDir, "prisma", "migrations");
 
 function resolveSqliteDatabasePath(url) {
