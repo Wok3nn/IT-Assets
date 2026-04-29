@@ -40,7 +40,7 @@ const warningClassName =
 const toggleClassName =
   "h-4 w-4 rounded border-slate-300 text-[#F69629] focus:ring-[#F69629] dark:border-[#596166] dark:bg-[#2f3437]";
 const helpPopoverId = "entra-provider-setup-help";
-const ENTRA_REDIRECT_URI_EXAMPLE = "https://app.domain.local/api/auth/entra/callback";
+const ENTRA_REDIRECT_URI_EXAMPLE = "https://it-assets.example.com/api/auth/entra/callback";
 
 function buildInitialMappings(settings: AuthenticationSettings, roles: RoleOption[]) {
   return roles.map((role) => {

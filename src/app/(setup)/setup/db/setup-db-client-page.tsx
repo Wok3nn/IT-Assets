@@ -271,7 +271,7 @@ export default function DatabaseSetupClientPage() {
                   <FieldLabelText>Host</FieldLabelText>
                   <TextField
                     autoComplete="off"
-                    placeholder="sqlserver.example.local"
+                    placeholder="sqlserver.example.com"
                     value={form.host}
                     onChange={(event) => updateField("host", event.target.value)}
                   />

@@ -12,6 +12,9 @@ progress.md
 /data/db/*.db-journal
 /data/uploads/*
 /prisma/data/
+!/prisma/data/
+/prisma/data/*
+!/prisma/data/.gitkeep
 tsconfig.tsbuildinfo
 !/data/uploads/.gitkeep
 !/data/db/.gitkeep

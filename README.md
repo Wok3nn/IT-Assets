@@ -1,269 +1,300 @@
-<p align="center">
-  <img 
-    src="https://github.com/user-attachments/assets/786c4b73-204c-49bc-bfbf-cbe17c38e8f7" 
-    width="200" 
-    alt="IT-Asset-Tracker Logo"
-  />
-</p>
+# IT Asset Tracker
 
-<h1 align="center">IT-Assets</h1>
+## Overview
 
-<p align="center">
-  A self-hosted asset management app for teams that need a simple way to track equipment, people, locations, categories, and printable labels from one web interface.
-</p>
+IT Asset Tracker is a self-hosted web app for managing IT equipment, assigned users, departments, locations, categories, and printable asset labels. It is designed for small and mid-sized internal teams that want a practical inventory system they can run with Docker.
 
-# IT-Asset-Tracker
+The recommended production deployment is Docker Compose with the app container and a MariaDB container. No external database is required for the default setup.
 
-IT-Asset-Tracker is a self-hosted asset management app for teams that need a simple way to track equipment, people, locations, categories, and printable labels from one web interface.
+## Features
 
-It is designed for small to mid-sized internal environments that want:
-- a clean browser-based inventory system
-- local admin setup and optional Microsoft Entra sign-in
-- printable asset labels with reusable templates
-- Docker Compose deployment with MariaDB-backed persistence
+- Asset management with assignment, status, category, department, and location tracking
+- Category and location hierarchy management
+- Department and user management
+- Role-based access foundations
+- CSV import and export workflows
+- Label templates with QR code and barcode support
+- Printable labels for assets
+- Theme-aware branding settings
+- Local authentication with optional Microsoft Entra sign-in configuration
+- Docker-first deployment with MariaDB persistence
 
-## What It Does
+## Quick Start (Docker - Recommended)
 
-The app currently includes:
-- first-run setup for the initial workspace and admin account
-- asset, user, category, department, and location management
-- role and permission controls
-- import/export tools for multiple entity types
-- label template creation, preview, and print workflows
-- theme-aware branding and a Docker-ready deployment path
+### Folder Structure
 
-## Recommended Docker Compose Deployment
+The production compose example is written for this host layout:
 
-The supported production deployment path is Docker Compose with two containers:
-- `IT-Assets` for the app
-- `IT-Assets-MariaDB` for the database
-
-Use the main Compose file in this repository:
-
-```bash
-docker compose -f docker/docker-compose.example.yml up -d --build
+```text
+/opt/docker/
++-- apps/
+|   +-- it-assets-tracker/
++-- compose/
+|   +-- IT-Assets-Tracker.yml
++-- data/
+    +-- it-assets-tracker/
+        +-- app/
+        +-- mariadb/
 ```
 
-That file is equivalent to this deployment shape:
+### Step 1: Clone Repo
+
+```bash
+mkdir -p /opt/docker/apps
+cd /opt/docker/apps
+git clone <repo-url> it-assets-tracker
+cd it-assets-tracker
+```
+
+### Step 2: Copy Compose File
+
+The production compose example lives at:
+
+```text
+docker/docker-compose.example.yml
+```
+
+Copy it to your compose directory:
+
+```bash
+mkdir -p /opt/docker/compose
+cp /opt/docker/apps/it-assets-tracker/docker/docker-compose.example.yml /opt/docker/compose/IT-Assets-Tracker.yml
+```
+
+### Step 3: Review/Edit Compose File
+
+Before production use, open `/opt/docker/compose/IT-Assets-Tracker.yml` and review:
+
+- `APP_URL`: defaults to `http://localhost:4050`; change it to your real external URL when using a domain or reverse proxy.
+- `SESSION_SECRET`: replace `change-me` with a long random value.
+- `MARIADB_PASSWORD` and `MARIADB_ROOT_PASSWORD`: replace the placeholders before production use.
+- Data paths: defaults are under `/opt/docker/data/it-assets-tracker`.
+
+`APP_URL` should not include a trailing slash.
+
+### Step 4: Start Containers
+
+```bash
+mkdir -p /opt/docker/data/it-assets-tracker/app
+mkdir -p /opt/docker/data/it-assets-tracker/mariadb
+
+docker compose -f /opt/docker/compose/IT-Assets-Tracker.yml up -d --build
+```
+
+### Step 5: Access App
+
+Open:
+
+```text
+http://localhost:4050
+```
+
+On first launch, complete the setup wizard to create the workspace and first administrator account.
+
+## Docker Compose Example
+
+This is the full recommended production compose file:
 
 ```yaml
 services:
+  # MariaDB is the default and supported production database.
   mariadb:
     container_name: IT-Assets-MariaDB
     image: mariadb:11.4
     environment:
+      # Change these before production use.
       MARIADB_DATABASE: it_assets
       MARIADB_USER: it_assets
       MARIADB_PASSWORD: change-me
       MARIADB_ROOT_PASSWORD: change-me-root
     volumes:
-      - mariadb_data:/var/lib/mysql
+      # Bind mount for straightforward host backups.
+      - /opt/docker/data/it-assets-tracker/mariadb:/var/lib/mysql
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD --silent"]
       interval: 5s
       timeout: 5s
       retries: 20
 
+  # Main IT Asset Tracker application.
   it-assets:
-    container_name: IT-Assets
+    container_name: IT-Assets-Tracker
     build:
-      context: ../apps/IT-Assets
+      # This absolute path lets the compose file live in /opt/docker/compose.
+      context: /opt/docker/apps/it-assets-tracker
       dockerfile: docker/Dockerfile
       args:
+        DB_MODE: local
         DB_PROVIDER: mariadb
     depends_on:
       mariadb:
         condition: service_healthy
     ports:
-      - "4050:4050"
+      # Production default. Use another host port, such as 4051, for test stacks.
+      - "${IT_ASSETS_HOST_PORT:-4050}:4050"
     environment:
       PORT: 4050
-      APP_URL: http://localhost:4050
-      SESSION_SECRET: SECRET_SESSION_KEY_CHANGE_ME
+      # Use the externally reachable app URL here. Do not include a trailing slash.
+      APP_URL: ${APP_URL:-http://localhost:4050}
+      SESSION_SECRET: change-me
       SESSION_COOKIE_SECURE: auto
       DB_MODE: local
       DB_PROVIDER: mariadb
       DATABASE_URL: mysql://it_assets:change-me@mariadb:3306/it_assets
       APP_DATA_DIR: /data
     volumes:
-      - /opt/docker/data/it-assets:/data
+      # App runtime state and uploads.
+      - /opt/docker/data/it-assets-tracker/app:/data
     restart: unless-stopped
-
-volumes:
-  mariadb_data:
 ```
 
-Basic startup flow:
+### Services
 
-1. Clone the repository.
-2. Review `docker/docker-compose.example.yml` and change `APP_URL`, `SESSION_SECRET`, and database passwords.
-3. Create the host app data directory if you use the default bind mount:
+- `it-assets`: the Next.js application container.
+- `mariadb`: the MariaDB database container used by the default deployment.
 
-```bash
-mkdir -p /opt/docker/data/it-assets
+### Key Configs
+
+- `ports`: exposes the app on host port `4050` by default.
+- `APP_URL`: the public URL users type into their browser.
+- `DATABASE_URL`: points the app container to the MariaDB service over the Docker network.
+- `volumes`: persist app state/uploads and MariaDB data under `/opt/docker/data/it-assets-tracker`.
+
+### Database Notes
+
+- MariaDB in Docker is the default production database.
+- No external database is required.
+- SQLite is not used for production deployments.
+- SQL Server support is currently paused and experimental.
+
+## Production vs Test Deployments
+
+The production compose file exposes host port `4050`.
+
+Do not run two IT Asset Tracker stacks on the same host port. For test deployments, use another port such as `4051`.
+
+A test compose file is provided at:
+
+```text
+docker/docker-compose.test.yml
 ```
-
-4. Build and start the container:
-
-```bash
-docker compose -f docker/docker-compose.example.yml up -d --build
-```
-
-5. Open `http://localhost:4050` and complete the first-run setup wizard.
-
-On container startup, the app automatically:
-- waits for MariaDB to become healthy
-- creates its internal `/data/state` and `/data/uploads` folders if they do not exist
-- applies MariaDB Prisma migrations automatically on first startup and later updates
-- bootstraps missing default roles and asset statuses without overwriting existing records
-
-You should not need to run `npx prisma ...` inside the container.
-
-## First-Run Setup
-
-<img width="1172" height="883" alt="image" src="https://github.com/user-attachments/assets/74397022-3000-437d-8d90-95cf60228096" />
-
-On a fresh database, the app opens the First-Run Setup page. This creates the initial workspace and the first local admin account.
-
-After setup is complete:
-- `/setup` is no longer the normal landing page
-- you sign in through `/login`
-<img width="469" height="591" alt="image" src="https://github.com/user-attachments/assets/11601469-0a0f-4dbb-9c4a-d863bf6f5789" />
-
-- the main dashboard becomes available
-<img width="2276" height="1250" alt="image" src="https://github.com/user-attachments/assets/db2d43d7-66e7-409e-b14e-9f02f07efa68" />
-
-## Key Environment Variables
-
-These are the main environment values most deployments need:
-
-- `PORT`: the web server port inside the container. Default is `4050`.
-- `APP_URL`: the public base URL used for redirects, logout, and authentication callbacks.
-- `SESSION_SECRET`: the secret used to sign session data. Change this before production use.
-- `SESSION_COOKIE_SECURE`: optional. `auto` works well for most deployments and turns on secure cookies automatically when `APP_URL` uses `https`.
-- `DB_MODE`: should be `local` for the supported Docker Compose deployment.
-- `DB_PROVIDER`: should be `mariadb` for the supported Docker Compose deployment.
-- `DATABASE_URL`: Prisma database connection string. For Docker Compose, use the MariaDB service hostname, for example `mysql://it_assets:change-me@mariadb:3306/it_assets`.
-- `APP_DATA_DIR`: root directory for runtime app data such as state files. In Docker, this should normally be `/data`.
-
-## APP_URL Guidance
-
-`APP_URL` must match the real URL users can reach.
-
-Examples:
-- `http://localhost:4050` for a local test deployment
-- `https://assets.example.com` behind a reverse proxy
-
-Important:
-- if you use a reverse proxy, set `APP_URL` to the public URL, not the container hostname
-- do not use internal Docker hostnames for redirects or callbacks
-- logout and Microsoft Entra callback behavior depend on this being correct
-
-## Microsoft Entra SSO Note
-
-If you enable Microsoft Entra sign-in, the callback URL in the Entra app registration must exactly match the deployed app URL.
 
 Example:
 
-```text
-https://assets.example.com/api/auth/entra/callback
+```bash
+cp /opt/docker/apps/it-assets-tracker/docker/docker-compose.test.yml /opt/docker/compose/IT-Assets-Tracker-Test.yml
+docker compose -f /opt/docker/compose/IT-Assets-Tracker-Test.yml up -d --build
 ```
 
-Use the same public base URL as `APP_URL`. Do not register an internal container hostname.
+The test compose file uses:
 
-For Entra group-to-role mapping to work reliably, especially when the ID token does not contain the `groups` claim because of group overage, the Entra app registration also needs Microsoft Graph delegated permission for signed-in user group lookup:
+- `IT-Assets-Tracker-Test`
+- `IT-Assets-MariaDB-Test`
+- host port `4051`
+- data path `/opt/docker/data/it-assets-tracker-test`
 
-- `User.Read`
+## APP_URL And Access
 
-After adding the permission, grant tenant/admin consent if your Entra tenant requires it for this app. The app uses the signed-in user token to call:
+`APP_URL` must match the URL users use to reach the app.
 
-```text
-GET https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$select=id
-```
-
-Group mappings continue to match Entra group Object IDs from Settings > Authentication. If no mapped group is found, the app falls back to the user’s local stored role.
-
-## Where Data Is Stored
-
-In the Docker flow above, persistent data is stored in the mounted host directory:
+Examples:
 
 ```text
-/opt/docker/data/it-assets
+http://localhost:4050
+http://your-server-ip:4050
+https://it-assets.example.com
 ```
 
-Inside the container, the app uses:
-- `/data/state` for app state files
-- `/data/uploads` for uploaded app files
+Rules:
 
-MariaDB stores database files in the Compose-managed `mariadb_data` volume by default. You can replace that volume with a bind mount if your host backup strategy requires a specific path.
+- Do not include a trailing slash.
+- For direct IP access, use `http://your-server-ip:4050`.
+- For domain access, use the external domain, such as `https://it-assets.example.com`.
+- Do not use internal Docker service names for `APP_URL`.
 
-SQLite is not the supported production deployment path. It can remain useful for local development or targeted tests, but production Docker deployments should use MariaDB.
+## Reverse Proxy Notes
 
-SQL Server external mode is experimental and paused. The related code may remain in the repository for future work, but it is not the recommended deployment path and the normal Docker Compose flow should not route through `/setup/db`.
+Direct access works with:
 
-## Updating The App
+```yaml
+ports:
+  - "4050:4050"
+```
 
-For a typical Docker deployment:
+For reverse-proxy-only access, bind the app to localhost on the Docker host:
 
-1. Pull the latest changes:
+```yaml
+ports:
+  - "127.0.0.1:4050:4050"
+```
+
+For Nginx Proxy Manager, configure the proxy host as:
+
+```text
+Scheme: http
+Forward Hostname / IP: Docker host IP, or 127.0.0.1 if Nginx Proxy Manager runs on the same host
+Forward Port: 4050
+```
+
+Then set:
+
+```text
+APP_URL=https://it-assets.example.com
+```
+
+## Data Storage
+
+Default host paths:
+
+```text
+/opt/docker/data/it-assets-tracker/app
+/opt/docker/data/it-assets-tracker/mariadb
+```
+
+Inside the app container:
+
+```text
+/data
+```
+
+Inside the MariaDB container:
+
+```text
+/var/lib/mysql
+```
+
+Back up both host directories for a complete deployment backup.
+
+## Updating
 
 ```bash
+cd /opt/docker/apps/it-assets-tracker
 git pull
+docker compose -f /opt/docker/compose/IT-Assets-Tracker.yml up -d --build
 ```
 
-2. Rebuild and restart:
-
-```bash
-docker compose -f docker/docker-compose.example.yml up -d --build
-```
-
-3. Let the container restart normally. It applies pending migrations automatically on startup before the app server begins accepting requests.
-
-Avoid `npx prisma ...` inside the container. If you ever need a manual Prisma command, use the project scripts such as `npm run db:deploy` so the local pinned Prisma version is used.
-
-## Validation Before Push
-
-The repository includes a lightweight GitHub Actions validation workflow that runs on pull requests and pushes to `main`.
-
-It checks:
-- dependency install with `npm ci`
-- TypeScript validation with `npm run typecheck`
-- a full production build with `npm run build`
-
-If you want to run the same checks locally before pushing:
-
-```bash
-npm ci
-npm run typecheck
-npm run build
-```
-
-## Optional `.env.example`
-
-The repository includes [.env.example](./.env.example) as an optional reference for local development and custom deployments.
-
-It is useful when:
-- running the app outside Docker
-- creating your own `.env` file
-- checking the expected variable names
-
-It is not required if your Docker Compose file already provides the needed environment values.
+The app runs provider-aware Prisma generation, MariaDB migrations, and baseline bootstrap automatically during container startup.
 
 ## Local Development
 
-If you want to run the app without Docker:
+For local development outside Docker:
 
-1. Copy `.env.example` to `.env`
-2. Install dependencies with `npm install`
-3. Generate Prisma client with `npm run db:generate`
-4. Run migrations with `npm run db:deploy`
-5. Bootstrap missing baseline roles and statuses with `npm run db:bootstrap`
-6. Start the dev server with `npm run dev`
+```bash
+npm install
+npm run db:generate
+npm run dev
+```
 
-## Notes
+Use `.env.example` as a starting point for local environment variables. Local development may use different database settings, but production documentation assumes Docker Compose with MariaDB.
 
-- The supported production database is MariaDB through Docker Compose.
-- SQLite is not the production deployment path.
-- SQL Server external mode is experimental and paused.
-- Labels are fully implemented and support preview and print workflows.
-- Import/Export supports assets, users, categories, departments, locations, and labels, with labels using JSON as the full-fidelity format.
+## Security Notes
+
+- Change `SESSION_SECRET` before production use.
+- Change MariaDB passwords before production use.
+- Keep `/opt/docker/data/it-assets-tracker` backed up and access-controlled.
+- Do not commit real `.env` files, database files, secrets, tokens, or exported production data.
+
+## Status
+
+MariaDB container-based deployment is the supported production path. SQL Server integration is paused/experimental, and SQLite is not the production deployment path.

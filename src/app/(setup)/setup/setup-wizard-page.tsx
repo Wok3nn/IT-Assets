@@ -187,7 +187,7 @@ export default function SetupWizardPage() {
               <FieldLabel>
                 <FieldLabelText>Admin email</FieldLabelText>
                 <TextField
-                  placeholder="admin@example.com"
+                  placeholder="user@example.com"
                   type="email"
                   value={form.adminEmail}
                   onChange={(event) => updateField("adminEmail", event.target.value)}

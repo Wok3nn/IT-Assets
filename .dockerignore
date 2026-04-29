@@ -3,6 +3,9 @@
 .next
 coverage
 data
+!prisma/data
+prisma/data/*
+!prisma/data/.gitkeep
 dist
 docker/docker-compose.example.yml
 docs
