@@ -3,11 +3,16 @@ import net from "node:net";
 import { copyFile, cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { assertScriptDatabaseSelection, resolveDatabaseConnectionInfo } from "./database-selection.mjs";
+import {
+  assertScriptDatabaseSelection,
+  isExternalBootstrapReady,
+  resolveDatabaseConnectionInfo,
+  resolveEffectiveDatabaseUrl,
+} from "./database-selection.mjs";
 
 const workspaceDir = process.cwd();
 const databaseSelection = assertScriptDatabaseSelection({ workspaceDir });
-const databaseConnectionInfo = resolveDatabaseConnectionInfo();
+const databaseConnectionInfo = resolveDatabaseConnectionInfo({ workspaceDir });
 const appDataDir = (process.env.APP_DATA_DIR ?? "/data").trim() || "/data";
 const databaseUrl = (process.env.DATABASE_URL ?? "file:/data/db/app.db").trim() || "file:/data/db/app.db";
 const prismaMigrationsSourceRoot = path.join(workspaceDir, "prisma", "migrations");
@@ -208,17 +213,28 @@ async function waitForDatabaseAvailability() {
 }
 
 async function main() {
+  const effectiveDatabaseUrl = resolveEffectiveDatabaseUrl({ workspaceDir });
+
+  if (effectiveDatabaseUrl) {
+    process.env.DATABASE_URL = effectiveDatabaseUrl;
+  }
+
   await ensureStartupDirectories();
-  await runNodeCommand([path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "generate"], "Prisma generate");
-  await waitForDatabaseAvailability();
-  await prepareProviderMigrations();
 
-  await runNodeCommand(
-    [path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "migrate", "deploy"],
-    "Prisma migrate deploy",
-  );
+  if (databaseSelection.mode === "external" && databaseSelection.provider === "sqlserver" && !isExternalBootstrapReady({ workspaceDir })) {
+    console.log("External SQL Server bootstrap is not complete yet. Skipping Prisma startup work and starting the app for /setup/db.");
+  } else {
+    await runNodeCommand([path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "generate"], "Prisma generate");
+    await waitForDatabaseAvailability();
+    await prepareProviderMigrations();
 
-  await runNodeCommand([path.join(workspaceDir, "scripts", "bootstrap.mjs")], "Application bootstrap");
+    await runNodeCommand(
+      [path.join(workspaceDir, "scripts", "prisma-provider.mjs"), "migrate", "deploy"],
+      "Prisma migrate deploy",
+    );
+
+    await runNodeCommand([path.join(workspaceDir, "scripts", "bootstrap.mjs")], "Application bootstrap");
+  }
 
   if (process.env.IT_ASSETS_SKIP_SERVER_START === "1") {
     console.log("Startup initialization completed. Server start skipped by IT_ASSETS_SKIP_SERVER_START=1.");

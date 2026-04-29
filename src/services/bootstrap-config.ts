@@ -1,23 +1,17 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { z } from "zod";
 
 import { readDatabaseConfig } from "@/services/database-config";
+import { resolveExternalSqlServerBootstrapState, sqlServerConnectionSchema } from "@/services/external-database";
 import { logger } from "@/services/logger";
-
-const bootstrapConnectionSchema = z.object({
-  host: z.string(),
-  port: z.number().int(),
-  database: z.string(),
-  username: z.string(),
-  password: z.string(),
-});
 
 const bootstrapConfigSchema = z.object({
   dbMode: z.enum(["local", "external"]).optional(),
   dbProvider: z.enum(["sqlite", "postgresql", "mariadb", "sqlserver"]).optional(),
-  connection: bootstrapConnectionSchema.optional(),
+  connection: sqlServerConnectionSchema.optional(),
   initialized: z.boolean(),
 });
 
@@ -43,19 +37,30 @@ async function ensureBootstrapStateDir() {
   await mkdir(getBootstrapStateDir(), { recursive: true });
 }
 
+function ensureBootstrapStateDirSync() {
+  if (!existsSync(getBootstrapStateDir())) {
+    mkdirSync(getBootstrapStateDir(), { recursive: true });
+  }
+}
+
+function parseBootstrapConfig(rawConfig: unknown) {
+  const parsed = bootstrapConfigSchema.safeParse(rawConfig);
+  return parsed.success ? parsed.data : null;
+}
+
 export async function readBootstrapConfig(): Promise<BootstrapConfig> {
   await ensureBootstrapStateDir();
 
   try {
     const fileContents = await readFile(getBootstrapConfigPath(), "utf8");
-    const parsed = bootstrapConfigSchema.safeParse(JSON.parse(fileContents));
+    const parsed = parseBootstrapConfig(JSON.parse(fileContents));
 
-    if (!parsed.success) {
+    if (!parsed) {
       logger.warn("[bootstrap] Invalid bootstrap config. Falling back to defaults.");
       return defaultBootstrapConfig;
     }
 
-    return parsed.data;
+    return parsed;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       logger.info("Bootstrap config not found");
@@ -67,11 +72,35 @@ export async function readBootstrapConfig(): Promise<BootstrapConfig> {
   }
 }
 
+export function readBootstrapConfigSync(): BootstrapConfig {
+  ensureBootstrapStateDirSync();
+
+  try {
+    const fileContents = readFileSync(getBootstrapConfigPath(), "utf8");
+    const parsed = parseBootstrapConfig(JSON.parse(fileContents));
+
+    if (!parsed) {
+      return defaultBootstrapConfig;
+    }
+
+    return parsed;
+  } catch {
+    return defaultBootstrapConfig;
+  }
+}
+
 export async function writeBootstrapConfig(input: BootstrapConfig) {
   await ensureBootstrapStateDir();
 
   const normalized = bootstrapConfigSchema.parse(input);
-  await writeFile(getBootstrapConfigPath(), `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
+  await writeFile(getBootstrapConfigPath(), `${JSON.stringify(normalized, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await chmod(getBootstrapConfigPath(), 0o600).catch(() => {});
+  try {
+    chmodSync(getBootstrapConfigPath(), 0o600);
+  } catch {}
 
   return normalized;
 }
@@ -87,6 +116,24 @@ export async function isBootstrapComplete() {
       databaseConfig.provider === "mariadb")
   ) {
     return true;
+  }
+
+  if (
+    databaseConfig.isSupportedCombination &&
+    databaseConfig.mode === "external" &&
+    databaseConfig.provider === "sqlserver"
+  ) {
+    const config = await readBootstrapConfig();
+    const externalState = resolveExternalSqlServerBootstrapState({
+      bootstrapConfig: config,
+      databaseConfig,
+    });
+
+    if (!externalState.isComplete) {
+      logger.info("Bootstrap incomplete");
+    }
+
+    return externalState.isComplete;
   }
 
   const config = await readBootstrapConfig();

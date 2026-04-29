@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 const defaultDatabaseMode = "local";
@@ -10,7 +11,7 @@ const allowedCombinations = new Set([
   "external:sqlserver",
   "local:sqlite",
 ]);
-const currentScriptProviders = new Set(["sqlite", "postgresql", "mariadb"]);
+const currentScriptProviders = new Set(["sqlite", "postgresql", "mariadb", "sqlserver"]);
 const providerDefaultPorts = {
   sqlite: null,
   postgresql: 5432,
@@ -26,6 +27,45 @@ const prismaProviderNames = {
 
 function normalizeEnvValue(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function getAppDataDir({ env = process.env, workspaceDir = process.cwd() } = {}) {
+  const appDataDir = typeof env.APP_DATA_DIR === "string" ? env.APP_DATA_DIR.trim() : "";
+  return appDataDir || path.join(workspaceDir, "data");
+}
+
+function getBootstrapConfigPath(options = {}) {
+  return path.join(getAppDataDir(options), "state", "bootstrap.json");
+}
+
+function readBootstrapConfigSync(options = {}) {
+  try {
+    const rawConfig = JSON.parse(fs.readFileSync(getBootstrapConfigPath(options), "utf8"));
+    return typeof rawConfig === "object" && rawConfig ? rawConfig : null;
+  } catch {
+    return null;
+  }
+}
+
+function isValidSqlServerConnection(connection) {
+  return Boolean(
+    connection &&
+      typeof connection.host === "string" &&
+      connection.host.trim() &&
+      Number.isInteger(connection.port) &&
+      connection.port > 0 &&
+      connection.port <= 65535 &&
+      typeof connection.database === "string" &&
+      connection.database.trim() &&
+      typeof connection.username === "string" &&
+      connection.username.trim() &&
+      typeof connection.password === "string" &&
+      connection.password.length > 0,
+  );
+}
+
+function buildSqlServerDatabaseUrl(connection) {
+  return `sqlserver://${connection.host.trim()}:${connection.port};database=${encodeURIComponent(connection.database.trim())};user=${encodeURIComponent(connection.username.trim())};password=${encodeURIComponent(connection.password)};encrypt=true;trustServerCertificate=true`;
 }
 
 export function readDatabaseSelectionConfig(env = process.env) {
@@ -80,9 +120,46 @@ export function resolveDatabaseSelection({ env = process.env, workspaceDir = pro
   };
 }
 
-export function resolveDatabaseConnectionInfo({ env = process.env } = {}) {
+export function resolveEffectiveDatabaseUrl({ env = process.env, workspaceDir = process.cwd() } = {}) {
+  const config = readDatabaseSelectionConfig(env);
+  const envDatabaseUrl = typeof env.DATABASE_URL === "string" ? env.DATABASE_URL.trim() : "";
+
+  if (envDatabaseUrl) {
+    return envDatabaseUrl;
+  }
+
+  if (config.mode !== "external" || config.provider !== "sqlserver") {
+    return envDatabaseUrl;
+  }
+
+  const bootstrapConfig = readBootstrapConfigSync({ env, workspaceDir });
+
+  if (
+    !bootstrapConfig ||
+    bootstrapConfig.initialized !== true ||
+    bootstrapConfig.dbMode !== "external" ||
+    bootstrapConfig.dbProvider !== "sqlserver" ||
+    !isValidSqlServerConnection(bootstrapConfig.connection)
+  ) {
+    return "";
+  }
+
+  return buildSqlServerDatabaseUrl(bootstrapConfig.connection);
+}
+
+export function isExternalBootstrapReady({ env = process.env, workspaceDir = process.cwd() } = {}) {
+  const config = readDatabaseSelectionConfig(env);
+
+  if (!config.isSupportedCombination || config.mode !== "external" || config.provider !== "sqlserver") {
+    return false;
+  }
+
+  return Boolean(resolveEffectiveDatabaseUrl({ env, workspaceDir }));
+}
+
+export function resolveDatabaseConnectionInfo({ env = process.env, workspaceDir = process.cwd() } = {}) {
   const selection = readDatabaseSelectionConfig(env);
-  const databaseUrl = typeof env.DATABASE_URL === "string" ? env.DATABASE_URL.trim() : "";
+  const databaseUrl = resolveEffectiveDatabaseUrl({ env, workspaceDir });
 
   if (!databaseUrl) {
     return {
