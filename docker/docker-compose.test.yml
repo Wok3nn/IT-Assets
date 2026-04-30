@@ -19,7 +19,7 @@ services:
   it-assets:
     container_name: IT-Assets-Tracker-Test
     build:
-      context: /opt/docker/apps/it-assets-tracker
+      context: /opt/docker/apps/It-Assets-Tracker
       dockerfile: docker/Dockerfile
       args:
         DB_MODE: local

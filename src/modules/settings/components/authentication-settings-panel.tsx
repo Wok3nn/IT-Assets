@@ -41,6 +41,7 @@ const toggleClassName =
   "h-4 w-4 rounded border-slate-300 text-[#F69629] focus:ring-[#F69629] dark:border-[#596166] dark:bg-[#2f3437]";
 const helpPopoverId = "entra-provider-setup-help";
 const ENTRA_REDIRECT_URI_EXAMPLE = "https://it-assets.example.com/api/auth/entra/callback";
+const ENTRA_GROUP_OBJECT_ID_PATTERN = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
 function buildInitialMappings(settings: AuthenticationSettings, roles: RoleOption[]) {
   return roles.map((role) => {
@@ -305,7 +306,7 @@ export function AuthenticationSettingsPanel({
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Group mapping</p>
             <h2 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-100">Entra groups to app roles</h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Prepare one optional Entra group mapping per app role. On Entra sign-in, a matching mapped group becomes the user’s effective app role for that session. If nothing matches, the stored local role remains the fallback.
+              Prepare one optional Entra group mapping per app role. Use the group Object ID GUID from Entra. On Entra sign-in, a matching mapped group becomes the user&apos;s effective app role for that session. If nothing matches, the stored local role remains the fallback.
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-[#34393c] dark:text-slate-300">{roles.length} roles</span>
@@ -325,9 +326,12 @@ export function AuthenticationSettingsPanel({
                 <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{mapping.roleName}</div>
                 <TextField
                   className="h-10 rounded-xl px-3 py-2 text-sm"
+                  maxLength={36}
                   name="groupMappingGroupId"
                   onChange={(event) => updateMapping(mapping.roleKey, "groupId", event.target.value)}
-                  placeholder="Object ID"
+                  pattern={ENTRA_GROUP_OBJECT_ID_PATTERN}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  title="Enter a valid Entra group Object ID in GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx."
                   value={mapping.groupId}
                 />
                 <TextField

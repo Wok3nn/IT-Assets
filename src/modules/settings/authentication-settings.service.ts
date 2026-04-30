@@ -11,6 +11,7 @@ const AUTH_ENTRA_CLIENT_ID_KEY = "authentication.entra.clientId";
 const AUTH_ENTRA_SECRET_REFERENCE_KEY = "authentication.entra.secretReference";
 const AUTH_ENTRA_REDIRECT_URI_KEY = "authentication.entra.redirectUri";
 const AUTH_ENTRA_GROUP_MAPPINGS_KEY = "authentication.entra.groupMappings";
+const ENTRA_GROUP_OBJECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const AUTHENTICATION_SETTINGS_KEYS = [
   AUTH_LOCAL_ENABLED_KEY,
@@ -56,7 +57,13 @@ export type EntraAuthenticationConfig = {
 const authenticationGroupRoleMappingSchema = z.object({
   roleKey: z.string().trim().min(1).max(80),
   roleName: z.string().trim().min(1).max(120),
-  groupId: z.string().trim().max(160),
+  groupId: z.string()
+    .trim()
+    .regex(
+      ENTRA_GROUP_OBJECT_ID_PATTERN,
+      "Enter a valid Entra group Object ID in GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.",
+    )
+    .transform(normalizeGroupId),
   groupName: z.string().trim().max(160),
 });
 
@@ -155,7 +162,13 @@ export async function resolveEntraMappedRoleKeys(groupIds: string[]) {
 }
 
 export async function updateAuthenticationSettings(input: AuthenticationSettings) {
-  const parsed = authenticationSettingsSchema.parse(input);
+  const result = authenticationSettingsSchema.safeParse(input);
+
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? "Authentication settings could not be saved.");
+  }
+
+  const parsed = result.data;
 
   if (!parsed.localAuthEnabled) {
     throw new Error("Local sign-in must remain enabled until another working admin recovery path is implemented.");

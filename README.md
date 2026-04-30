@@ -42,8 +42,8 @@ The production compose example is written for this host layout:
 ```bash
 mkdir -p /opt/docker/apps
 cd /opt/docker/apps
-git clone <repo-url> it-assets-tracker
-cd it-assets-tracker
+git clone <repo-url> It-Assets-Tracker
+cd It-Assets-Tracker
 ```
 
 ### Step 2: Copy Compose File
@@ -58,7 +58,7 @@ Copy it to your compose directory:
 
 ```bash
 mkdir -p /opt/docker/compose
-cp /opt/docker/apps/it-assets-tracker/docker/docker-compose.example.yml /opt/docker/compose/IT-Assets-Tracker.yml
+cp /opt/docker/apps/It-Assets-Tracker/docker/docker-compose.example.yml /opt/docker/compose/IT-Assets-Tracker.yml
 ```
 
 ### Step 3: Review/Edit Compose File
@@ -122,7 +122,7 @@ services:
     container_name: IT-Assets-Tracker
     build:
       # This absolute path lets the compose file live in /opt/docker/compose.
-      context: /opt/docker/apps/it-assets-tracker
+      context: /opt/docker/apps/It-Assets-Tracker
       dockerfile: docker/Dockerfile
       args:
         DB_MODE: local
@@ -183,7 +183,7 @@ docker/docker-compose.test.yml
 Example:
 
 ```bash
-cp /opt/docker/apps/it-assets-tracker/docker/docker-compose.test.yml /opt/docker/compose/IT-Assets-Tracker-Test.yml
+cp /opt/docker/apps/It-Assets-Tracker/docker/docker-compose.test.yml /opt/docker/compose/IT-Assets-Tracker-Test.yml
 docker compose -f /opt/docker/compose/IT-Assets-Tracker-Test.yml up -d --build
 ```
 
@@ -269,7 +269,7 @@ Back up both host directories for a complete deployment backup.
 ## Updating
 
 ```bash
-cd /opt/docker/apps/it-assets-tracker
+cd /opt/docker/apps/It-Assets-Tracker
 git pull
 docker compose -f /opt/docker/compose/IT-Assets-Tracker.yml up -d --build
 ```

@@ -43,7 +43,7 @@ async function saveAuthenticationSettingsAction(formData: FormData) {
     const groupId = groupIds[index] ?? "";
     const groupName = groupNames[index] ?? "";
 
-    if (roleKey && (groupId || groupName)) {
+    if (roleKey && groupId) {
       groupMappings.push({ roleKey, roleName, groupId, groupName });
     }
   }

@@ -24,7 +24,7 @@ services:
     container_name: IT-Assets-Tracker
     build:
       # This absolute path lets the compose file live in /opt/docker/compose.
-      context: /opt/docker/apps/it-assets-tracker
+      context: /opt/docker/apps/It-Assets-Tracker
       dockerfile: docker/Dockerfile
       args:
         DB_MODE: local
