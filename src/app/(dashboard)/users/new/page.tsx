@@ -11,6 +11,8 @@ import { UserCreateCard } from "@/modules/users/components/user-create-card";
 import { createUser, listAssignableRoles, listAssignableScopes } from "@/modules/users/user.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 const USERS_DIRECTORY_HREF = "/users?view=users";
 
 async function createUserAction(formData: FormData) {

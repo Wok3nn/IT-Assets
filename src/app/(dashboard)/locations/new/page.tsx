@@ -11,6 +11,8 @@ import { LocationCreateCard } from "@/modules/locations/components/location-crea
 import { createLocation, getLocationById, listAllLocations } from "@/modules/locations/location.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type NewLocationPageProps = {
   searchParams?: Promise<{
     parentId?: string;

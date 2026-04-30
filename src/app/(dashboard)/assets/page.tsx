@@ -24,6 +24,8 @@ import { readSetupState } from "@/services/setup-state";
 
 import { AssetsGrid, type AssetGridRow } from "./assets-grid";
 
+export const dynamic = "force-dynamic";
+
 type AssetsPageProps = {
   searchParams?: Promise<{
     q?: string;

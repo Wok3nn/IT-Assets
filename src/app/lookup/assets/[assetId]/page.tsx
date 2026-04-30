@@ -5,6 +5,8 @@ import { buildAssetLookupPath } from "@/modules/assets/assets-routing";
 import { getAssetById } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type AssetLookupPageProps = {
   params: Promise<{
     assetId: string;

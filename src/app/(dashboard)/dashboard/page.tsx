@@ -8,6 +8,8 @@ import { getCurrentUser } from "@/lib/session.server";
 import { getAssetSummary } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const [setupState, currentUser, assetSummary] = await Promise.all([readSetupState(), getCurrentUser(), getAssetSummary()]);
 

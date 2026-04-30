@@ -13,6 +13,8 @@ import { listEnabledLabelTemplates } from "@/modules/labels/label-template.servi
 import { readSetupState } from "@/services/setup-state";
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 type NewCategoryPageProps = {
   searchParams?: Promise<{
     parentId?: string;

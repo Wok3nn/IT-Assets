@@ -11,6 +11,8 @@ import { getLabelTemplateById, listEnabledLabelTemplates } from "@/modules/label
 import { getLabelValueMapForAsset } from "@/modules/labels/label-template.shared";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type AssetLabelPrintPageProps = {
   params: Promise<{
     assetId: string;

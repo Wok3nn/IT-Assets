@@ -10,6 +10,8 @@ import { buildAssetHref, normalizeAssetsReturnTo } from "@/modules/assets/assets
 import { getAssetAuditHistory, getAssetById } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 const panelClass = "rounded-[32px] border border-[#ece7df] bg-white/92 p-6 shadow-panel backdrop-blur dark:border-[#464c4f] dark:bg-[#383d40]/92 dark:shadow-[0_18px_40px_rgba(0,0,0,0.18)]";
 const cardClass = "rounded-3xl border border-[#ece7df] bg-white/92 p-5 shadow-panel backdrop-blur dark:border-[#4b5255] dark:bg-[#34393c]/92 dark:shadow-[0_18px_40px_rgba(0,0,0,0.16)]";
 

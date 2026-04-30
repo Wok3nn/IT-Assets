@@ -21,6 +21,8 @@ import {
 import { listAssignableRoles } from "@/modules/users/user.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type PermissionsSettingsPageProps = {
   searchParams?: Promise<{
     error?: string;

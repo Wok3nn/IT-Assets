@@ -15,6 +15,8 @@ import { getCurrentUser } from "@/lib/session.server";
 import { deleteScope, listScopes } from "@/modules/scopes/scope.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type ScopesPageProps = {
   searchParams?: Promise<Record<string, never>>;
 };

@@ -37,6 +37,8 @@ import {
 } from "@/modules/users/user.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type UsersPageProps = {
   searchParams?: Promise<{
     view?: string;

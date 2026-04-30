@@ -17,6 +17,8 @@ import {
 } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type EditAssetPageProps = {
   params: Promise<{ assetId: string }>;
   searchParams?: Promise<{ returnTo?: string }>;

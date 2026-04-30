@@ -12,6 +12,8 @@ import { AuthenticationSettingsPanel } from "@/modules/settings/components/authe
 import { listAssignableRoles } from "@/modules/users/user.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 function getBooleanFormValue(formData: FormData, key: string) {
   return formData.get(key) === "on" || formData.get(key) === "true";
 }

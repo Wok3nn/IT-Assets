@@ -10,6 +10,8 @@ import { ImportExportNavCard } from "@/modules/settings/components/import-export
 import { importExportEntityConfigs } from "@/modules/settings/import-export-navigation";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 export default async function ImportExportPage() {
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),

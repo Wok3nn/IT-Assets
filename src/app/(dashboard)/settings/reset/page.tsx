@@ -11,6 +11,8 @@ import { ResetManagementPanel } from "@/modules/settings/components/reset-manage
 import { getResetOverview } from "@/modules/settings/reset-management.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 export default async function ResetSettingsPage() {
   const [setupState, currentUser, roleKeys, permissionContext] = await Promise.all([
     readSetupState(),

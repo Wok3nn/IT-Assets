@@ -11,13 +11,11 @@ import { getImportExportEntityConfig, importExportEntityConfigs } from "@/module
 import { getImportExportReferenceData } from "@/modules/settings/import-export.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type ImportExportEntityPageProps = {
   params: Promise<{ entity: string }>;
 };
-
-export async function generateStaticParams() {
-  return importExportEntityConfigs.map((config) => ({ entity: config.slug }));
-}
 
 export default async function ImportExportEntityPage({ params }: ImportExportEntityPageProps) {
   const { entity } = await params;

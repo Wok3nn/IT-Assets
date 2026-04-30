@@ -11,6 +11,8 @@ import { ScopeCreateCard } from "@/modules/scopes/components/scope-create-card";
 import { createScope } from "@/modules/scopes/scope.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 const SCOPES_DIRECTORY_HREF = "/scopes";
 
 async function createGroupAction(formData: FormData) {

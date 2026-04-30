@@ -12,6 +12,8 @@ import { buildAssetsUrl, parseAssetsPage, parseAssetsPageSize, parseAssetsSort }
 import { createAsset, getAssetById, listAssetReferenceData } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type NewAssetPageProps = {
   searchParams?: Promise<{
     duplicateId?: string;

@@ -15,6 +15,8 @@ import {
 } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 async function createLabelTemplateAction(formData: FormData) {
   "use server";
 

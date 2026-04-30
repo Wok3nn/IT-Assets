@@ -11,6 +11,8 @@ import { LabelTemplateLibrary } from "@/modules/labels/components/label-template
 import { listLabelTemplates } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 export default async function LabelsPage() {
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),

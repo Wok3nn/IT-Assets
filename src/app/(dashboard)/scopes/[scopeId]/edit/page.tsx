@@ -11,6 +11,8 @@ import { ScopeEditCard } from "@/modules/scopes/components/scope-edit-card";
 import { getScopeById, updateScope } from "@/modules/scopes/scope.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type EditScopePageProps = {
   params: Promise<{
     scopeId: string;

@@ -16,6 +16,8 @@ import {
 } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type EditLabelTemplatePageProps = {
   params: Promise<{
     templateId: string;

@@ -11,6 +11,8 @@ import {
 } from "@/modules/settings/settings.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 async function saveBrandingSettingsAction(formData: FormData) {
   "use server";
 

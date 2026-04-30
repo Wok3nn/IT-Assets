@@ -10,6 +10,8 @@ import { LabelsSettingsEntry } from "@/modules/labels/components/labels-settings
 import { listLabelTemplates } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 export default async function LabelsSettingsPage() {
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),

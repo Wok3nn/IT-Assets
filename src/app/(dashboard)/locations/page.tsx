@@ -20,6 +20,8 @@ import {
 } from "@/modules/locations/location.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type LocationsPageProps = {
   searchParams?: Promise<{
     parentId?: string;

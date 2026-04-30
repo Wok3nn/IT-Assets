@@ -11,6 +11,8 @@ import { LocationEditCard } from "@/modules/locations/components/location-edit-c
 import { getLocationById, updateLocation } from "@/modules/locations/location.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type EditLocationPageProps = {
   params: Promise<{
     locationId: string;

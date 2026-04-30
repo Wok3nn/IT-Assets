@@ -20,6 +20,8 @@ import {
 } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type BulkEditAssetsPageProps = {
   searchParams?: Promise<{
     assetIds?: string | string[];

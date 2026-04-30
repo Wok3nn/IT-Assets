@@ -21,6 +21,8 @@ import {
 } from "@/modules/categories/category.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type CategoriesPageProps = {
   searchParams?: Promise<{
     parentId?: string;

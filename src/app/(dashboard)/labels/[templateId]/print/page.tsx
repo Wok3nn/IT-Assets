@@ -6,6 +6,8 @@ import { LabelTemplatePrintPreview } from "@/modules/labels/components/label-tem
 import { getLabelTemplateById } from "@/modules/labels/label-template.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type LabelTemplatePrintPageProps = {
   params: Promise<{
     templateId: string;

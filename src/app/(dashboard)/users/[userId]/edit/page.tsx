@@ -12,6 +12,8 @@ import { getUserById, listAssignableRoles, listAssignableScopes, updateUser } fr
 import { normalizeUsersReturnTo } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type EditUserPageProps = {
   params: Promise<{
     userId: string;

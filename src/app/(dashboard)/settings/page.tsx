@@ -9,6 +9,8 @@ import { getCurrentUser, getCurrentUserRoleKeys } from "@/lib/session.server";
 import { SettingsNavCard } from "@/modules/settings/components/settings-nav-card";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 const baseSettingsCards = [
   {
     href: "/settings/general",

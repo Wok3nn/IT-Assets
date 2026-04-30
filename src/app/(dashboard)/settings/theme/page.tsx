@@ -6,6 +6,8 @@ import { getCurrentUser } from "@/lib/session.server";
 import { SettingsPlaceholderPanel } from "@/modules/settings/components/settings-placeholder-panel";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 export default async function ThemeSettingsPage() {
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),

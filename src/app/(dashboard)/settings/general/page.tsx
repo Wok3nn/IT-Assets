@@ -14,6 +14,8 @@ import {
 } from "@/modules/settings/settings.service";
 import { readSetupState } from "@/services/setup-state";
 
+export const dynamic = "force-dynamic";
+
 type AssetStatus = {
   id: string;
   key: string;
