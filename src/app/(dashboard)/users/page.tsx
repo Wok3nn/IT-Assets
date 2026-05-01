@@ -13,6 +13,7 @@ import { UsersFilterBar } from "@/modules/users/components/users-filter-bar";
 import { UsersHeader } from "@/modules/users/components/users-header";
 import {
   buildRoleFilteredUsersUrl,
+  buildUserHref,
   buildUserEditHref,
   buildUsersUrl,
   DEFAULT_PAGE_SIZE,
@@ -303,6 +304,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                   />
                   <UsersDirectoryList
                     buildEditHref={(userId) => buildUserEditHref(userId, usersViewHref)}
+                    buildViewHref={(userId) => buildUserHref(userId)}
                     currentPage={currentPage}
                     currentUserId={currentUser.id}
                     nextPageHref={currentPage < totalPages ? buildUsersUrl({ view: "users", q: searchQuery || null, filterRoleKey, scopeId, status, login, sort, page: currentPage + 1, pageSize }) : null}

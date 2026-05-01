@@ -19,7 +19,8 @@ import {
   parseAssetsSort,
   type AssetPageSize,
 } from "@/modules/assets/assets-routing";
-import { deleteAsset, getAssetById, listAssetReferenceData, listAssets } from "@/modules/assets/asset.service";
+import type { AssetListTransferState } from "@/modules/assets/asset-list-transfer-dialog";
+import { checkInAsset, checkOutAsset, deleteAsset, getAssetById, listAssetReferenceData, listAssets } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
 import { AssetsGrid, type AssetGridRow } from "./assets-grid";
@@ -124,6 +125,77 @@ async function deleteAssetAction(formData: FormData) {
   redirect(returnTo);
 }
 
+async function transferAssetFromListAction(
+  _state: AssetListTransferState,
+  formData: FormData,
+): Promise<AssetListTransferState> {
+  "use server";
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) redirect("/login");
+
+  const permissionContext = await getCurrentUserAssetPermissionContext();
+
+  if (!permissionContext.capabilities.manageAssetTransfers) {
+    return {
+      ok: false,
+      message: "You do not have permission to check assets in or out.",
+    };
+  }
+
+  const assetId = String(formData.get("assetId") ?? "").trim();
+  const mode = String(formData.get("mode") ?? "").trim();
+
+  if (mode !== "checkout" && mode !== "checkin") {
+    return {
+      ok: false,
+      message: "Choose a valid asset movement.",
+    };
+  }
+
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
+
+  if (!asset) {
+    return {
+      ok: false,
+      mode,
+      message: "Asset was not found or is no longer available.",
+    };
+  }
+
+  try {
+    if (mode === "checkout") {
+      await checkOutAsset({
+        assetId,
+        assignedUserId: String(formData.get("assignedUserId") ?? ""),
+        actorUserId: currentUser.id,
+        accessScope: permissionContext.assetScope,
+      });
+    } else {
+      await checkInAsset({
+        assetId,
+        locationId: String(formData.get("locationId") ?? ""),
+        actorUserId: currentUser.id,
+        accessScope: permissionContext.assetScope,
+      });
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      mode,
+      message: error instanceof Error ? error.message : "Asset movement could not be saved.",
+    };
+  }
+
+  revalidatePath("/assets");
+
+  return {
+    ok: true,
+    mode,
+    message: mode === "checkout" ? "Asset checked out." : "Asset checked in.",
+  };
+}
+
 export default async function AssetsPage({ searchParams }: AssetsPageProps) {
   const params = (await searchParams) ?? {};
   const searchQuery = params.q?.trim() ?? "";
@@ -198,6 +270,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
           color: asset.status.color,
         }
       : null,
+    userId: asset.assignedUser?.id ?? null,
     user: asset.assignedUser?.name ?? "Unassigned",
     serialNumber: asset.serialNumber?.trim() || "Not set",
     category: asset.category ? buildTreeLabel(referenceData.categories, asset.category.id) ?? asset.category.name : "Unassigned",
@@ -335,8 +408,11 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
               canPrintLabels={permissionContext.capabilities.printLabels}
               deleteAction={deleteAssetAction}
               headerSorts={headerSorts}
+              locations={locationOptions}
               returnTo={returnTo}
               rows={assetGridRows}
+              transferAction={transferAssetFromListAction}
+              users={userOptions}
             />
 
             <div className="flex flex-col gap-3 rounded-[26px] border border-[#d7dde4] bg-white/80 px-4 py-3 dark:border-[#556068] dark:bg-[#2c3134] sm:flex-row sm:items-center sm:justify-between">

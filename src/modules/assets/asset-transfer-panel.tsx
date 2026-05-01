@@ -1,10 +1,12 @@
 "use client";
 
 import { ArrowLeftRight } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
+import { buildUserHref } from "@/modules/users/users-routing";
 
 type UserOption = {
   id: string;
@@ -23,6 +25,7 @@ type AssetTransferPanelProps = {
   statusLabel: string;
   statusColor?: string | null;
   userLabel: string;
+  userId?: string | null;
   locationLabel: string;
   initialAssignedUserId?: string | null;
   initialAssignedLocationId?: string | null;
@@ -51,6 +54,7 @@ export function AssetTransferPanel({
   statusLabel,
   statusColor,
   userLabel,
+  userId,
   locationLabel,
   initialAssignedUserId,
   initialAssignedLocationId,
@@ -153,7 +157,14 @@ export function AssetTransferPanel({
             <div className="space-y-3">
               <div>
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Checked out</h4>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">User {userLabel}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  User{" "}
+                  {userId ? (
+                    <Link className="font-medium text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildUserHref(userId)}>
+                      {userLabel}
+                    </Link>
+                  ) : userLabel}
+                </p>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Location {locationLabel}</p>
               </div>
               {currentState === "checkout" ? (

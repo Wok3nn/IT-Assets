@@ -60,6 +60,12 @@ const assetBulkEditSchema = z.object({
   }
 });
 
+const unassignAssetFromUserSchema = z.object({
+  assetId: requiredIdSchema,
+  userId: requiredIdSchema,
+  actorUserId: requiredIdSchema.optional(),
+});
+
 export type AssetSortOption = "updated-desc" | "tag-asc" | "tag-desc" | "model-asc" | "model-desc";
 
 const NATURAL_SORT_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -945,6 +951,25 @@ export async function getAssetsByIds(assetIds: string[], options?: { accessScope
   return uniqueAssetIds.map((assetId) => assetById.get(assetId)).filter((asset): asset is BulkEditableAsset => Boolean(asset));
 }
 
+export async function listAssetsAssignedToUser(userId: string, options?: { accessScope?: AssetAccessScope | null }) {
+  const parsedUserId = requiredIdSchema.parse(userId);
+  const accessWhere = buildAssetAccessWhere(options?.accessScope);
+  const where: Prisma.AssetWhereInput = accessWhere
+    ? {
+        assignedUserId: parsedUserId,
+        AND: [accessWhere],
+      }
+    : {
+        assignedUserId: parsedUserId,
+      };
+
+  return db.asset.findMany({
+    where,
+    select: assetListSelect,
+    orderBy: [{ assetTag: "asc" }, { name: "asc" }],
+  });
+}
+
 export async function createAsset(input: {
   name?: string;
   make?: string;
@@ -1286,6 +1311,76 @@ export async function deleteAsset(assetId: string, actorUserId?: string, accessS
 
     await tx.asset.delete({
       where: { id: existingAsset.id },
+    });
+  });
+}
+
+export async function unassignAssetFromUser(input: {
+  assetId: string;
+  userId: string;
+  actorUserId?: string;
+  accessScope?: AssetAccessScope | null;
+}) {
+  const parsed = unassignAssetFromUserSchema.parse({
+    assetId: input.assetId,
+    userId: input.userId,
+    actorUserId: input.actorUserId,
+  });
+
+  await db.$transaction(async (tx) => {
+    const accessWhere = buildAssetAccessWhere(input.accessScope);
+    const asset = await tx.asset.findFirst({
+      where: accessWhere
+        ? {
+            id: parsed.assetId,
+            AND: [accessWhere],
+          }
+        : {
+            id: parsed.assetId,
+          },
+      select: {
+        id: true,
+        name: true,
+        assetTag: true,
+        assignedUserId: true,
+        assignedLocationId: true,
+        status: {
+          select: {
+            key: true,
+          },
+        },
+      },
+    });
+
+    if (!asset || asset.assignedUserId !== parsed.userId) {
+      throw new Error("Asset is no longer assigned to this user.");
+    }
+
+    const inStockStatus = asset.status?.key === "ASSIGNED" && !asset.assignedLocationId
+      ? await getStatusByKey(tx, "IN_STOCK")
+      : null;
+
+    const updatedAsset = await tx.asset.update({
+      where: {
+        id: asset.id,
+      },
+      data: {
+        assignedUserId: null,
+        statusId: inStockStatus?.id,
+      },
+    });
+
+    await createAssetAuditEntry(tx, {
+      actorUserId: parsed.actorUserId,
+      action: "asset.user_unassigned",
+      entityId: updatedAsset.id,
+      summary: `Unassigned asset ${updatedAsset.assetTag} from user.`,
+      payload: {
+        previousAssignedUserId: parsed.userId,
+        assignedLocationId: asset.assignedLocationId,
+        statusChangedTo: inStockStatus ? "IN_STOCK" : null,
+        name: asset.name,
+      },
     });
   });
 }

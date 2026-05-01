@@ -33,6 +33,7 @@ export function UsersDirectoryList({
   nextPageHref,
   currentUserId,
   buildEditHref,
+  buildViewHref,
   canEditUsers,
   renderDeleteForm,
 }: {
@@ -47,6 +48,7 @@ export function UsersDirectoryList({
   nextPageHref: string | null;
   currentUserId: string;
   buildEditHref: (userId: string) => string;
+  buildViewHref: (userId: string) => string;
   canEditUsers: boolean;
   renderDeleteForm: (userId: string, canDelete: boolean) => ReactNode;
 }) {
@@ -79,7 +81,12 @@ export function UsersDirectoryList({
                 <tr key={user.id} className="align-middle">
                   <td className="px-4 py-3">
                     <div className="space-y-0.5">
-                      <p className="font-medium leading-5 text-slate-950 dark:text-slate-100">{user.name}</p>
+                      <Link
+                        className="font-medium leading-5 text-slate-950 underline-offset-4 transition hover:text-[#b56613] hover:underline dark:text-slate-100 dark:hover:text-[#ffd1a0]"
+                        href={buildViewHref(user.id)}
+                      >
+                        {user.name}
+                      </Link>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
                     </div>
                   </td>
@@ -104,6 +111,9 @@ export function UsersDirectoryList({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2 whitespace-nowrap">
+                      <Link href={buildViewHref(user.id)}>
+                        <Button className="px-3 py-1.5 text-xs" type="button" variant="secondary">View</Button>
+                      </Link>
                       {canEditUsers ? (
                         <Link href={buildEditHref(user.id)}>
                           <Button className="px-3 py-1.5 text-xs" type="button" variant="secondary">Edit</Button>

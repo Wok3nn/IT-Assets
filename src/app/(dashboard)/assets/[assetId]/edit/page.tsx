@@ -15,6 +15,7 @@ import {
   listAssetReferenceData,
   updateAsset,
 } from "@/modules/assets/asset.service";
+import { buildUserHref } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
 
 export const dynamic = "force-dynamic";
@@ -135,7 +136,14 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
           <div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
             <span>Category {buildTreeLabel(referenceData.categories, asset.categoryId) ?? "Unassigned"}</span>
             <span>Location {asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) : "Unassigned"}</span>
-            <span>User {asset.assignedUser?.name ?? "Unassigned"}</span>
+            <span>
+              User{" "}
+              {asset.assignedUser ? (
+                <Link className="text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildUserHref(asset.assignedUser.id)}>
+                  {asset.assignedUser.name}
+                </Link>
+              ) : "Unassigned"}
+            </span>
           </div>
 
           <AssetForm

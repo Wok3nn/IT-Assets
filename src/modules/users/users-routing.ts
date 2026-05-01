@@ -92,6 +92,10 @@ export function buildUserEditHref(userId: string, returnTo: string) {
   return `/users/${userId}/edit?${params.toString()}`;
 }
 
+export function buildUserHref(userId: string) {
+  return `/users/${userId}`;
+}
+
 export function normalizeUsersReturnTo(value: string | null | undefined) {
   const trimmed = value?.trim();
 

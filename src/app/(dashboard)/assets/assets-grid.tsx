@@ -6,8 +6,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
+import { AssetListTransferDialog, type AssetListTransferState } from "@/modules/assets/asset-list-transfer-dialog";
 import { ASSET_BULK_EDIT_HREF, buildAssetHref, buildAssetLabelHref } from "@/modules/assets/assets-routing";
 import type { AssetSortOption } from "@/modules/assets/asset.service";
+import { buildUserHref } from "@/modules/users/users-routing";
 
 export type AssetGridRow = {
   id: string;
@@ -16,6 +18,7 @@ export type AssetGridRow = {
   make: string | null;
   model: string | null;
   status: { label: string; color: string | null } | null;
+  userId: string | null;
   user: string;
   serialNumber: string;
   category: string;
@@ -67,6 +70,9 @@ type AssetsGridProps = {
   canDeleteAssets: boolean;
   canManageAssetTransfers: boolean;
   canPrintLabels: boolean;
+  locations: Array<{ id: string; label: string }>;
+  transferAction: (state: AssetListTransferState, formData: FormData) => Promise<AssetListTransferState>;
+  users: Array<{ id: string; label: string }>;
 };
 
 const DEBUG_RESIZE = false;
@@ -87,7 +93,6 @@ const SECONDARY_ACTION_STYLE = { width: "64px", height: "36px" } as const;
 const DELETE_ACTION_STYLE = { width: "64px", height: "36px" } as const;
 const DISABLED_PILL_STYLE = { borderColor: "#cbd5e1", backgroundColor: "#f1f5f9", color: "#64748b" } as const;
 const VIEW_ACTIVE_STYLE = { borderColor: "#2f8f57", backgroundColor: "#3fb26d", color: "#ffffff" } as const;
-const CHECK_ACTIVE_STYLE = { borderColor: "#d9892c", backgroundColor: "#F69629", color: "#ffffff" } as const;
 const DELETE_ACTIVE_STYLE = { borderColor: "#c23b32", backgroundColor: "#dd4f45", color: "#ffffff" } as const;
 
 const columns: ColumnDefinition[] = [
@@ -179,7 +184,7 @@ function SortIndicator({ direction }: { direction: "asc" | "desc" | null }) {
   return <ArrowUpDown className="h-3.5 w-3.5 opacity-70 transition group-hover:opacity-100" strokeWidth={1.8} />;
 }
 
-function ActionLink({ href, label, isSelected, style, sizeStyle }: { href: string; label: string; isSelected: boolean; style: typeof VIEW_ACTIVE_STYLE | typeof CHECK_ACTIVE_STYLE; sizeStyle: typeof PRIMARY_ACTION_STYLE | typeof SECONDARY_ACTION_STYLE }) {
+function ActionLink({ href, label, isSelected, style, sizeStyle }: { href: string; label: string; isSelected: boolean; style: typeof VIEW_ACTIVE_STYLE; sizeStyle: typeof SECONDARY_ACTION_STYLE }) {
   const className = isSelected
     ? "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-white"
     : "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-slate-500 dark:text-slate-200";
@@ -234,6 +239,9 @@ export function AssetsGrid({
   canDeleteAssets,
   canManageAssetTransfers,
   canPrintLabels,
+  locations,
+  transferAction,
+  users,
 }: AssetsGridProps) {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(rows[0]?.id ?? null);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
@@ -694,10 +702,6 @@ export function AssetsGrid({
                   const isSelected = row.id === selectedRowId;
                   const rowClass = isSelected ? selectedBodyBaseClass : bodyBaseClass;
                   const hoverClass = isSelected ? "hover:bg-[rgba(246,150,41,0.16)] dark:hover:bg-[#54483a]" : "hover:bg-[#fdf1e4] dark:hover:bg-[#3d4448]";
-                  const checkHref = buildAssetHref(row.id, {
-                    transfer: row.checkLabel === "Check in" ? "checkin" : "checkout",
-                    returnTo,
-                  });
                   const viewHref = buildAssetHref(row.id, { returnTo });
                   const labelHref = buildAssetLabelHref(row.id);
 
@@ -776,7 +780,22 @@ export function AssetsGrid({
                         }
 
                         if (column.id === "user") {
-                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.user}>{row.user}</span></div>;
+                          return (
+                            <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
+                              {row.userId ? (
+                                <Link
+                                  className="block truncate text-sm font-medium text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]"
+                                  href={buildUserHref(row.userId)}
+                                  onClick={(event) => event.stopPropagation()}
+                                  title={row.user}
+                                >
+                                  {row.user}
+                                </Link>
+                              ) : (
+                                <span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.user}>{row.user}</span>
+                              )}
+                            </div>
+                          );
                         }
 
                         if (column.id === "serialNumber") {
@@ -806,7 +825,16 @@ export function AssetsGrid({
                                 <ActionLink href={viewHref} isSelected={isSelected} label="View" sizeStyle={SECONDARY_ACTION_STYLE} style={VIEW_ACTIVE_STYLE} />
                               </div>
                               <div className="flex justify-end" style={{ width: PRIMARY_ACTION_STYLE.width }}>
-                                <ActionLink href={checkHref} isSelected={isSelected && canManageAssetTransfers} label={row.checkLabel} sizeStyle={PRIMARY_ACTION_STYLE} style={CHECK_ACTIVE_STYLE} />
+                                {canManageAssetTransfers ? (
+                                  <AssetListTransferDialog
+                                    action={transferAction}
+                                    asset={row}
+                                    isActive={isSelected}
+                                    locations={locations}
+                                    returnTo={returnTo}
+                                    users={users}
+                                  />
+                                ) : null}
                               </div>
                               <div className="flex justify-end" style={{ width: DELETE_ACTION_STYLE.width }}>
                                 <DeleteButton deleteAction={deleteAction} isAllowed={canDeleteAssets} isSelected={isSelected} returnTo={returnTo} row={row} />

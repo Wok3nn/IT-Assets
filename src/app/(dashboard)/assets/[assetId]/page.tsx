@@ -16,6 +16,7 @@ import {
   getAssetById,
   listAssetReferenceData,
 } from "@/modules/assets/asset.service";
+import { buildUserHref } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
 
 export const dynamic = "force-dynamic";
@@ -201,6 +202,7 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
               returnTo={returnTo}
               statusColor={asset.status?.color ?? null}
               statusLabel={asset.status?.name ?? "No status"}
+              userId={asset.assignedUser?.id ?? null}
               userLabel={asset.assignedUser?.name ?? "Nobody"}
               users={referenceData.users}
             />
@@ -261,7 +263,13 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
             </div>
             <div className={subpanelClass}>
               <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Assigned user</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.assignedUser?.name ?? "Unassigned"}</p>
+              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">
+                {asset.assignedUser ? (
+                  <Link className="text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildUserHref(asset.assignedUser.id)}>
+                    {asset.assignedUser.name}
+                  </Link>
+                ) : "Unassigned"}
+              </p>
             </div>
             <div className={subpanelClass}>
               <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Location</p>
