@@ -65,48 +65,48 @@ All running **locally with Docker** — no cloud dependency required.
 
 ### 3. Edit config (VERY IMPORTANT)
 
-  Open:
-    nano /opt/docker/compose/IT-Assets-Tracker.yml
+- Open:
+  - nano /opt/docker/compose/IT-Assets-Tracker.yml
 
-  Change:
-    APP_URL: http://YOUR-IP:4050
-    SESSION_SECRET: change-me
-    MARIADB_PASSWORD: change-me
-    MARIADB_ROOT_PASSWORD: change-me-root
+- Change:
+  - APP_URL: http://YOUR-IP:4050
+  - SESSION_SECRET: change-me
+  - MARIADB_PASSWORD: change-me
+  - MARIADB_ROOT_PASSWORD: change-me-root
 
 ### 4. Start the app
   
-  mkdir -p /opt/docker/data/it-assets-tracker/app
-  mkdir -p /opt/docker/data/it-assets-tracker/mariadb
+- mkdir -p /opt/docker/data/it-assets-tracker/app
+- mkdir -p /opt/docker/data/it-assets-tracker/mariadb
 
-  docker compose -f /opt/docker/compose/IT-Assets-Tracker.yml up -d --build
+- docker compose -f /opt/docker/compose/IT-Assets-Tracker.yml up -d --build
 
 ### 5. Open the App
 
-  http://YOUR-IP:4050
-  Run the setup wizard → create your admin account → done ✅
+- http://YOUR-IP:4050
+- Run the setup wizard → create your admin account → done ✅
 
 ### 🔄️ Updating
 
-  cd /opt/docker/apps/It-Assets-Tracker
-  git pull
+- cd /opt/docker/apps/It-Assets-Tracker
+- git pull
 
-  cd /opt/docker/compose
-  docker compose -f IT-Assets-Tracker.yml up -d --build
+- cd /opt/docker/compose
+- docker compose -f IT-Assets-Tracker.yml up -d --build
 
 ### 💾 Backups (IMPORTANT)
 
-  Backup this folder:
-    /opt/docker/data/it-assets-tracker
+- Backup this folder:
+  - /opt/docker/data/it-assets-tracker
 
 ### 🌐 Reverse Proxy (Optional)
 
-  Works great with:
-    Nginx Proxy Manager
-    Traefik
-    Cloudflare Tunnel
+- Works great with:
+  - Nginx Proxy Manager
+  - Traefik
+  - Cloudflare Tunnel
 
-  Set:
-    APP_URL=https://your-domain.com
+- Set:
+  - APP_URL=https://your-domain.com
 
 ```bash
