@@ -244,7 +244,7 @@ model AuditLog {
   entityType  String
   entityId    String?
   summary     String
-  payloadJson String?
+  payloadJson String?  @db.LongText
   createdAt   DateTime @default(now())
   actor       User?    @relation(fields: [actorUserId], references: [id])
 }

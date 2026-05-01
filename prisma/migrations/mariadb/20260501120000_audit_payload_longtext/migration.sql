@@ -1,0 +1,1 @@
+ALTER TABLE `AuditLog` MODIFY `payloadJson` LONGTEXT NULL;

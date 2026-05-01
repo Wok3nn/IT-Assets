@@ -28,7 +28,7 @@ export type AssetGridRow = {
   checkLabel: "Check out" | "Check in";
 };
 
-type ColumnId = "select" | "assetTag" | "assetModel" | "assetName" | "status" | "user" | "serialNumber" | "category" | "location" | "purchaseDate" | "warrantyExpiry" | "actions";
+type ColumnId = "select" | "assetTag" | "assetModel" | "status" | "user" | "serialNumber" | "category" | "location" | "purchaseDate" | "warrantyExpiry" | "actions";
 
 type ColumnDefinition = {
   id: ColumnId;
@@ -99,7 +99,6 @@ const columns: ColumnDefinition[] = [
   { id: "select", label: DEBUG_RESIZE ? "Select (80)" : "Select", defaultWidth: 80, minWidth: 80, resizable: true, justify: "center", cellPadding: "px-3", fixed: true },
   { id: "assetTag", label: DEBUG_RESIZE ? "Asset tag (104)" : "Asset Tag", defaultWidth: 112, minWidth: 104, resizable: true, justify: "start", cellPadding: "px-3", fixed: true },
   { id: "assetModel", label: DEBUG_RESIZE ? "Make / Model (244)" : "Make / Model", defaultWidth: 244, minWidth: 168, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "assetName", label: "Asset Name", defaultWidth: 156, minWidth: 128, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "status", label: DEBUG_RESIZE ? "Status (124)" : "Status", defaultWidth: 124, minWidth: 104, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "user", label: DEBUG_RESIZE ? "User (144)" : "User", defaultWidth: 144, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (144)" : "Serial Number", defaultWidth: 144, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
@@ -764,15 +763,10 @@ export function AssetsGrid({
                             <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
                               <div className="min-w-0">
                                 {row.make?.trim() ? <span className="block min-w-0 truncate whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400" title={row.make.trim()}>{row.make.trim()}</span> : null}
-                                <span className="block min-w-0 truncate whitespace-nowrap text-sm font-medium text-slate-950 dark:text-slate-100" title={row.model?.trim() || row.assetName}>{row.model?.trim() || row.assetName}</span>
-                                {row.model?.trim() && row.assetName.trim() && row.assetName.trim() !== row.model.trim() ? <span className="mt-1 block min-w-0 truncate whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400" title={row.assetName}>Name: {row.assetName}</span> : null}
+                                <span className="block min-w-0 truncate whitespace-nowrap text-sm font-medium text-slate-950 dark:text-slate-100" title={row.model?.trim() || "No model"}>{row.model?.trim() || "No model"}</span>
                               </div>
                             </div>
                           );
-                        }
-
-                        if (column.id === "assetName") {
-                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.assetName}>{row.assetName}</span></div>;
                         }
 
                         if (column.id === "status") {
