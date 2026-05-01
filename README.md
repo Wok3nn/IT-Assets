@@ -54,14 +54,14 @@ All running **locally with Docker** — no cloud dependency required.
 
 ### 1. Clone the repo
 
-  mkdir -p /opt/docker/apps
-  cd /opt/docker/apps
-  git clone <repo-url> It-Assets-Tracker
+- mkdir -p /opt/docker/apps
+- cd /opt/docker/apps
+- git clone <repo-url> It-Assets-Tracker
 
 ### 2. Copy the Docker compose
 
-  mkdir -p /opt/docker/compose
-  cp It-Assets-Tracker/docker/docker-compose.example.yml /opt/docker/compose/IT-Assets-Tracker.yml
+- mkdir -p /opt/docker/compose
+- cp It-Assets-Tracker/docker/docker-compose.example.yml /opt/docker/compose/IT-Assets-Tracker.yml
 
 ### 3. Edit config (VERY IMPORTANT)
 
