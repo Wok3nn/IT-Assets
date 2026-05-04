@@ -1,7 +1,7 @@
 # 🖥️ IT Asset Tracker
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Wok3nn/IT-Assets/main/IT-Assets%20Logo/asset-tracker-logo-dark-transparent%20256x256.png" width="180" />
+  <img src="./IT-Assets%20Logo/asset-tracker-logo-dark-transparent%20256x256.png" width="180" alt="IT Asset Tracker Logo" />
 </p>
 
 <p align="center">
