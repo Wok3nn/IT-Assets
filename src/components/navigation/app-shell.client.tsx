@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_STORAGE_KEY = "app-shell-sidebar-collapsed";
+const SIDEBAR_COOKIE_KEY = "app-shell-sidebar-collapsed";
 let cachedSidebarCollapsed: boolean | null = null;
 
 const navItems = [
@@ -23,6 +24,10 @@ const navItems = [
   { id: "settings", href: "/settings", label: "Settings", icon: Settings2 },
 ] as const;
 
+function isShelllessDashboardPath(pathname: string) {
+  return /^\/assets\/[^/]+\/label$/.test(pathname) || /^\/labels\/[^/]+\/print$/.test(pathname);
+}
+
 type AppShellClientProps = {
   appTitle: string;
   branding: {
@@ -30,13 +35,34 @@ type AppShellClientProps = {
     darkLogoUrl: string;
   };
   children: React.ReactNode;
+  initialSidebarCollapsed: boolean;
   visibleNavItemIds: string[];
 };
 
-export function AppShellClient({ appTitle, branding, children, visibleNavItemIds }: AppShellClientProps) {
+function readLegacyStoredSidebarCollapsed() {
+  try {
+    const storedValue = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    return storedValue === null ? null : storedValue === "true";
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSidebarCollapsed(isCollapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isCollapsed));
+  } catch {
+    // Ignore storage failures; the cookie remains the server-render source.
+  }
+
+  document.cookie = `${SIDEBAR_COOKIE_KEY}=${isCollapsed ? "true" : "false"}; path=/; max-age=31536000; samesite=lax`;
+}
+
+export function AppShellClient({ appTitle, branding, children, initialSidebarCollapsed, visibleNavItemIds }: AppShellClientProps) {
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(() => cachedSidebarCollapsed ?? false);
+  const [isCollapsed, setIsCollapsed] = useState(() => cachedSidebarCollapsed ?? initialSidebarCollapsed);
   const [isReady, setIsReady] = useState(() => cachedSidebarCollapsed !== null);
+  const isShelllessPath = isShelllessDashboardPath(pathname);
 
   const renderedNavItems = useMemo(
     () => navItems.filter((item) => visibleNavItemIds.includes(item.id)),
@@ -53,11 +79,12 @@ export function AppShellClient({ appTitle, branding, children, visibleNavItemIds
   }, [pathname, renderedNavItems]);
 
   useEffect(() => {
-    const savedValue = window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
+    const savedValue = readLegacyStoredSidebarCollapsed() ?? initialSidebarCollapsed;
     cachedSidebarCollapsed = savedValue;
     setIsCollapsed(savedValue);
+    writeStoredSidebarCollapsed(savedValue);
     setIsReady(true);
-  }, []);
+  }, [initialSidebarCollapsed]);
 
   useEffect(() => {
     if (!isReady) {
@@ -65,8 +92,12 @@ export function AppShellClient({ appTitle, branding, children, visibleNavItemIds
     }
 
     cachedSidebarCollapsed = isCollapsed;
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isCollapsed));
+    writeStoredSidebarCollapsed(isCollapsed);
   }, [isCollapsed, isReady]);
+
+  if (isShelllessPath) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.08),_transparent_24%),linear-gradient(180deg,#fcfcfd_0%,#f6f7f9_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.08),_transparent_24%),linear-gradient(180deg,#2f3437_0%,#2c3134_52%,#292e31_100%)]">

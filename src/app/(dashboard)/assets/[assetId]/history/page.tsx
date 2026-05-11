@@ -7,7 +7,7 @@ import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
-import { getAssetAuditHistory, getAssetById } from "@/modules/assets/asset.service";
+import { getAssetAuditHistory, getAssetAuditPayloadNote, getAssetById } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
 export const dynamic = "force-dynamic";
@@ -109,17 +109,22 @@ export default async function AssetHistoryPage({ params, searchParams }: AssetHi
             {history.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[#ece7df] px-4 py-5 text-sm text-slate-500 dark:border-[#4b5255] dark:text-slate-400">No audit history has been recorded in this time window.</div>
             ) : (
-              history.map((entry) => (
-                <article key={entry.id} className="rounded-2xl border border-slate-200 bg-[#f8f9fb] px-4 py-4 dark:border-[#4b5255] dark:bg-[#2f3437]">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950 dark:text-slate-100">{entry.summary}</p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{entry.actor?.name ?? "System"} - {entry.action}</p>
+              history.map((entry) => {
+                const note = getAssetAuditPayloadNote(entry.payloadJson);
+
+                return (
+                  <article key={entry.id} className="rounded-2xl border border-slate-200 bg-[#f8f9fb] px-4 py-4 dark:border-[#4b5255] dark:bg-[#2f3437]">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950 dark:text-slate-100">{entry.summary}</p>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{entry.actor?.name ?? "System"} - {entry.action}</p>
+                        {note ? <p className="mt-2 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-200">{note}</p> : null}
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateTimeLabel(entry.createdAt)}</p>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateTimeLabel(entry.createdAt)}</p>
-                  </div>
-                </article>
-              ))
+                  </article>
+                );
+              })
             )}
           </div>
         </section>

@@ -1,4 +1,7 @@
 import { requireBootstrapPage } from "@/lib/bootstrap.server";
+import { AppShellRoot } from "@/components/navigation/app-shell";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({
   children,
@@ -7,5 +10,5 @@ export default async function DashboardLayout({
 }>) {
   await requireBootstrapPage();
 
-  return children;
+  return <AppShellRoot>{children}</AppShellRoot>;
 }

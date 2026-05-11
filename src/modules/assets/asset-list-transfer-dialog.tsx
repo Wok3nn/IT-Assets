@@ -57,11 +57,11 @@ function filterOptions(options: TransferOption[], query: string) {
   return options.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
 }
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({ disabled = false, label }: { disabled?: boolean; label: string }) {
   const { pending } = useFormStatus();
 
   return (
-    <Button disabled={pending} type="submit">
+    <Button disabled={pending || disabled} type="submit">
       {pending ? "Saving..." : label}
     </Button>
   );
@@ -80,6 +80,7 @@ export function AssetListTransferDialog({
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState<AssetListTransferState | null>(null);
   const [userQuery, setUserQuery] = useState("");
+  const [selectedUser, setSelectedUser] = useState<TransferOption | null>(null);
   const [state, formAction] = useActionState(action, initialAssetListTransferState);
   const mode = asset.checkLabel === "Check in" ? "checkin" : "checkout";
   const isCheckOut = mode === "checkout";
@@ -87,6 +88,7 @@ export function AssetListTransferDialog({
   const summary = getAssetSummary(asset);
 
   const filteredUsers = useMemo(() => filterOptions(users, userQuery), [userQuery, users]);
+  const visibleUsers = filteredUsers.slice(0, 8);
 
   useEffect(() => {
     setIsMounted(true);
@@ -113,6 +115,13 @@ export function AssetListTransferDialog({
     const timeout = window.setTimeout(() => setFeedback(null), 3600);
     return () => window.clearTimeout(timeout);
   }, [feedback]);
+
+  useEffect(() => {
+    if (!open) {
+      setUserQuery("");
+      setSelectedUser(null);
+    }
+  }, [open]);
 
   if (!isActive) {
     return (
@@ -171,30 +180,79 @@ export function AssetListTransferDialog({
           <input name="assetId" type="hidden" value={asset.id} />
           <input name="mode" type="hidden" value={mode} />
           <input name="returnTo" type="hidden" value={returnTo} />
+          {isCheckOut ? <input name="assignedUserId" type="hidden" value={selectedUser?.id ?? ""} /> : null}
 
           {isCheckOut ? (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor={`checkout-user-${asset.id}`}>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor={`checkout-user-search-${asset.id}`}>
                 Assign to user
               </label>
               <input
+                aria-controls={`checkout-user-results-${asset.id}`}
+                aria-describedby={selectedUser ? `checkout-user-selected-${asset.id}` : undefined}
+                autoComplete="off"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-100"
+                id={`checkout-user-search-${asset.id}`}
                 onChange={(event) => setUserQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && visibleUsers.length === 1) {
+                    event.preventDefault();
+                    setSelectedUser(visibleUsers[0]);
+                    setUserQuery("");
+                  }
+                }}
                 placeholder="Search users"
+                role="combobox"
+                aria-expanded="true"
                 type="search"
                 value={userQuery}
               />
-              <select
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-100"
-                id={`checkout-user-${asset.id}`}
-                name="assignedUserId"
-                required
+              <div
+                className="max-h-52 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 dark:border-[#4b5255] dark:bg-[#34393c]"
+                id={`checkout-user-results-${asset.id}`}
+                role="listbox"
               >
-                <option value="">Select user</option>
-                {filteredUsers.map((user) => (
-                  <option key={user.id} value={user.id}>{user.label}</option>
-                ))}
-              </select>
+                {visibleUsers.length > 0 ? (
+                  visibleUsers.map((user) => {
+                    const isSelected = selectedUser?.id === user.id;
+                    return (
+                      <button
+                        aria-selected={isSelected}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${isSelected ? "bg-[#fff4e8] text-[#b56613] dark:bg-[rgba(246,150,41,0.18)] dark:text-[#ffd7ab]" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3c4347]"}`}
+                        key={user.id}
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setUserQuery("");
+                        }}
+                        role="option"
+                        type="button"
+                      >
+                        <span className="min-w-0 truncate">{user.label}</span>
+                        {isSelected ? <span className="ml-3 shrink-0 text-xs font-medium">Selected</span> : null}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">No users match that search.</p>
+                )}
+              </div>
+              {selectedUser ? (
+                <div
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-[#f0d3b4] bg-[#fff8f0] px-3 py-2 text-sm text-slate-700 dark:border-[#6f5530] dark:bg-[rgba(246,150,41,0.12)] dark:text-slate-200"
+                  id={`checkout-user-selected-${asset.id}`}
+                >
+                  <span className="min-w-0 truncate">Selected: <span className="font-medium text-slate-950 dark:text-slate-100">{selectedUser.label}</span></span>
+                  <button
+                    className="shrink-0 rounded-full px-2 py-1 text-xs font-medium text-[#b56613] transition hover:bg-white/70 dark:text-[#ffd7ab] dark:hover:bg-white/10"
+                    onClick={() => setSelectedUser(null)}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 dark:text-slate-400">Choose a user from the results before checking out.</p>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -214,6 +272,17 @@ export function AssetListTransferDialog({
             </div>
           )}
 
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Comment</span>
+            <textarea
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-100"
+              maxLength={2000}
+              name="transferNote"
+              placeholder={isCheckOut ? "Optional handoff note" : "Optional return note"}
+              rows={3}
+            />
+          </label>
+
           {state.message && !state.ok ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
               {state.message}
@@ -222,7 +291,7 @@ export function AssetListTransferDialog({
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button onClick={() => setOpen(false)} type="button" variant="ghost">Cancel</Button>
-            <SubmitButton label={isCheckOut ? "Check out asset" : "Check in asset"} />
+            <SubmitButton disabled={isCheckOut && !selectedUser} label={isCheckOut ? "Check out asset" : "Check in asset"} />
           </div>
         </form>
       </div>

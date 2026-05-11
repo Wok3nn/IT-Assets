@@ -114,14 +114,20 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
   ]);
 
   const backHref = buildAssetsUrl({ q: searchQuery || null, statusId, categoryId, scopeId, locationId, userId, sort, page, pageSize });
+  const defaultStatusId = referenceData.statuses.find((status) => status.key === "IN_STOCK")?.id
+    ?? referenceData.statuses.find((status) => status.name.trim().toLowerCase() === "in stock")?.id
+    ?? null;
   const initialValue = duplicateAsset
     ? {
         name: duplicateAsset.name,
         make: duplicateAsset.make,
         model: duplicateAsset.model,
         categoryId: duplicateAsset.categoryId,
+        statusId: defaultStatusId,
       }
-    : undefined;
+    : defaultStatusId
+      ? { statusId: defaultStatusId }
+      : undefined;
 
   return (
     <AppShell>
@@ -143,6 +149,7 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
           </div>
         </PageHero>
 
+        <div className="mx-auto w-full max-w-3xl">
         <PageHero>
           <div className="flex flex-col gap-2">
             <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">{duplicateAsset ? "New asset from template" : "Asset details"}</h2>
@@ -158,6 +165,7 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
             defaultAssetTag={referenceData.suggestedAssetTag}
             hiddenFields={hiddenFilterFields({ q: searchQuery, statusId, categoryId, scopeId, locationId, userId, sort, page, pageSize })}
             initialValue={initialValue}
+            layout="compact"
             locations={referenceData.locations}
             mode="create"
             scopes={referenceData.scopes}
@@ -166,6 +174,7 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
             users={referenceData.users}
           />
         </PageHero>
+        </div>
       </div>
     </AppShell>
   );

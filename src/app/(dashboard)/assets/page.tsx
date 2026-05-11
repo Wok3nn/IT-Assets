@@ -21,6 +21,8 @@ import {
 } from "@/modules/assets/assets-routing";
 import type { AssetListTransferState } from "@/modules/assets/asset-list-transfer-dialog";
 import { checkInAsset, checkOutAsset, deleteAsset, getAssetById, listAssetReferenceData, listAssets } from "@/modules/assets/asset.service";
+import { AssetsFilterPanel } from "@/modules/assets/components/assets-filter-panel";
+import { AssetsIncludeRetiredPreference } from "@/modules/assets/components/assets-include-retired-preference";
 import { readSetupState } from "@/services/setup-state";
 
 import { AssetsGrid, type AssetGridRow } from "./assets-grid";
@@ -145,6 +147,7 @@ async function transferAssetFromListAction(
 
   const assetId = String(formData.get("assetId") ?? "").trim();
   const mode = String(formData.get("mode") ?? "").trim();
+  const notes = String(formData.get("transferNote") ?? "");
 
   if (mode !== "checkout" && mode !== "checkin") {
     return {
@@ -168,6 +171,7 @@ async function transferAssetFromListAction(
       await checkOutAsset({
         assetId,
         assignedUserId: String(formData.get("assignedUserId") ?? ""),
+        notes,
         actorUserId: currentUser.id,
         accessScope: permissionContext.assetScope,
       });
@@ -175,6 +179,7 @@ async function transferAssetFromListAction(
       await checkInAsset({
         assetId,
         locationId: String(formData.get("locationId") ?? ""),
+        notes,
         actorUserId: currentUser.id,
         accessScope: permissionContext.assetScope,
       });
@@ -188,6 +193,8 @@ async function transferAssetFromListAction(
   }
 
   revalidatePath("/assets");
+  revalidatePath(`/assets/${assetId}`);
+  revalidatePath(`/assets/${assetId}/history`);
 
   return {
     ok: true,
@@ -205,6 +212,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
   const locationId = params.locationId?.trim() || null;
   const userId = params.userId?.trim() || null;
   const includeRetired = parseAssetsIncludeRetired(params.includeRetired);
+  const hasIncludeRetiredParam = typeof params.includeRetired === "string";
   const sort = parseAssetsSort(params.sort);
   const page = parseAssetsPage(params.page);
   const pageSize = parseAssetsPageSize(params.pageSize);
@@ -273,6 +281,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
     userId: asset.assignedUser?.id ?? null,
     user: asset.assignedUser?.name ?? "Unassigned",
     serialNumber: asset.serialNumber?.trim() || "Not set",
+    comments: asset.notes?.trim() || null,
     category: asset.category ? buildTreeLabel(referenceData.categories, asset.category.id) ?? asset.category.name : "Unassigned",
     location: asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) ?? asset.assignedLocation.name : "Unassigned",
     purchaseDate: formatDateLabel(asset.purchaseDate),
@@ -298,6 +307,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
     includeRetired: !includeRetired,
     page: 1,
   });
+  const activeFilterCount = [statusId, categoryId, scopeId, locationId, userId].filter(Boolean).length;
   const headerSorts = {
     assetTag: {
       href: buildAssetsUrl({ ...sharedQuery, sort: getNextSort(sort, "assetTag"), page: 1 }),
@@ -313,6 +323,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
 
   return (
     <AppShell>
+      <AssetsIncludeRetiredPreference hasIncludeRetiredParam={hasIncludeRetiredParam} includeRetired={includeRetired} />
       <div className="space-y-6">
         <PageHero>
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -323,7 +334,21 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
             </div>
             <div className="flex w-full min-w-0 max-w-[760px] flex-col gap-3 xl:flex-none">
               <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-end">
-                <HeaderAssetSearch className="min-w-0 flex-1" compact defaultValue={searchQuery} />
+                <HeaderAssetSearch
+                  className="min-w-0 flex-1"
+                  compact
+                  defaultValue={searchQuery}
+                  hiddenFields={{
+                    statusId,
+                    categoryId,
+                    scopeId,
+                    locationId,
+                    userId,
+                    includeRetired,
+                    sort,
+                    pageSize,
+                  }}
+                />
                 <Link
                   aria-checked={includeRetired}
                   aria-label={includeRetired ? "Hide retired assets" : "Include retired assets"}
@@ -378,27 +403,29 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
           </div>
 
           <div className="mt-5 space-y-4">
-            <form
-              action="/assets"
-              className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_180px_auto]"
-              id="asset-filters"
-            >
-              <input name="q" type="hidden" value={searchQuery} />
-              <input name="sort" type="hidden" value={sort} />
-              {includeRetired ? <input name="includeRetired" type="hidden" value="true" /> : null}
-              <select defaultValue={statusId ?? ""} name="statusId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All statuses</option>{statusOptions.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select>
-              <select defaultValue={categoryId ?? ""} name="categoryId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All categories</option>{categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
-              <select defaultValue={scopeId ?? ""} name="scopeId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All departments</option>{scopeOptions.map((scope) => <option key={scope.id} value={scope.id}>{scope.label}</option>)}</select>
-              <select defaultValue={locationId ?? ""} name="locationId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All locations</option>{locationOptions.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}</select>
-              <select defaultValue={userId ?? ""} name="userId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">Any assignee</option>{userOptions.map((user) => <option key={user.id} value={user.id}>{user.label}</option>)}</select>
-              <select defaultValue={String(pageSize)} name="pageSize" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}>
-                {ASSET_PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option} per page</option>)}
-              </select>
-              <div className="flex items-center gap-3 xl:justify-end">
-                <Button className="whitespace-nowrap" type="submit">Apply filters</Button>
-                <Link href="/assets"><Button className="whitespace-nowrap" type="button" variant="ghost">Reset</Button></Link>
-              </div>
-            </form>
+            <AssetsFilterPanel activeFilterCount={activeFilterCount}>
+              <form
+                action="/assets"
+                className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_180px_auto]"
+                id="asset-filters"
+              >
+                <input name="q" type="hidden" value={searchQuery} />
+                <input name="sort" type="hidden" value={sort} />
+                {includeRetired ? <input name="includeRetired" type="hidden" value="true" /> : null}
+                <select defaultValue={statusId ?? ""} name="statusId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All statuses</option>{statusOptions.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select>
+                <select defaultValue={categoryId ?? ""} name="categoryId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All categories</option>{categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
+                <select defaultValue={scopeId ?? ""} name="scopeId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All departments</option>{scopeOptions.map((scope) => <option key={scope.id} value={scope.id}>{scope.label}</option>)}</select>
+                <select defaultValue={locationId ?? ""} name="locationId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">All locations</option>{locationOptions.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}</select>
+                <select defaultValue={userId ?? ""} name="userId" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}><option value="">Any assignee</option>{userOptions.map((user) => <option key={user.id} value={user.id}>{user.label}</option>)}</select>
+                <select defaultValue={String(pageSize)} name="pageSize" className={`${fieldClass} min-w-0 px-3 py-2.5 text-xs`}>
+                  {ASSET_PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option} per page</option>)}
+                </select>
+                <div className="flex items-center gap-3 xl:justify-end">
+                  <Button className="whitespace-nowrap" type="submit">Apply filters</Button>
+                  <Link href="/assets"><Button className="whitespace-nowrap" type="button" variant="ghost">Reset</Button></Link>
+                </div>
+              </form>
+            </AssetsFilterPanel>
 
             <AssetsGrid
               activeSort={sort}

@@ -13,6 +13,7 @@ import {
   checkInAsset,
   checkOutAsset,
   getAssetAuditHistory,
+  getAssetAuditPayloadNote,
   getAssetById,
   listAssetReferenceData,
 } from "@/modules/assets/asset.service";
@@ -227,17 +228,22 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
               {recentHistory.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[#ece7df] px-4 py-5 text-sm text-slate-500 dark:border-[#4b5255] dark:text-slate-400">No audit history has been recorded for this asset yet.</div>
               ) : (
-                recentHistory.map((entry) => (
-                  <article key={entry.id} className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 dark:border-[#4b5255] dark:bg-[#2f3437]">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{entry.summary}</p>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{entry.actor?.name ?? "System"} - {entry.action}</p>
+                recentHistory.map((entry) => {
+                  const note = getAssetAuditPayloadNote(entry.payloadJson);
+
+                  return (
+                    <article key={entry.id} className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 dark:border-[#4b5255] dark:bg-[#2f3437]">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{entry.summary}</p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{entry.actor?.name ?? "System"} - {entry.action}</p>
+                          {note ? <p className="mt-2 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-200">{note}</p> : null}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateTimeLabel(entry.createdAt)}</p>
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateTimeLabel(entry.createdAt)}</p>
-                    </div>
-                  </article>
-                ))
+                    </article>
+                  );
+                })
               )}
             </div>
           </section>

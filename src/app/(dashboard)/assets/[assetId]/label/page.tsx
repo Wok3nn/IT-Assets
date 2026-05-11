@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { AdminSelectField } from "@/components/admin/admin-fields";
 import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
-import { buildAssetLookupUrl } from "@/modules/assets/assets-routing";
+import { buildAssetLookupUrl, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
 import { getAssetById } from "@/modules/assets/asset.service";
 import { LabelTemplatePrintPreview } from "@/modules/labels/components/label-template-print-preview";
 import { getLabelTemplateById, listEnabledLabelTemplates } from "@/modules/labels/label-template.service";
@@ -19,6 +19,7 @@ type AssetLabelPrintPageProps = {
   }>;
   searchParams?: Promise<{
     templateId?: string;
+    returnTo?: string;
   }>;
 };
 
@@ -38,6 +39,7 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const assetId = resolvedParams.assetId;
   const requestedTemplateId = resolvedSearchParams?.templateId?.trim() || null;
+  const requestedReturnTo = resolvedSearchParams?.returnTo?.trim() || null;
 
   const requestHeaders = await headers();
   const requestOrigin = getRequestOrigin(requestHeaders);
@@ -67,6 +69,8 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
     notFound();
   }
 
+  const backHref = requestedReturnTo ? normalizeAssetsReturnTo(requestedReturnTo) : `/assets/${asset.id}`;
+
   if (enabledTemplates.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f6_100%)] px-6 py-10 dark:bg-[linear-gradient(180deg,#2f3437_0%,#252a2d_100%)]">
@@ -74,7 +78,7 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
           <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-100">No enabled label templates</h1>
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Create or enable a label template before printing labels for assets.</p>
           <div className="mt-5 flex justify-center">
-            <a className="inline-flex items-center justify-center rounded-full bg-[#F69629] px-4 py-2 text-sm font-medium text-white" href={`/assets/${asset.id}`}>Back to asset</a>
+            <a className="inline-flex items-center justify-center rounded-full bg-[#F69629] px-4 py-2 text-sm font-medium text-white" href={backHref}>Back to asset</a>
           </div>
         </div>
       </div>
@@ -88,7 +92,7 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
   const template = selectedTemplateId ? await getLabelTemplateById(selectedTemplateId) : null;
 
   if (!template) {
-    redirect(`/assets/${asset.id}`);
+    redirect(backHref);
   }
 
   const renderData = {
@@ -102,8 +106,8 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
 
   return (
     <LabelTemplatePrintPreview
-      backHref={`/assets/${asset.id}`}
-      backLabel="Back to asset"
+      backHref={backHref}
+      backLabel={requestedReturnTo ? "Back to assets" : "Back to asset"}
       caption={`${asset.assetTag} - ${template.name}`}
       description="Preview and print the selected label template using this asset's real values."
       renderData={renderData}
@@ -111,6 +115,7 @@ export default async function AssetLabelPrintPage({ params, searchParams }: Asse
       templateName={`Print label for ${asset.assetTag}`}
       toolbarContent={
         <form action={`/assets/${asset.id}/label`} className="flex flex-wrap items-center gap-3" method="get">
+          {requestedReturnTo ? <input name="returnTo" type="hidden" value={requestedReturnTo} /> : null}
           <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
             <span className="sr-only">Label template</span>
             <AdminSelectField defaultValue={template.id} name="templateId">

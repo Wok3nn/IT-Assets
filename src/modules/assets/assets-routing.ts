@@ -49,7 +49,8 @@ export function buildAssetsUrl(options?: AssetsFilterState) {
   if (options?.scopeId) params.set("scopeId", options.scopeId);
   if (options?.locationId) params.set("locationId", options.locationId);
   if (options?.userId) params.set("userId", options.userId);
-  if (options?.includeRetired) params.set("includeRetired", "true");
+  if (options?.includeRetired === true) params.set("includeRetired", "true");
+  if (options?.includeRetired === false) params.set("includeRetired", "false");
   if (options?.sort && options.sort !== "updated-desc") params.set("sort", options.sort);
   if (options?.pageSize && options.pageSize !== 25) params.set("pageSize", String(options.pageSize));
   if (options?.page && options.page > 1) params.set("page", String(options.page));
@@ -102,8 +103,16 @@ export function buildAssetHref(
   return query ? `${basePath}?${query}` : basePath;
 }
 
-export function buildAssetLabelHref(assetId: string) {
-  return `/assets/${assetId}/label`;
+export function buildAssetLabelHref(assetId: string, options?: { returnTo?: string | null }) {
+  const params = new URLSearchParams();
+  const returnTo = options?.returnTo ? normalizeAssetsReturnTo(options.returnTo) : null;
+
+  if (returnTo) {
+    params.set("returnTo", returnTo);
+  }
+
+  const query = params.toString();
+  return query ? `/assets/${assetId}/label?${query}` : `/assets/${assetId}/label`;
 }
 
 export function buildAssetLookupPath(assetId: string) {

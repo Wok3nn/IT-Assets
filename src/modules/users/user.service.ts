@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { getAuthenticationSettings } from "@/modules/settings/authentication-settings.service";
@@ -59,6 +60,10 @@ function sanitizePassword(password?: string) {
 
 function isValidLocalPassword(password?: string | null) {
   return Boolean(password && password.trim().length >= 8);
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 function canUseEntraOnlyLogin() {
@@ -275,29 +280,37 @@ export async function createUser(input: {
     throw new Error("A temporary password with at least 8 characters is required when login is enabled.");
   }
 
-  return db.user.create({
-    data: {
-      name: parsed.name,
-      email: parsed.email,
-      passwordHash: buildPasswordHash({
-        allowLogin: parsed.allowLogin,
-        password: parsed.password,
-        allowEntraOnlyLogin,
-      }),
-      canLogin: parsed.allowLogin,
-      isActive: parsed.isActive,
-      userRoles: {
-        create: {
-          roleId,
+  try {
+    return await db.user.create({
+      data: {
+        name: parsed.name,
+        email: parsed.email,
+        passwordHash: buildPasswordHash({
+          allowLogin: parsed.allowLogin,
+          password: parsed.password,
+          allowEntraOnlyLogin,
+        }),
+        canLogin: parsed.allowLogin,
+        isActive: parsed.isActive,
+        userRoles: {
+          create: {
+            roleId,
+          },
+        },
+        userScopes: {
+          create: scopeIds.map((scopeId) => ({
+            scopeId,
+          })),
         },
       },
-      userScopes: {
-        create: scopeIds.map((scopeId) => ({
-          scopeId,
-        })),
-      },
-    },
-  });
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new Error("A user with this email already exists. Use a different email address or edit the existing user.");
+    }
+
+    throw error;
+  }
 }
 
 export async function updateUser(input: {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowUpDown, Settings2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
@@ -21,6 +22,7 @@ export type AssetGridRow = {
   userId: string | null;
   user: string;
   serialNumber: string;
+  comments: string | null;
   category: string;
   location: string;
   purchaseDate: string;
@@ -28,13 +30,14 @@ export type AssetGridRow = {
   checkLabel: "Check out" | "Check in";
 };
 
-type ColumnId = "select" | "assetTag" | "assetModel" | "status" | "user" | "serialNumber" | "category" | "location" | "purchaseDate" | "warrantyExpiry" | "actions";
+type ColumnId = "select" | "assetTag" | "assetModel" | "status" | "user" | "serialNumber" | "comments" | "category" | "location" | "purchaseDate" | "warrantyExpiry" | "actions";
 
 type ColumnDefinition = {
   id: ColumnId;
   label: string;
   defaultWidth: number;
   minWidth: number;
+  maxWidth?: number;
   resizable: boolean;
   justify?: "start" | "center" | "end";
   cellPadding?: string;
@@ -42,11 +45,9 @@ type ColumnDefinition = {
 };
 
 type ResizeState = {
-  leftId: ColumnId;
-  rightId: ColumnId;
+  columnId: ColumnId;
   startX: number;
-  leftStartWidth: number;
-  rightStartWidth: number;
+  startWidth: number;
 };
 
 type HeaderSortConfig = {
@@ -82,31 +83,37 @@ const separatorClass = DEBUG_RESIZE ? "border-slate-500/90 dark:border-slate-400
 const headerBaseClass = `relative flex min-w-0 items-center border-b border-r ${separatorClass} bg-[#eef2f6] py-3 text-[10px] font-semibold uppercase leading-none tracking-[0.14em] text-slate-500 dark:bg-[#2f3539] dark:text-slate-400`;
 const bodyBaseClass = `flex min-w-0 items-center border-b border-r ${separatorClass} bg-white py-3 dark:bg-[#353b3f]`;
 const selectedBodyBaseClass = `flex min-w-0 items-center border-b border-r ${separatorClass} bg-[rgba(246,150,41,0.12)] py-3 dark:bg-[#4a4034]`;
+const actionsRailBaseClass = "isolate border-l border-slate-300/90 bg-clip-padding dark:border-[#657078]";
+const actionsHeaderRailClass = `${actionsRailBaseClass} bg-[#eef2f6] dark:bg-[#2f3539]`;
+const actionsBodyRailClass = `${actionsRailBaseClass} bg-white dark:bg-[#353b3f]`;
+const selectedActionsBodyRailClass = `${actionsRailBaseClass} bg-[#fef2e5] dark:bg-[#4a4034]`;
 const sortableHeaderButtonClassName = "group inline-flex min-w-0 items-center gap-2 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:bg-white/80 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200";
 const activeSortableHeaderButtonClassName = "bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.05)] dark:bg-white/8 dark:text-slate-100";
 const columnMenuButtonClassName = "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#F69629]/50 hover:text-slate-900 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-300 dark:hover:border-[#F69629]/60 dark:hover:text-slate-100";
-const columnMenuPanelClassName = "absolute right-0 top-full z-30 mt-2 w-[260px] rounded-[22px] border border-[#d7dde4] bg-white/95 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur dark:border-[#556068] dark:bg-[#2c3134]/95";
+const columnMenuPanelClassName = "z-50 w-[260px] rounded-[22px] border border-[#d7dde4] bg-white/95 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur dark:border-[#556068] dark:bg-[#2c3134]/95";
 const columnMenuItemClassName = "flex cursor-pointer items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm text-slate-600 transition hover:bg-[#f6f8fb] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-[#353b3f] dark:hover:text-slate-100";
 
 const PRIMARY_ACTION_STYLE = { width: "96px", height: "36px" } as const;
 const SECONDARY_ACTION_STYLE = { width: "64px", height: "36px" } as const;
 const DELETE_ACTION_STYLE = { width: "64px", height: "36px" } as const;
+const ACTIONS_WIDTH = 272;
 const DISABLED_PILL_STYLE = { borderColor: "#cbd5e1", backgroundColor: "#f1f5f9", color: "#64748b" } as const;
 const VIEW_ACTIVE_STYLE = { borderColor: "#2f8f57", backgroundColor: "#3fb26d", color: "#ffffff" } as const;
 const DELETE_ACTIVE_STYLE = { borderColor: "#c23b32", backgroundColor: "#dd4f45", color: "#ffffff" } as const;
 
 const columns: ColumnDefinition[] = [
-  { id: "select", label: DEBUG_RESIZE ? "Select (80)" : "Select", defaultWidth: 80, minWidth: 80, resizable: true, justify: "center", cellPadding: "px-3", fixed: true },
-  { id: "assetTag", label: DEBUG_RESIZE ? "Asset tag (104)" : "Asset Tag", defaultWidth: 112, minWidth: 104, resizable: true, justify: "start", cellPadding: "px-3", fixed: true },
-  { id: "assetModel", label: DEBUG_RESIZE ? "Make / Model (244)" : "Make / Model", defaultWidth: 244, minWidth: 168, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "status", label: DEBUG_RESIZE ? "Status (124)" : "Status", defaultWidth: 124, minWidth: 104, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "user", label: DEBUG_RESIZE ? "User (144)" : "User", defaultWidth: 144, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (144)" : "Serial Number", defaultWidth: 144, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "category", label: "Category", defaultWidth: 168, minWidth: 124, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "location", label: "Location", defaultWidth: 160, minWidth: 120, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "purchaseDate", label: "Purchase Date", defaultWidth: 128, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "warrantyExpiry", label: "Warranty Expiry", defaultWidth: 132, minWidth: 112, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "actions", label: DEBUG_RESIZE ? "Actions (272 fixed)" : "Actions", defaultWidth: 272, minWidth: 272, resizable: false, justify: "end", cellPadding: "px-3", fixed: true },
+  { id: "select", label: DEBUG_RESIZE ? "Select (80)" : "Select", defaultWidth: 80, minWidth: 80, maxWidth: 80, resizable: false, justify: "center", cellPadding: "px-3", fixed: true },
+  { id: "assetTag", label: DEBUG_RESIZE ? "Asset tag (140 fixed)" : "Asset Tag", defaultWidth: 140, minWidth: 140, maxWidth: 140, resizable: false, justify: "start", cellPadding: "px-3", fixed: true },
+  { id: "assetModel", label: DEBUG_RESIZE ? "Make / Model (244)" : "Make / Model", defaultWidth: 244, minWidth: 120, maxWidth: 440, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "status", label: DEBUG_RESIZE ? "Status (124)" : "Status", defaultWidth: 124, minWidth: 96, maxWidth: 260, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "user", label: DEBUG_RESIZE ? "User (144)" : "User", defaultWidth: 144, minWidth: 96, maxWidth: 320, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (144)" : "Serial Number", defaultWidth: 144, minWidth: 96, maxWidth: 300, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "comments", label: "Comments", defaultWidth: 220, minWidth: 120, maxWidth: 440, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "category", label: "Category", defaultWidth: 168, minWidth: 96, maxWidth: 360, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "location", label: "Location", defaultWidth: 160, minWidth: 96, maxWidth: 360, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "purchaseDate", label: "Purchase Date", defaultWidth: 128, minWidth: 96, maxWidth: 220, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "warrantyExpiry", label: "Warranty Expiry", defaultWidth: 132, minWidth: 96, maxWidth: 220, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "actions", label: DEBUG_RESIZE ? "Actions (272 fixed)" : "Actions", defaultWidth: ACTIONS_WIDTH, minWidth: ACTIONS_WIDTH, maxWidth: ACTIONS_WIDTH, resizable: false, justify: "end", cellPadding: "px-3", fixed: true },
 ];
 
 const fixedColumnIds = columns.filter((column) => column.fixed).map((column) => column.id);
@@ -127,24 +134,29 @@ function getColumn(columnId: ColumnId) {
   return columns.find((column) => column.id === columnId) ?? columns[0];
 }
 
+function clampColumnWidth(column: ColumnDefinition, width: number) {
+  const maxWidth = column.maxWidth ?? 520;
+  return Math.min(maxWidth, Math.max(column.minWidth, width));
+}
+
 function getStickyPlacement(columnId: ColumnId, renderedWidths: Record<ColumnId, number>): StickyPlacement | null {
   if (columnId === "select") {
     return {
-      className: "sticky left-0 z-[4] shadow-[1px_0_0_rgba(148,163,184,0.28)] dark:shadow-[1px_0_0_rgba(86,96,104,0.7)]",
+      className: "sticky left-0 z-[4]",
       style: { left: 0 },
     };
   }
 
   if (columnId === "assetTag") {
     return {
-      className: "sticky z-[4] shadow-[1px_0_0_rgba(148,163,184,0.28)] dark:shadow-[1px_0_0_rgba(86,96,104,0.7)]",
+      className: "sticky z-[4]",
       style: { left: `${renderedWidths.select}px` },
     };
   }
 
   if (columnId === "actions") {
     return {
-      className: "sticky right-0 z-[4] shadow-[-1px_0_0_rgba(148,163,184,0.28)] dark:shadow-[-1px_0_0_rgba(86,96,104,0.7)]",
+      className: "sticky right-0 z-[40]",
       style: { right: 0 },
     };
   }
@@ -260,13 +272,15 @@ export function AssetsGrid({
   });
   const [isHydrated, setIsHydrated] = useState(false);
   const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
-  const [resizingPair, setResizingPair] = useState<{ leftId: ColumnId; rightId: ColumnId } | null>(null);
+  const [columnMenuPosition, setColumnMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const [resizingColumnId, setResizingColumnId] = useState<ColumnId | null>(null);
   const [guideX, setGuideX] = useState<number | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(() => (typeof window !== "undefined" ? cachedContainerWidth : 0));
   const [scrollState, setScrollState] = useState({ canScrollLeft: false, canScrollRight: false });
   const wrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const resizeStateRef = useRef<ResizeState | null>(null);
 
@@ -281,7 +295,7 @@ export function AssetsGrid({
           if (!column.resizable) continue;
           const value = parsed[column.id];
           if (typeof value === "number" && Number.isFinite(value)) {
-            next[column.id] = Math.max(column.minWidth, value);
+            next[column.id] = clampColumnWidth(column, value);
           }
         }
 
@@ -338,7 +352,9 @@ export function AssetsGrid({
     }
 
     const persistable: Partial<Record<ColumnId, number>> = { ...columnWidths };
-    delete persistable.actions;
+    for (const fixedId of fixedColumnIds) {
+      delete persistable[fixedId];
+    }
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable));
   }, [columnWidths, isHydrated]);
 
@@ -352,7 +368,8 @@ export function AssetsGrid({
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !menuButtonRef.current?.contains(target)) {
         setIsColumnsMenuOpen(false);
       }
     }
@@ -361,6 +378,31 @@ export function AssetsGrid({
       window.addEventListener("pointerdown", handlePointerDown);
       return () => window.removeEventListener("pointerdown", handlePointerDown);
     }
+  }, [isColumnsMenuOpen]);
+
+  useEffect(() => {
+    if (!isColumnsMenuOpen) {
+      return;
+    }
+
+    function updateColumnMenuPosition() {
+      const rect = menuButtonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      setColumnMenuPosition({
+        top: rect.bottom + 8,
+        right: Math.max(12, window.innerWidth - rect.right),
+      });
+    }
+
+    updateColumnMenuPosition();
+    window.addEventListener("resize", updateColumnMenuPosition);
+    window.addEventListener("scroll", updateColumnMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateColumnMenuPosition);
+      window.removeEventListener("scroll", updateColumnMenuPosition, true);
+    };
   }, [isColumnsMenuOpen]);
 
   const allVisibleAssetIds = useMemo(() => rows.map((row) => row.id), [rows]);
@@ -420,32 +462,13 @@ export function AssetsGrid({
       const state = resizeStateRef.current;
       if (!state) return;
 
-      const leftColumn = getColumn(state.leftId);
-      const rightColumn = getColumn(state.rightId);
+      const column = getColumn(state.columnId);
       const delta = event.clientX - state.startX;
-
-      let nextLeft = state.leftStartWidth + delta;
-      let nextRight = state.rightStartWidth - delta;
-
-      if (nextLeft < leftColumn.minWidth) {
-        const correction = leftColumn.minWidth - nextLeft;
-        nextLeft = leftColumn.minWidth;
-        nextRight -= correction;
-      }
-
-      if (nextRight < rightColumn.minWidth) {
-        const correction = rightColumn.minWidth - nextRight;
-        nextRight = rightColumn.minWidth;
-        nextLeft -= correction;
-      }
-
-      nextLeft = Math.max(leftColumn.minWidth, nextLeft);
-      nextRight = Math.max(rightColumn.minWidth, nextRight);
+      const nextWidth = clampColumnWidth(column, state.startWidth + delta);
 
       setColumnWidths((current) => ({
         ...current,
-        [state.leftId]: nextLeft,
-        [state.rightId]: nextRight,
+        [state.columnId]: nextWidth,
       }));
 
       const rect = contentRef.current?.getBoundingClientRect();
@@ -456,7 +479,7 @@ export function AssetsGrid({
 
     function handlePointerUp() {
       resizeStateRef.current = null;
-      setResizingPair(null);
+      setResizingColumnId(null);
       setGuideX(null);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
@@ -471,18 +494,16 @@ export function AssetsGrid({
     };
   }, []);
 
-  function startResize(leftId: ColumnId, rightId: ColumnId, event: React.PointerEvent<HTMLButtonElement>) {
+  function startResize(columnId: ColumnId, event: React.PointerEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
 
     resizeStateRef.current = {
-      leftId,
-      rightId,
+      columnId,
       startX: event.clientX,
-      leftStartWidth: columnWidths[leftId],
-      rightStartWidth: columnWidths[rightId],
+      startWidth: columnWidths[columnId],
     };
-    setResizingPair({ leftId, rightId });
+    setResizingColumnId(columnId);
 
     const rect = contentRef.current?.getBoundingClientRect();
     if (rect) {
@@ -562,6 +583,8 @@ export function AssetsGrid({
     () => visibleColumns.reduce((sum, column) => sum + renderedWidths[column.id], 0),
     [renderedWidths, visibleColumns],
   );
+  const hasHorizontalOverflow = containerWidth > 0 && tableWidth > containerWidth;
+  const scrollReserveWidth = hasHorizontalOverflow && visibleColumnIds.includes("actions") ? ACTIONS_WIDTH : 0;
 
   return (
     <div
@@ -585,20 +608,26 @@ export function AssetsGrid({
               </Button>
             </form>
           ) : null}
-          <div className="relative" ref={menuRef}>
+          <div className="relative">
             <button
               className={columnMenuButtonClassName}
               onClick={(event) => {
                 event.stopPropagation();
                 setIsColumnsMenuOpen((current) => !current);
               }}
+              ref={menuButtonRef}
               type="button"
             >
               <Settings2 className="h-4 w-4" strokeWidth={1.8} />
               <span>Columns</span>
             </button>
-            {isColumnsMenuOpen ? (
-              <div className={columnMenuPanelClassName} onClick={(event) => event.stopPropagation()}>
+            {isColumnsMenuOpen && columnMenuPosition ? createPortal(
+              <div
+                className={columnMenuPanelClassName}
+                onClick={(event) => event.stopPropagation()}
+                ref={menuRef}
+                style={{ position: "fixed", top: `${columnMenuPosition.top}px`, right: `${columnMenuPosition.right}px` }}
+              >
                 <div className="mb-2 px-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Visible columns</p>
                 </div>
@@ -613,7 +642,8 @@ export function AssetsGrid({
                     );
                   })}
                 </div>
-              </div>
+              </div>,
+              document.body,
             ) : null}
           </div>
         </div>
@@ -631,8 +661,15 @@ export function AssetsGrid({
           {scrollState.canScrollRight ? (
             <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-8 bg-gradient-to-l from-[#f6f8fb] via-[#f6f8fb]/92 to-transparent dark:from-[#2c3134] dark:via-[#2c3134]/92" />
           ) : null}
-          <div className="min-h-[188px] overflow-x-auto overscroll-x-contain pr-2" ref={wrapperRef} style={{ visibility: isGridVisible ? "visible" : "hidden", scrollbarWidth: "thin" }}>
-            <div ref={contentRef} style={{ minWidth: `${tableWidth}px`, width: containerWidth > 0 ? "100%" : `${tableWidth}px` }}>
+          <div className="min-h-[188px] overflow-x-auto overscroll-x-contain" ref={wrapperRef} style={{ visibility: isGridVisible ? "visible" : "hidden", scrollbarWidth: "thin" }}>
+            <div
+              ref={contentRef}
+              style={{
+                minWidth: `${tableWidth}px`,
+                paddingRight: scrollReserveWidth > 0 ? `${scrollReserveWidth}px` : undefined,
+                width: containerWidth > 0 ? "100%" : `${tableWidth}px`,
+              }}
+            >
               <div className="relative">
                 {guideX !== null ? (
                   <div className="pointer-events-none absolute inset-y-0 z-30 w-px bg-[#F69629] shadow-[0_0_0_1px_rgba(246,150,41,0.28)]" style={{ left: `${guideX}px` }} />
@@ -641,14 +678,14 @@ export function AssetsGrid({
                 <div className="grid" style={{ gridTemplateColumns }}>
                   {visibleColumns.map((column, index) => {
                     const isLast = index === visibleColumns.length - 1;
-                    const nextColumn = visibleColumns[index + 1] ?? null;
-                    const canResizeAgainstNext = column.resizable && nextColumn && nextColumn.id !== "actions";
+                    const canResizeColumn = column.resizable && !column.fixed;
                     const stickyPlacement = getStickyPlacement(column.id, renderedWidths);
                     const headerClassName = [
                       headerBaseClass,
                       column.cellPadding ?? "px-4",
                       column.id === "actions" ? "justify-start text-left" : getJustifyClass(column.justify),
                       stickyPlacement?.className ?? "",
+                      column.id === "actions" ? actionsHeaderRailClass : "",
                       isLast ? "border-r-0" : "",
                     ].join(" ");
                     const headerSort = (column.id === "assetTag" || column.id === "assetModel") ? headerSorts[column.id] : null;
@@ -679,17 +716,21 @@ export function AssetsGrid({
                             <span className="block min-w-0 truncate whitespace-nowrap">{column.label}</span>
                             <SortIndicator direction={headerSort.direction} />
                           </Link>
+                        ) : column.id === "actions" ? (
+                          <div className="flex h-full w-full flex-nowrap items-center justify-start gap-2 overflow-hidden whitespace-nowrap">
+                            <span className="block min-w-0 truncate whitespace-nowrap">Actions</span>
+                          </div>
                         ) : (
                           <span className="block min-w-0 truncate whitespace-nowrap">{column.label}</span>
                         )}
-                        {canResizeAgainstNext ? (
+                        {canResizeColumn ? (
                           <button
                             aria-label={`Resize ${column.label} column`}
-                            className={`absolute right-0 top-0 z-20 h-full w-3 translate-x-1/2 cursor-col-resize transition ${DEBUG_RESIZE ? "bg-[#F69629]/35" : "bg-slate-500/22"} hover:bg-[#F69629]/45 ${resizingPair?.leftId === column.id ? "bg-[#F69629]/65" : ""}`}
-                            onPointerDown={(event) => startResize(column.id, nextColumn.id, event)}
+                            className={`absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize transition ${DEBUG_RESIZE ? "bg-[#F69629]/35" : "bg-slate-500/22"} hover:bg-[#F69629]/45 ${resizingColumnId === column.id ? "bg-[#F69629]/65" : ""}`}
+                            onPointerDown={(event) => startResize(column.id, event)}
                             type="button"
                           >
-                            <span className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 ${DEBUG_RESIZE ? "bg-[#F69629]" : "bg-slate-500/80"}`} />
+                            <span className={`absolute inset-y-0 right-0 w-px ${DEBUG_RESIZE ? "bg-[#F69629]" : "bg-slate-500/80"}`} />
                           </button>
                         ) : null}
                       </div>
@@ -702,7 +743,7 @@ export function AssetsGrid({
                   const rowClass = isSelected ? selectedBodyBaseClass : bodyBaseClass;
                   const hoverClass = isSelected ? "hover:bg-[rgba(246,150,41,0.16)] dark:hover:bg-[#54483a]" : "hover:bg-[#fdf1e4] dark:hover:bg-[#3d4448]";
                   const viewHref = buildAssetHref(row.id, { returnTo });
-                  const labelHref = buildAssetLabelHref(row.id);
+                  const labelHref = buildAssetLabelHref(row.id, { returnTo });
 
                   return (
                     <div
@@ -722,6 +763,7 @@ export function AssetsGrid({
                           column.cellPadding ?? "px-4",
                           getJustifyClass(column.justify),
                           stickyPlacement?.className ?? "",
+                          column.id === "actions" ? (isSelected ? selectedActionsBodyRailClass : actionsBodyRailClass) : "",
                           isLast ? "border-r-0" : "",
                         ].join(" ");
 
@@ -794,6 +836,11 @@ export function AssetsGrid({
 
                         if (column.id === "serialNumber") {
                           return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]" title={row.serialNumber}>{row.serialNumber}</span></div>;
+                        }
+
+                        if (column.id === "comments") {
+                          const comments = row.comments?.trim() ?? "";
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className={`block truncate text-sm ${comments ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}`} title={comments || "No comments"}>{comments || "No comments"}</span></div>;
                         }
 
                         if (column.id === "category") {

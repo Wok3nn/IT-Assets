@@ -15,7 +15,29 @@ export const dynamic = "force-dynamic";
 
 const USERS_DIRECTORY_HREF = "/users?view=users";
 
-async function createUserAction(formData: FormData) {
+export type UserCreateFormState = {
+  values: {
+    name: string;
+    email: string;
+    allowLogin: boolean;
+    roleKey: string;
+    scopeIds: string[];
+  };
+  error: string | null;
+};
+
+const initialUserCreateFormState: UserCreateFormState = {
+  values: {
+    name: "",
+    email: "",
+    allowLogin: false,
+    roleKey: "",
+    scopeIds: [],
+  },
+  error: null,
+};
+
+async function createUserAction(_state: UserCreateFormState, formData: FormData): Promise<UserCreateFormState> {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
@@ -28,8 +50,30 @@ async function createUserAction(formData: FormData) {
   const roleKey = String(formData.get("roleKey") ?? "").trim();
   const scopeIds = formData.getAll("scopeIds").map((value) => String(value).trim()).filter(Boolean);
   const isActive = String(formData.get("isActive") ?? "true") !== "false";
-  if (name.length < 2 || email.length < 3 || !roleKey) return;
-  await createUser({ name, email, allowLogin, password, roleKey, scopeIds, isActive });
+
+  const values = { name, email, allowLogin, roleKey, scopeIds };
+
+  if (name.length < 2) {
+    return { values, error: "Enter a display name with at least 2 characters." };
+  }
+
+  if (email.length < 3) {
+    return { values, error: "Enter a valid email address." };
+  }
+
+  if (!roleKey) {
+    return { values, error: "Choose a role for this user." };
+  }
+
+  try {
+    await createUser({ name, email, allowLogin, password, roleKey, scopeIds, isActive });
+  } catch (error) {
+    return {
+      values,
+      error: error instanceof Error ? error.message : "User could not be created. Check the details and try again.",
+    };
+  }
+
   revalidatePath("/users");
   redirect(USERS_DIRECTORY_HREF);
 }
@@ -65,7 +109,7 @@ export default async function NewUserPage() {
         </PageHero>
 
         <div className="mx-auto w-full max-w-3xl">
-          <UserCreateCard action={createUserAction} defaultRoleKey={roles[0]?.key ?? ""} roleOptions={roles} scopeOptions={scopes} />
+          <UserCreateCard action={createUserAction} defaultRoleKey={roles[0]?.key ?? ""} initialState={initialUserCreateFormState} roleOptions={roles} scopeOptions={scopes} />
         </div>
       </div>
     </AppShell>

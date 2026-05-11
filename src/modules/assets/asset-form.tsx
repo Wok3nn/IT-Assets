@@ -20,6 +20,7 @@ type ScopeOption = {
 
 type StatusOption = {
   id: string;
+  key?: string;
   name: string;
 };
 
@@ -63,6 +64,7 @@ type AssetFormProps = {
   submitLabel: string;
   defaultAssetTag?: string;
   initialValue?: AssetFormValue;
+  layout?: "default" | "compact";
 };
 
 const MAX_CATEGORY_LEVELS = 5;
@@ -114,6 +116,7 @@ export function AssetForm({
   submitLabel,
   defaultAssetTag,
   initialValue,
+  layout = "default",
 }: AssetFormProps) {
   const initialLineage = useMemo(
     () => buildLineage(categories, initialValue?.categoryId ?? null).map((category) => category.id),
@@ -121,6 +124,9 @@ export function AssetForm({
   );
 
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(initialLineage);
+  const [useCategoryForMakeModel, setUseCategoryForMakeModel] = useState(false);
+  const [makeValue, setMakeValue] = useState(initialValue?.make ?? "");
+  const [modelValue, setModelValue] = useState(initialValue?.model ?? "");
 
   useEffect(() => {
     setSelectedCategoryIds(initialLineage);
@@ -132,8 +138,13 @@ export function AssetForm({
   );
 
   const deepestCategory = selectedLineage.at(-1) ?? null;
+  const topCategory = selectedLineage[0] ?? null;
   const selectedCategoryPath = selectedLineage.map((category) => category.name).join(" > ");
   const createModeAssetTag = defaultAssetTag ?? "";
+  const isCompact = layout === "compact";
+  const sectionClassName = insetCardClassName;
+  const compactGridClassName = isCompact ? "grid gap-4 md:grid-cols-2" : "grid gap-4 sm:grid-cols-2";
+  const selectedStatusId = initialValue?.statusId ?? "";
   const locationLabels = useMemo(
     () => new Map(locations.map((location) => [location.id, buildLocationLabel(locations, location)])),
     [locations],
@@ -161,26 +172,35 @@ export function AssetForm({
     return options;
   }, [categories, selectedCategoryIds]);
 
+  useEffect(() => {
+    if (!useCategoryForMakeModel) {
+      return;
+    }
+
+    setMakeValue(topCategory?.name ?? "");
+    setModelValue(deepestCategory?.name ?? "");
+  }, [deepestCategory?.name, topCategory?.name, useCategoryForMakeModel]);
+
   return (
     <form action={action} className="mt-5 space-y-4">
       {initialValue?.id ? <input name="assetId" type="hidden" value={initialValue.id} /> : null}
       {hiddenFields}
       <input name="categoryId" type="hidden" value={deepestCategory?.id ?? ""} />
 
-      <div className={insetCardClassName}>
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <div className={sectionClassName}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Category path</p>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Select up to five levels. The deepest selected category is saved on the asset.
             </p>
           </div>
-          <div className="rounded-2xl border border-dashed border-[#ece7df] px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:text-slate-300 lg:min-w-[260px]">
+          <div className="rounded-2xl border border-dashed border-[#ece7df] px-4 py-3 text-sm text-slate-600 dark:border-[#4b5255] dark:text-slate-300 lg:min-w-[220px]">
             {selectedCategoryPath || "No category selected"}
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4">
+        <div className={isCompact ? "mt-4 grid gap-3 md:grid-cols-2" : "mt-4 grid gap-4"}>
           {levelOptions.map((options, index) => (
             <label key={index} className="block space-y-2">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{getLevelLabel(index)}</span>
@@ -210,76 +230,98 @@ export function AssetForm({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</span>
+      {mode === "create" ? (
+        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200">
           <input
-            className={textFieldClassName}
-            defaultValue={initialValue?.model ?? ""}
-            name="model"
-            placeholder="Latitude 5420"
-            type="text"
+            checked={useCategoryForMakeModel}
+            className="ui-switch mt-0.5"
+            onChange={(event) => setUseCategoryForMakeModel(event.target.checked)}
+            type="checkbox"
           />
-          <p className="text-xs text-slate-500 dark:text-slate-400">Primary device identity for create, edit, and import flows.</p>
+          <span>
+            <span className="block font-medium text-slate-800 dark:text-slate-100">Use category path for make/model</span>
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Top-level category becomes Make, and the selected category becomes Model while enabled.</span>
+          </span>
         </label>
+      ) : null}
+
+      <div className={compactGridClassName}>
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Make</span>
           <input
-            className={textFieldClassName}
-            defaultValue={initialValue?.make ?? ""}
+            className={`${textFieldClassName} ${useCategoryForMakeModel ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-[#262b2e] dark:text-slate-400" : ""}`}
             name="make"
+            onChange={(event) => setMakeValue(event.target.value)}
             placeholder="Dell"
+            readOnly={useCategoryForMakeModel}
             type="text"
+            value={makeValue}
           />
-          <p className="text-xs text-slate-500 dark:text-slate-400">Manufacturer or brand for the selected model.</p>
+          {!isCompact ? <p className="text-xs text-slate-500 dark:text-slate-400">Manufacturer or brand for the selected model.</p> : null}
+        </label>
+        <label className="block space-y-2">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</span>
+          <input
+            className={`${textFieldClassName} ${useCategoryForMakeModel ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-[#262b2e] dark:text-slate-400" : ""}`}
+            name="model"
+            onChange={(event) => setModelValue(event.target.value)}
+            placeholder="Latitude 5420"
+            readOnly={useCategoryForMakeModel}
+            type="text"
+            value={modelValue}
+          />
+          {!isCompact ? <p className="text-xs text-slate-500 dark:text-slate-400">Primary device identity for create, edit, and import flows.</p> : null}
         </label>
       </div>
 
-      <label className="block space-y-2">
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Asset name</span>
-        <input
-          className={textFieldClassName}
-          defaultValue={initialValue?.name ?? ""}
-          name="name"
-          placeholder="Optional friendly name"
-          type="text"
-        />
-        <p className="text-xs text-slate-500 dark:text-slate-400">Optional compatibility field for a descriptive or legacy display name.</p>
-      </label>
-
-      {mode === "create" ? (
+      <div className={compactGridClassName}>
         <label className="block space-y-2">
-          <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-            <span>Asset tag</span>
-            <span className="inline-flex min-h-[1.75rem] items-center gap-2 rounded-full bg-emerald-100 px-4 py-1.5 text-[11px] font-semibold leading-none text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
-              <span>Configured in General Settings</span>
-              <span aria-hidden="true" className="h-2 w-2 opacity-0"></span>
-            </span>
-          </span>
-          <input className={`${textFieldClassName} cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-[#4b5255] dark:bg-[#262b2e] dark:text-slate-400`} name="assetTag" readOnly type="text" value={createModeAssetTag} />
-        </label>
-      ) : (
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Asset tag</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Asset name</span>
           <input
             className={textFieldClassName}
-            defaultValue={initialValue?.assetTag ?? ""}
-            name="assetTag"
-            required
+            defaultValue={initialValue?.name ?? ""}
+            name="name"
+            placeholder="Optional friendly name"
             type="text"
           />
+          {!isCompact ? <p className="text-xs text-slate-500 dark:text-slate-400">Optional compatibility field for a descriptive or legacy display name.</p> : null}
         </label>
-      )}
+        {mode === "create" ? (
+          <label className="block space-y-2">
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+              <span>Asset tag</span>
+              {!isCompact ? (
+                <span className="inline-flex min-h-[1.75rem] items-center gap-2 rounded-full bg-emerald-100 px-4 py-1.5 text-[11px] font-semibold leading-none text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
+                  <span>Configured in General Settings</span>
+                  <span aria-hidden="true" className="h-2 w-2 opacity-0"></span>
+                </span>
+              ) : null}
+            </span>
+            <input className={`${textFieldClassName} cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-[#4b5255] dark:bg-[#262b2e] dark:text-slate-400`} name="assetTag" readOnly type="text" value={createModeAssetTag} />
+          </label>
+        ) : (
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Asset tag</span>
+            <input
+              className={textFieldClassName}
+              defaultValue={initialValue?.assetTag ?? ""}
+              name="assetTag"
+              required
+              type="text"
+            />
+          </label>
+        )}
+      </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={compactGridClassName}>
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Serial number</span>
           <input defaultValue={initialValue?.serialNumber ?? ""} name="serialNumber" className={textFieldClassName} type="text" />
         </label>
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Status</span>
-          <select defaultValue={initialValue?.statusId ?? ""} name="statusId" className={textFieldClassName}>
+          <select defaultValue={selectedStatusId} name="statusId" className={textFieldClassName}>
             <option value="">No status</option>
             {statuses.map((status) => (
               <option key={status.id} value={status.id}>
@@ -290,7 +332,7 @@ export function AssetForm({
         </label>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={compactGridClassName}>
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Assigned user</span>
           <select defaultValue={initialValue?.assignedUserId ?? ""} name="assignedUserId" className={textFieldClassName}>
@@ -315,7 +357,7 @@ export function AssetForm({
         </label>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={compactGridClassName}>
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Purchase date</span>
           <input defaultValue={initialValue?.purchaseDate ?? ""} name="purchaseDate" className={textFieldClassName} type="date" />
@@ -326,7 +368,7 @@ export function AssetForm({
         </label>
       </div>
 
-      <div className={insetCardClassName}>
+      <div className={sectionClassName}>
         <div>
           <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Departments</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Use department tags for visibility and filtering.</p>
@@ -363,7 +405,7 @@ export function AssetForm({
 
       <label className="block space-y-2">
         <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Notes</span>
-        <textarea defaultValue={initialValue?.notes ?? ""} name="notes" rows={4} className={textFieldClassName} />
+        <textarea defaultValue={initialValue?.notes ?? ""} name="notes" rows={isCompact ? 3 : 4} className={textFieldClassName} />
       </label>
 
       <Button className="w-full" type="submit">

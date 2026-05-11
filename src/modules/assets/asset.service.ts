@@ -1571,6 +1571,19 @@ export async function getAssetAuditHistory(
   });
 }
 
+export function getAssetAuditPayloadNote(payloadJson?: string | null) {
+  if (!payloadJson) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(payloadJson) as { note?: unknown };
+    return typeof payload.note === "string" && payload.note.trim() ? payload.note.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getAssetSummary() {
   await ensureDefaultAssetStatuses();
 
