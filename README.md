@@ -46,6 +46,14 @@ All running **locally with Docker** — no cloud dependency required.
 ## 📸 Screenshots
 
 > Add screenshots here
+> <img width="2558" height="1276" alt="image" src="https://github.com/user-attachments/assets/f2e0a198-4352-4c3f-bc60-0ed04872128b" />
+> <img width="2557" height="1276" alt="image" src="https://github.com/user-attachments/assets/224ef192-a702-4ae1-98c3-2f3557077a14" />
+> <img width="2557" height="1271" alt="image" src="https://github.com/user-attachments/assets/5997984a-c11b-4fe8-b014-3b50c97bf840" />
+> <img width="2558" height="1279" alt="image" src="https://github.com/user-attachments/assets/7c4b85ef-c655-479f-8ec5-71ece29ad953" />
+
+
+
+
 
 
 ---
