@@ -2,6 +2,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 
+import { textFieldClassName } from "@/components/forms/text-field";
+import { insetCardClassName } from "@/components/layout/inset-card";
+import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
@@ -21,10 +24,6 @@ import { buildUserHref } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
 
 export const dynamic = "force-dynamic";
-
-const panelClass = "rounded-[32px] border border-[#ece7df] bg-white/92 p-6 shadow-panel backdrop-blur dark:border-[#464c4f] dark:bg-[#383d40]/92 dark:shadow-[0_18px_40px_rgba(0,0,0,0.18)]";
-const fieldClass = "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-100 dark:focus:border-[#F69629]/70";
-const subpanelClass = "rounded-3xl border border-[#ece7df] bg-[#f8f9fb] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-[#4b5255] dark:bg-[#34393c] dark:shadow-[0_14px_28px_rgba(0,0,0,0.18)]";
 
 type AssetViewPageProps = {
   params: Promise<{ assetId: string }>;
@@ -148,7 +147,7 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
   return (
     <AppShell>
       <div className="space-y-6">
-        <section className={panelClass}>
+        <PageHero>
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Assets</p>
@@ -183,16 +182,16 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
               </Link>
             </div>
           </div>
-        </section>
+        </PageHero>
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="mx-auto w-full max-w-3xl space-y-6">
           {permissionContext.capabilities.manageAssetTransfers ? (
             <AssetTransferPanel
               assetId={asset.id}
-              cardClass={subpanelClass}
+              cardClass={insetCardClassName}
               checkInAction={checkInAssetAction}
               checkOutAction={checkOutAssetAction}
-              fieldClass={fieldClass}
+              fieldClass={textFieldClassName}
               filterState={{ q: "", statusId: null, categoryId: null, scopeId: null, locationId: null, userId: null, sort: "updated-desc" }}
               initialAssignedLocationId={asset.assignedLocationId}
               initialAssignedUserId={asset.assignedUserId}
@@ -208,13 +207,82 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
               users={referenceData.users}
             />
           ) : (
-            <section className={subpanelClass}>
+            <section className={insetCardClassName}>
               <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">Asset movement</h2>
               <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">This role does not have check in / check out access.</p>
             </section>
           )}
 
-          <section className={subpanelClass}>
+          <PageHero>
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">Asset details</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Identity, ownership, and lifecycle details for this asset.</p>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Make</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.make?.trim() || "Not set"}</p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Model</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.model?.trim() || "Not set"}</p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Asset name</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.name}</p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Category</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{buildTreeLabel(referenceData.categories, asset.categoryId) ?? "Unassigned"}</p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Assigned user</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">
+                  {asset.assignedUser ? (
+                    <Link className="text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildUserHref(asset.assignedUser.id)}>
+                      {asset.assignedUser.name}
+                    </Link>
+                  ) : "Unassigned"}
+                </p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Location</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) : "Unassigned"}</p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Serial number</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.serialNumber ?? "Not set"}</p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Purchase date</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.purchaseDate ? asset.purchaseDate.toLocaleDateString() : "Not set"}</p>
+              </div>
+              <div className={insetCardClassName}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Warranty expiry</p>
+                <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.warrantyExpiry ? asset.warrantyExpiry.toLocaleDateString() : "Not set"}</p>
+              </div>
+            </div>
+
+            {asset.scopes.length > 0 ? (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {asset.scopes.map(({ scope }) => (
+                  <span key={scope.id} className="rounded-full border px-2.5 py-1 text-xs font-medium" style={buildScopeBadgeStyle(scope)}>
+                    {scope.name}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {asset.notes ? (
+              <div className="mt-5 rounded-3xl border border-[#ece7df] bg-[#f8f9fb] p-4 dark:border-[#4b5255] dark:bg-[#34393c]">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Notes</p>
+                <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{asset.notes}</p>
+              </div>
+            ) : null}
+          </PageHero>
+
+          <section className={insetCardClassName}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">Asset history</h2>
@@ -248,62 +316,6 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
             </div>
           </section>
         </div>
-
-        <section className={panelClass}>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <div className={subpanelClass}>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Make</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.make?.trim() || "Not set"}</p>
-            </div>
-            <div className={subpanelClass}>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Model</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.model?.trim() || "Not set"}</p>
-            </div>
-            <div className={subpanelClass}>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Asset name</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.name}</p>
-            </div>
-            <div className={subpanelClass}>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Category</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{buildTreeLabel(referenceData.categories, asset.categoryId) ?? "Unassigned"}</p>
-            </div>
-            <div className={subpanelClass}>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Assigned user</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">
-                {asset.assignedUser ? (
-                  <Link className="text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildUserHref(asset.assignedUser.id)}>
-                    {asset.assignedUser.name}
-                  </Link>
-                ) : "Unassigned"}
-              </p>
-            </div>
-            <div className={subpanelClass}>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Location</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) : "Unassigned"}</p>
-            </div>
-            <div className={subpanelClass}>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Serial number</p>
-              <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{asset.serialNumber ?? "Not set"}</p>
-            </div>
-          </div>
-
-          {asset.scopes.length > 0 ? (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {asset.scopes.map(({ scope }) => (
-                <span key={scope.id} className="rounded-full border px-2.5 py-1 text-xs font-medium" style={buildScopeBadgeStyle(scope)}>
-                  {scope.name}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          {asset.notes ? (
-            <div className="mt-5 rounded-3xl border border-[#ece7df] bg-[#f8f9fb] p-4 dark:border-[#4b5255] dark:bg-[#34393c]">
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Notes</p>
-              <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{asset.notes}</p>
-            </div>
-          ) : null}
-        </section>
       </div>
     </AppShell>
   );

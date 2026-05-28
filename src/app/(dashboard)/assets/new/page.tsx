@@ -7,9 +7,9 @@ import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
-import { AssetForm } from "@/modules/assets/asset-form";
+import { AssetForm, type AssetFormState } from "@/modules/assets/asset-form";
 import { buildAssetsUrl, parseAssetsPage, parseAssetsPageSize, parseAssetsSort } from "@/modules/assets/assets-routing";
-import { createAsset, getAssetById, listAssetReferenceData } from "@/modules/assets/asset.service";
+import { AssetTagAlreadyExistsError, createAsset, getAssetById, listAssetReferenceData } from "@/modules/assets/asset.service";
 import { readSetupState } from "@/services/setup-state";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ function hiddenFilterFields(input: { q: string; statusId: string | null; categor
   );
 }
 
-async function createAssetAction(formData: FormData) {
+async function createAssetAction(_state: AssetFormState, formData: FormData): Promise<AssetFormState> {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
@@ -55,22 +55,31 @@ async function createAssetAction(formData: FormData) {
     redirect("/assets");
   }
 
-  await createAsset({
-    name: formData.get("name")?.toString() ?? "",
-    make: formData.get("make")?.toString() ?? "",
-    model: formData.get("model")?.toString() ?? "",
-    assetTag: formData.get("assetTag")?.toString() ?? "",
-    serialNumber: formData.get("serialNumber")?.toString() ?? "",
-    notes: formData.get("notes")?.toString() ?? "",
-    purchaseDate: formData.get("purchaseDate")?.toString() ?? "",
-    warrantyExpiry: formData.get("warrantyExpiry")?.toString() ?? "",
-    categoryId: formData.get("categoryId")?.toString() ?? "",
-    statusId: formData.get("statusId")?.toString() ?? "",
-    assignedUserId: formData.get("assignedUserId")?.toString() ?? "",
-    assignedLocationId: formData.get("assignedLocationId")?.toString() ?? "",
-    scopeIds: formData.getAll("scopeIds").map((value) => value.toString()),
-    actorUserId: currentUser.id,
-  });
+  try {
+    await createAsset({
+      name: formData.get("name")?.toString() ?? "",
+      make: formData.get("make")?.toString() ?? "",
+      model: formData.get("model")?.toString() ?? "",
+      assetTag: formData.get("assetTag")?.toString() ?? "",
+      serialNumber: formData.get("serialNumber")?.toString() ?? "",
+      notes: formData.get("notes")?.toString() ?? "",
+      purchaseDate: formData.get("purchaseDate")?.toString() ?? "",
+      warrantyExpiry: formData.get("warrantyExpiry")?.toString() ?? "",
+      categoryId: formData.get("categoryId")?.toString() ?? "",
+      statusId: formData.get("statusId")?.toString() ?? "",
+      assignedUserId: formData.get("assignedUserId")?.toString() ?? "",
+      assignedLocationId: formData.get("assignedLocationId")?.toString() ?? "",
+      scopeIds: formData.getAll("scopeIds").map((value) => value.toString()),
+      actorUserId: currentUser.id,
+    });
+  } catch (error) {
+    if (error instanceof AssetTagAlreadyExistsError) {
+      return { fieldErrors: { assetTag: "Asset tag already exists." } };
+    }
+
+    throw error;
+  }
+
   revalidatePath("/assets");
   revalidatePath("/assets/new");
   redirect(buildAssetsUrl({
@@ -163,6 +172,7 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
             action={createAssetAction}
             categories={referenceData.categories}
             defaultAssetTag={referenceData.suggestedAssetTag}
+            existingAssetTags={referenceData.assetTags}
             hiddenFields={hiddenFilterFields({ q: searchQuery, statusId, categoryId, scopeId, locationId, userId, sort, page, pageSize })}
             initialValue={initialValue}
             layout="compact"

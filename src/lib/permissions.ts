@@ -35,6 +35,7 @@ export const PERMISSION_NAV_OPTIONS = [
   { key: "labels", label: "Labels", href: "/labels" },
   { key: "users", label: "Users", href: "/users" },
   { key: "locations", label: "Locations", href: "/locations" },
+  { key: "patchNotes", label: "Patch Notes", href: "/patch-notes" },
   { key: "settings", label: "Settings", href: "/settings" },
 ] as const;
 

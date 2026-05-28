@@ -13,6 +13,11 @@ import { readSetupState } from "@/services/setup-state";
 
 export const dynamic = "force-dynamic";
 
+const bottomTabOrder = ["assets", "categories", "departments", "locations", "labels", "users"];
+const bottomTabConfigs = bottomTabOrder
+  .map((slug) => importExportEntityConfigs.find((entry) => entry.slug === slug))
+  .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
 type ImportExportEntityPageProps = {
   params: Promise<{ entity: string }>;
 };
@@ -72,17 +77,22 @@ export default async function ImportExportEntityPage({ params }: ImportExportEnt
 
         <div className="flex justify-center pt-2 lg:pt-3">
           <div className="flex flex-wrap justify-center gap-2">
-            {importExportEntityConfigs
-              .filter((entry) => entry.slug !== config.slug)
-              .map((entry) => (
+            {bottomTabConfigs.map((entry) => {
+              const isActive = entry.slug === config.slug;
+
+              return (
                 <Link
-                  className="inline-flex rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-[#f0c48d] hover:text-[#b56613] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F69629]/40 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-300 dark:hover:border-[#f0a853] dark:hover:text-[#ffd1a0]"
+                  aria-current={isActive ? "page" : undefined}
+                  className={isActive
+                    ? "inline-flex rounded-full border border-[#f2c28c] bg-[rgba(246,150,41,0.16)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#b56613] shadow-[0_8px_18px_rgba(246,150,41,0.12)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F69629]/40 dark:border-[#7f5a2d] dark:bg-[rgba(246,150,41,0.22)] dark:text-[#ffd7ab]"
+                    : "inline-flex rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-[#f0c48d] hover:text-[#b56613] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F69629]/40 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-300 dark:hover:border-[#f0a853] dark:hover:text-[#ffd1a0]"}
                   href={entry.href}
                   key={entry.slug}
                 >
                   {entry.title}
                 </Link>
-              ))}
+              );
+            })}
           </div>
           </div>
       </div>

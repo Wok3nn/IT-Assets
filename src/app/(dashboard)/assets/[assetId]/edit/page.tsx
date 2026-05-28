@@ -7,10 +7,11 @@ import { AppShell } from "@/components/navigation/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
-import { AssetForm } from "@/modules/assets/asset-form";
+import { AssetForm, type AssetFormState } from "@/modules/assets/asset-form";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
 import {
+  AssetTagAlreadyExistsError,
   getAssetById,
   listAssetReferenceData,
   updateAsset,
@@ -44,7 +45,7 @@ function buildTreeLabel(items: Array<{ id: string; name: string; parentId: strin
   return labels.join(" / ");
 }
 
-async function updateAssetAction(formData: FormData) {
+async function updateAssetAction(_state: AssetFormState, formData: FormData): Promise<AssetFormState> {
   "use server";
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
@@ -62,24 +63,32 @@ async function updateAssetAction(formData: FormData) {
     redirect(returnTo);
   }
 
-  await updateAsset({
-    assetId,
-    name: formData.get("name")?.toString() ?? "",
-    make: formData.get("make")?.toString() ?? "",
-    model: formData.get("model")?.toString() ?? "",
-    assetTag: formData.get("assetTag")?.toString() ?? "",
-    serialNumber: formData.get("serialNumber")?.toString() ?? "",
-    notes: formData.get("notes")?.toString() ?? "",
-    purchaseDate: formData.get("purchaseDate")?.toString() ?? "",
-    warrantyExpiry: formData.get("warrantyExpiry")?.toString() ?? "",
-    categoryId: formData.get("categoryId")?.toString() ?? "",
-    statusId: formData.get("statusId")?.toString() ?? "",
-    assignedUserId: formData.get("assignedUserId")?.toString() ?? "",
-    assignedLocationId: formData.get("assignedLocationId")?.toString() ?? "",
-    scopeIds: formData.getAll("scopeIds").map((value) => value.toString()),
-    actorUserId: currentUser.id,
-    accessScope: permissionContext.assetScope,
-  });
+  try {
+    await updateAsset({
+      assetId,
+      name: formData.get("name")?.toString() ?? "",
+      make: formData.get("make")?.toString() ?? "",
+      model: formData.get("model")?.toString() ?? "",
+      assetTag: formData.get("assetTag")?.toString() ?? "",
+      serialNumber: formData.get("serialNumber")?.toString() ?? "",
+      notes: formData.get("notes")?.toString() ?? "",
+      purchaseDate: formData.get("purchaseDate")?.toString() ?? "",
+      warrantyExpiry: formData.get("warrantyExpiry")?.toString() ?? "",
+      categoryId: formData.get("categoryId")?.toString() ?? "",
+      statusId: formData.get("statusId")?.toString() ?? "",
+      assignedUserId: formData.get("assignedUserId")?.toString() ?? "",
+      assignedLocationId: formData.get("assignedLocationId")?.toString() ?? "",
+      scopeIds: formData.getAll("scopeIds").map((value) => value.toString()),
+      actorUserId: currentUser.id,
+      accessScope: permissionContext.assetScope,
+    });
+  } catch (error) {
+    if (error instanceof AssetTagAlreadyExistsError) {
+      return { fieldErrors: { assetTag: "Asset tag already exists." } };
+    }
+
+    throw error;
+  }
 
   revalidatePath("/assets");
   revalidatePath(`/assets/${assetId}`);
@@ -132,6 +141,7 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
           </div>
         </PageHero>
 
+        <div className="mx-auto w-full max-w-3xl">
         <PageHero>
           <div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
             <span>Category {buildTreeLabel(referenceData.categories, asset.categoryId) ?? "Unassigned"}</span>
@@ -149,6 +159,7 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
           <AssetForm
             action={updateAssetAction}
             categories={referenceData.categories}
+            existingAssetTags={referenceData.assetTags}
             hiddenFields={<><input name="assetId" type="hidden" value={asset.id} /><input name="returnTo" type="hidden" value={returnTo} /></>}
             initialValue={{
               id: asset.id,
@@ -166,6 +177,7 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
               assignedLocationId: asset.assignedLocationId,
               scopeIds: asset.scopes.map((scope) => scope.scopeId),
             }}
+            layout="compact"
             locations={referenceData.locations}
             mode="edit"
             scopes={referenceData.scopes}
@@ -174,6 +186,7 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
             users={referenceData.users}
           />
         </PageHero>
+        </div>
       </div>
     </AppShell>
   );

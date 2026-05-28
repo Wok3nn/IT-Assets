@@ -15,6 +15,13 @@ const optionalDateSchema = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.l
 const optionalAssetTagSchema = z.union([z.string().trim().min(1).max(80), z.literal("")]).optional();
 const requiredIdSchema = z.string().trim().cuid();
 
+export class AssetTagAlreadyExistsError extends Error {
+  constructor() {
+    super("Asset tag already exists.");
+    this.name = "AssetTagAlreadyExistsError";
+  }
+}
+
 const assetSchema = z
   .object({
     assetId: z.string().trim().cuid().optional(),
@@ -602,6 +609,21 @@ async function getNextAvailableAssetTag(client: DatabaseClient, startingNumber: 
   return String(candidate);
 }
 
+async function ensureAssetTagAvailable(client: DatabaseClient, assetTag: string, currentAssetId?: string | null) {
+  const existingAsset = await client.asset.findUnique({
+    where: {
+      assetTag,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingAsset && existingAsset.id !== currentAssetId) {
+    throw new AssetTagAlreadyExistsError();
+  }
+}
+
 export async function getSuggestedAssetTag() {
   const settings = await getGeneralSettings();
   return getNextAvailableAssetTag(db, settings.startingAssetTagNumber);
@@ -610,7 +632,7 @@ export async function getSuggestedAssetTag() {
 export async function listAssetReferenceData() {
   await ensureDefaultAssetStatuses();
 
-  const [categories, scopes, users, locations, statuses, suggestedAssetTag] = await Promise.all([
+  const [categories, scopes, users, locations, statuses, suggestedAssetTag, assetTags] = await Promise.all([
     db.category.findMany({
       select: {
         id: true,
@@ -658,9 +680,16 @@ export async function listAssetReferenceData() {
       orderBy: [{ name: "asc" }],
     }),
     getSuggestedAssetTag(),
+    db.asset.findMany({
+      select: {
+        id: true,
+        assetTag: true,
+      },
+      orderBy: [{ assetTag: "asc" }],
+    }),
   ]);
 
-  return { categories, scopes, users, locations, statuses, suggestedAssetTag };
+  return { categories, scopes, users, locations, statuses, suggestedAssetTag, assetTags };
 }
 
 export async function listAssets(options?: {
@@ -992,6 +1021,7 @@ export async function createAsset(input: {
     const parsed = await parseAssetInput(tx, input);
     const settings = await getGeneralSettings();
     const assetTag = parsed.assetTag ?? (await getNextAvailableAssetTag(tx, settings.startingAssetTagNumber));
+    await ensureAssetTagAvailable(tx, assetTag);
     const resolvedName = resolveAssetDisplayName({
       name: parsed.name,
       make: parsed.make,
@@ -1091,6 +1121,9 @@ export async function updateAsset(input: {
     }
 
     const parsed = await parseAssetInput(tx, input);
+    if (parsed.assetTag) {
+      await ensureAssetTagAvailable(tx, parsed.assetTag, existingAsset.id);
+    }
     const resolvedName = resolveAssetDisplayName({
       name: parsed.name,
       make: parsed.make,

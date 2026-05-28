@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, ChevronLeft, ChevronRight, FolderTree, LayoutDashboard, LogOut, MapPin, Settings2, Shield, Tags, Users } from "lucide-react";
+import { Boxes, ChevronLeft, ChevronRight, FileText, FolderTree, LayoutDashboard, LogOut, MapPin, Settings2, Shield, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppLogo } from "@/components/branding/app-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { APP_VERSION } from "@/lib/app-metadata";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_STORAGE_KEY = "app-shell-sidebar-collapsed";
@@ -21,6 +22,7 @@ const navItems = [
   { id: "labels", href: "/labels", label: "Labels", icon: Tags },
   { id: "users", href: "/users", label: "Users", icon: Users },
   { id: "locations", href: "/locations", label: "Locations", icon: MapPin },
+  { id: "patchNotes", href: "/patch-notes", label: "Patch Notes", icon: FileText, badge: "New" },
   { id: "settings", href: "/settings", label: "Settings", icon: Settings2 },
 ] as const;
 
@@ -148,7 +150,9 @@ export function AppShellClient({ appTitle, branding, children, initialSidebarCol
 
             <nav className={cn("min-h-0 flex-1 overflow-y-auto", isCollapsed ? "px-3 py-4" : "px-4 py-5 pr-4")}>
               <div className={cn(isCollapsed ? "space-y-2" : "space-y-2")}>
-                {renderedNavItems.map(({ href, label, icon: Icon }) => {
+                {renderedNavItems.map((item) => {
+                  const { href, label, icon: Icon } = item;
+                  const badge = "badge" in item ? item.badge : null;
                   const isActive = activeHref === href;
 
                   return (
@@ -157,19 +161,31 @@ export function AppShellClient({ appTitle, branding, children, initialSidebarCol
                         href={href}
                         className={isActive
                           ? cn(
-                              "text-sm font-medium text-[#b56613] transition-colors dark:text-[#ffd7ab]",
+                              "relative text-sm font-medium text-[#b56613] transition-colors dark:text-[#ffd7ab]",
                               isCollapsed
                                 ? "mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[#f2c28c] bg-[rgba(246,150,41,0.16)] shadow-[0_10px_22px_rgba(246,150,41,0.12)] dark:border-[#7f5a2d] dark:bg-[rgba(246,150,41,0.22)] dark:shadow-[0_14px_28px_rgba(0,0,0,0.18)]"
                                 : "flex items-center gap-3 rounded-2xl border border-[#f2c28c] bg-[rgba(246,150,41,0.16)] px-4 py-3 shadow-[0_10px_22px_rgba(246,150,41,0.12)] dark:border-[#7f5a2d] dark:bg-[rgba(246,150,41,0.22)] dark:shadow-[0_14px_28px_rgba(0,0,0,0.18)]",
                             )
                           : cn(
-                              "text-sm text-slate-700 transition-colors hover:bg-[rgba(246,150,41,0.12)] hover:text-[#b56613] dark:text-slate-100 dark:hover:bg-[rgba(246,150,41,0.18)] dark:hover:text-[#ffd1a0]",
+                              "relative text-sm text-slate-700 transition-colors hover:bg-[rgba(246,150,41,0.12)] hover:text-[#b56613] dark:text-slate-100 dark:hover:bg-[rgba(246,150,41,0.18)] dark:hover:text-[#ffd1a0]",
                               isCollapsed
                                 ? "mx-auto flex h-12 w-12 items-center justify-center rounded-2xl"
                                 : "flex items-center gap-3 rounded-2xl px-4 py-3",
                             )}
                         title={isCollapsed ? label : undefined}
                       >
+                        {badge ? (
+                          <span
+                            className={cn(
+                              "pointer-events-none absolute rounded-full bg-red-600 font-semibold uppercase tracking-[0.08em] text-white shadow-[0_8px_16px_rgba(220,38,38,0.24)]",
+                              isCollapsed
+                                ? "-left-1 -top-1 px-1.5 py-0.5 text-[9px] leading-none"
+                                : "right-3 top-2 px-2 py-0.5 text-[10px] leading-none",
+                            )}
+                          >
+                            {badge}
+                          </span>
+                        ) : null}
                         <Icon className="h-4 w-4 shrink-0" />
                         {isCollapsed ? <span className="sr-only">{label}</span> : <span>{label}</span>}
                       </Link>
@@ -199,6 +215,7 @@ export function AppShellClient({ appTitle, branding, children, initialSidebarCol
                   <div className="rounded-2xl border border-[#efe8df] bg-slate-50/80 px-3.5 py-3 dark:border-[#464c4f] dark:bg-[#34393c]/80">
                     <p className="text-[0.68rem] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Application</p>
                     <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-[#fff3e4]" title={appTitle}>{appTitle}</p>
+                    <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Version {APP_VERSION}</p>
                   </div>
                   <form action="/api/auth/logout" method="post">
                     <button
