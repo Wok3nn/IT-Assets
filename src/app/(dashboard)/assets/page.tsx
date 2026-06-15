@@ -280,7 +280,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
       : null,
     userId: asset.assignedUser?.id ?? null,
     user: asset.assignedUser?.name ?? "Unassigned",
-    serialNumber: asset.serialNumber?.trim() || "Not set",
+    serialNumber: asset.serialNumber?.trim() || null,
     comments: asset.notes?.trim() || null,
     category: asset.category ? buildTreeLabel(referenceData.categories, asset.category.id) ?? asset.category.name : "Unassigned",
     location: asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) ?? asset.assignedLocation.name : "Unassigned",
