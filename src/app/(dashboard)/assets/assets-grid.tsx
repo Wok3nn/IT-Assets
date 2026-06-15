@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ArrowUpDown, Settings2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy, Settings2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -21,7 +21,7 @@ export type AssetGridRow = {
   status: { label: string; color: string | null } | null;
   userId: string | null;
   user: string;
-  serialNumber: string;
+  serialNumber: string | null;
   comments: string | null;
   category: string;
   location: string;
@@ -107,7 +107,7 @@ const columns: ColumnDefinition[] = [
   { id: "assetModel", label: DEBUG_RESIZE ? "Make / Model (244)" : "Make / Model", defaultWidth: 244, minWidth: 120, maxWidth: 440, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "status", label: DEBUG_RESIZE ? "Status (124)" : "Status", defaultWidth: 124, minWidth: 96, maxWidth: 260, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "user", label: DEBUG_RESIZE ? "User (144)" : "User", defaultWidth: 144, minWidth: 96, maxWidth: 320, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (144)" : "Serial Number", defaultWidth: 144, minWidth: 96, maxWidth: 300, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (184)" : "Serial Number", defaultWidth: 184, minWidth: 144, maxWidth: 320, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "comments", label: "Comments", defaultWidth: 220, minWidth: 120, maxWidth: 440, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "category", label: "Category", defaultWidth: 168, minWidth: 96, maxWidth: 360, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "location", label: "Location", defaultWidth: 160, minWidth: 96, maxWidth: 360, resizable: true, justify: "start", cellPadding: "px-3.5" },
@@ -165,6 +165,100 @@ function getStickyPlacement(columnId: ColumnId, renderedWidths: Record<ColumnId,
 }
 function buildDeleteMessage(row: AssetGridRow) {
   return `Delete asset ${row.assetTag} - ${row.model ?? row.assetName}?`;
+}
+
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Fall through for browsers or origins where clipboard permission is blocked.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+function SerialNumberCell({ serialNumber }: { serialNumber: string | null }) {
+  const [copied, setCopied] = useState(false);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const normalizedSerialNumber = serialNumber?.trim() ?? "";
+
+  useEffect(() => {
+    return () => {
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function handleCopy() {
+    if (!normalizedSerialNumber) {
+      return;
+    }
+
+    const wasCopied = await copyTextToClipboard(normalizedSerialNumber);
+
+    if (wasCopied) {
+      setCopied(true);
+
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+      }
+
+      resetTimeoutRef.current = setTimeout(() => setCopied(false), 1800);
+    } else {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <Button
+        aria-label={normalizedSerialNumber ? "Copy serial number" : "No serial number to copy"}
+        className={`h-7 w-7 shrink-0 p-0 ${copied ? "text-emerald-600 dark:text-emerald-400" : ""}`}
+        disabled={!normalizedSerialNumber}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void handleCopy();
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        title={normalizedSerialNumber ? "Copy serial number" : "No serial number to copy"}
+        type="button"
+        variant="ghost"
+      >
+        {copied ? (
+          <Check aria-hidden="true" className="h-4 w-4 animate-[pulse_0.35s_ease-out_1]" />
+        ) : (
+          <Copy aria-hidden="true" className="h-4 w-4" />
+        )}
+        <span className="sr-only" aria-live="polite">{copied ? "Serial number copied" : "Copy serial number"}</span>
+      </Button>
+      <span
+        className={`min-w-0 flex-1 truncate text-sm ${normalizedSerialNumber ? "font-semibold text-[#b56613] dark:text-[#ffd7ab]" : "text-slate-400 dark:text-slate-500"}`}
+        title={normalizedSerialNumber || "Not set"}
+      >
+        {normalizedSerialNumber || "Not set"}
+      </span>
+    </div>
+  );
 }
 
 function normalizeVisibleColumnIds(value: unknown): ColumnId[] {
@@ -835,7 +929,7 @@ export function AssetsGrid({
                         }
 
                         if (column.id === "serialNumber") {
-                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><span className="block truncate text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]" title={row.serialNumber}>{row.serialNumber}</span></div>;
+                          return <div key={column.id} className={cellClass} style={stickyPlacement?.style}><SerialNumberCell serialNumber={row.serialNumber} /></div>;
                         }
 
                         if (column.id === "comments") {
