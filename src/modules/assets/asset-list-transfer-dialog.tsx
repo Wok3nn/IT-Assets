@@ -38,7 +38,6 @@ type AssetListTransferDialogProps = {
 };
 
 const actionButtonStyle = { width: "96px", height: "36px" } as const;
-const disabledPillStyle = { borderColor: "#cbd5e1", backgroundColor: "#f1f5f9", color: "#64748b" } as const;
 const activeButtonStyle = { borderColor: "#d9892c", backgroundColor: "#F69629", color: "#ffffff" } as const;
 const overlayLayerClassName = "fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/25 p-4 backdrop-blur-[2px] dark:bg-black/35";
 const feedbackLayerClassName = "fixed bottom-5 right-5 z-[1010] max-w-sm rounded-2xl border px-4 py-3 text-sm shadow-lg";
@@ -122,18 +121,6 @@ export function AssetListTransferDialog({
       setSelectedUser(null);
     }
   }, [open]);
-
-  if (!isActive) {
-    return (
-      <span
-        aria-disabled="true"
-        className="inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-slate-500 dark:text-slate-200"
-        style={{ ...actionButtonStyle, ...disabledPillStyle }}
-      >
-        {asset.checkLabel}
-      </span>
-    );
-  }
 
   const feedbackToast = feedback ? (
     <div
@@ -301,13 +288,15 @@ export function AssetListTransferDialog({
   return (
     <>
       <button
-        className="inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-white"
+        className={isActive
+          ? "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-white"
+          : "inline-flex items-center justify-center whitespace-nowrap rounded-full border border-slate-300 bg-slate-100 px-4 text-sm font-medium leading-none text-slate-500 transition hover:!border-[#d9892c] hover:!bg-[#F69629] hover:!text-white dark:border-[#5b6468] dark:bg-[#3c4347] dark:text-slate-200"}
         onClick={(event) => {
           event.stopPropagation();
           setFeedback(null);
           setOpen(true);
         }}
-        style={{ ...actionButtonStyle, ...activeButtonStyle }}
+        style={isActive ? { ...actionButtonStyle, ...activeButtonStyle } : actionButtonStyle}
         type="button"
       >
         {asset.checkLabel}

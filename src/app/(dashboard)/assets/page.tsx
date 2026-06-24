@@ -286,7 +286,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
     location: asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) ?? asset.assignedLocation.name : "Unassigned",
     purchaseDate: formatDateLabel(asset.purchaseDate),
     warrantyExpiry: formatDateLabel(asset.warrantyExpiry),
-    checkLabel: asset.assignedUser || asset.assignedLocation || asset.status?.key === "ASSIGNED" ? "Check in" : "Check out",
+    checkLabel: asset.assignedUser || asset.status?.key === "ASSIGNED" ? "Check in" : "Check out",
   }));
   const visibleRangeStart = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const visibleRangeEnd = totalCount === 0 ? 0 : Math.min(currentPage * pageSize, totalCount);
@@ -431,6 +431,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
               activeSort={sort}
               canBulkEditAssets={permissionContext.capabilities.bulkEditAssets}
               canDeleteAssets={permissionContext.capabilities.deleteAssets}
+              canEditAssets={permissionContext.capabilities.editAssets}
               canManageAssetTransfers={permissionContext.capabilities.manageAssetTransfers}
               canPrintLabels={permissionContext.capabilities.printLabels}
               deleteAction={deleteAssetAction}

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy, Settings2 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy, Pencil, Settings2 } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ type AssetsGridProps = {
   headerSorts: Partial<Record<"assetTag" | "assetModel", HeaderSortConfig>>;
   canBulkEditAssets: boolean;
   canDeleteAssets: boolean;
+  canEditAssets: boolean;
   canManageAssetTransfers: boolean;
   canPrintLabels: boolean;
   locations: Array<{ id: string; label: string }>;
@@ -94,9 +95,10 @@ const columnMenuPanelClassName = "z-50 w-[260px] rounded-[22px] border border-[#
 const columnMenuItemClassName = "flex cursor-pointer items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm text-slate-600 transition hover:bg-[#f6f8fb] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-[#353b3f] dark:hover:text-slate-100";
 
 const PRIMARY_ACTION_STYLE = { width: "96px", height: "36px" } as const;
+const ICON_ACTION_STYLE = { width: "32px", height: "32px" } as const;
 const SECONDARY_ACTION_STYLE = { width: "64px", height: "36px" } as const;
 const DELETE_ACTION_STYLE = { width: "64px", height: "36px" } as const;
-const ACTIONS_WIDTH = 272;
+const ACTIONS_WIDTH = 304;
 const DISABLED_PILL_STYLE = { borderColor: "#cbd5e1", backgroundColor: "#f1f5f9", color: "#64748b" } as const;
 const VIEW_ACTIVE_STYLE = { borderColor: "#2f8f57", backgroundColor: "#3fb26d", color: "#ffffff" } as const;
 const DELETE_ACTIVE_STYLE = { borderColor: "#c23b32", backgroundColor: "#dd4f45", color: "#ffffff" } as const;
@@ -113,7 +115,7 @@ const columns: ColumnDefinition[] = [
   { id: "location", label: "Location", defaultWidth: 160, minWidth: 96, maxWidth: 360, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "purchaseDate", label: "Purchase Date", defaultWidth: 128, minWidth: 96, maxWidth: 220, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "warrantyExpiry", label: "Warranty Expiry", defaultWidth: 132, minWidth: 96, maxWidth: 220, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "actions", label: DEBUG_RESIZE ? "Actions (272 fixed)" : "Actions", defaultWidth: ACTIONS_WIDTH, minWidth: ACTIONS_WIDTH, maxWidth: ACTIONS_WIDTH, resizable: false, justify: "end", cellPadding: "px-3", fixed: true },
+  { id: "actions", label: DEBUG_RESIZE ? "Actions (304 fixed)" : "Actions", defaultWidth: ACTIONS_WIDTH, minWidth: ACTIONS_WIDTH, maxWidth: ACTIONS_WIDTH, resizable: false, justify: "end", cellPadding: "px-3", fixed: true },
 ];
 
 const fixedColumnIds = columns.filter((column) => column.fixed).map((column) => column.id);
@@ -289,25 +291,67 @@ function SortIndicator({ direction }: { direction: "asc" | "desc" | null }) {
   return <ArrowUpDown className="h-3.5 w-3.5 opacity-70 transition group-hover:opacity-100" strokeWidth={1.8} />;
 }
 
-function ActionLink({ href, label, isSelected, style, sizeStyle }: { href: string; label: string; isSelected: boolean; style: typeof VIEW_ACTIVE_STYLE; sizeStyle: typeof SECONDARY_ACTION_STYLE }) {
+function ActionLink({
+  href,
+  label,
+  isSelected,
+  sizeStyle,
+  activeStyle,
+  hoverClassName,
+  children,
+}: {
+  href: string;
+  label: string;
+  isSelected: boolean;
+  sizeStyle: typeof SECONDARY_ACTION_STYLE;
+  activeStyle: typeof VIEW_ACTIVE_STYLE;
+  hoverClassName: string;
+  children?: ReactNode;
+}) {
   const className = isSelected
     ? "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-white"
-    : "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-slate-500 dark:text-slate-200";
+    : `inline-flex items-center justify-center whitespace-nowrap rounded-full border border-slate-300 bg-slate-100 px-4 text-sm font-medium leading-none text-slate-500 transition dark:border-[#5b6468] dark:bg-[#3c4347] dark:text-slate-200 ${hoverClassName}`;
 
-  if (!isSelected) {
-    return <span aria-disabled="true" className={className} style={{ ...sizeStyle, ...DISABLED_PILL_STYLE }}>{label}</span>;
-  }
+  return (
+    <Link
+      aria-label={label}
+      className={className}
+      href={href}
+      onClick={(event) => event.stopPropagation()}
+      style={isSelected ? { ...sizeStyle, ...activeStyle } : sizeStyle}
+      title={label}
+    >
+      {children ?? label}
+    </Link>
+  );
+}
 
-  return <Link className={className} href={href} style={{ ...sizeStyle, ...style }}>{label}</Link>;
+function EditActionLink({ href, isSelected }: { href: string; isSelected: boolean }) {
+  const className = isSelected
+    ? "inline-flex items-center justify-center rounded-full text-[#2563eb] transition hover:!bg-blue-50 hover:!text-[#1d4ed8] dark:text-[#93c5fd] dark:hover:!bg-[rgba(59,130,246,0.16)] dark:hover:!text-[#bfdbfe]"
+    : "inline-flex items-center justify-center rounded-full text-slate-500 transition hover:!bg-blue-50 hover:!text-[#2563eb] dark:text-slate-300 dark:hover:!bg-[rgba(59,130,246,0.16)] dark:hover:!text-[#93c5fd]";
+
+  return (
+    <Link
+      aria-label="Edit asset"
+      className={className}
+      href={href}
+      onClick={(event) => event.stopPropagation()}
+      style={ICON_ACTION_STYLE}
+      title="Edit asset"
+    >
+      <Pencil aria-hidden="true" className="h-4 w-4" />
+    </Link>
+  );
 }
 
 function DeleteButton({ row, isAllowed, isSelected, deleteAction, returnTo }: { row: AssetGridRow; isAllowed: boolean; isSelected: boolean; deleteAction: (formData: FormData) => void | Promise<void>; returnTo: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const className = isSelected
     ? "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-white"
-    : "inline-flex items-center justify-center whitespace-nowrap rounded-full border px-4 text-sm font-medium leading-none text-slate-500 dark:text-slate-200";
+    : "inline-flex items-center justify-center whitespace-nowrap rounded-full border border-slate-300 bg-slate-100 px-4 text-sm font-medium leading-none text-slate-500 transition hover:!border-[#c23b32] hover:!bg-[#dd4f45] hover:!text-white dark:border-[#5b6468] dark:bg-[#3c4347] dark:text-slate-200";
 
-  if (!isSelected || !isAllowed) {
+  if (!isAllowed) {
     return <span aria-disabled="true" className={className} style={{ ...DELETE_ACTION_STYLE, ...DISABLED_PILL_STYLE }}>Delete</span>;
   }
 
@@ -325,7 +369,7 @@ function DeleteButton({ row, isAllowed, isSelected, deleteAction, returnTo }: { 
             formRef.current?.requestSubmit();
           }
         }}
-        style={{ ...DELETE_ACTION_STYLE, ...DELETE_ACTIVE_STYLE }}
+        style={isSelected ? { ...DELETE_ACTION_STYLE, ...DELETE_ACTIVE_STYLE } : DELETE_ACTION_STYLE}
         type="submit"
       >
         Delete
@@ -342,6 +386,7 @@ export function AssetsGrid({
   headerSorts,
   canBulkEditAssets,
   canDeleteAssets,
+  canEditAssets,
   canManageAssetTransfers,
   canPrintLabels,
   locations,
@@ -837,6 +882,7 @@ export function AssetsGrid({
                   const rowClass = isSelected ? selectedBodyBaseClass : bodyBaseClass;
                   const hoverClass = isSelected ? "hover:bg-[rgba(246,150,41,0.16)] dark:hover:bg-[#54483a]" : "hover:bg-[#fdf1e4] dark:hover:bg-[#3d4448]";
                   const viewHref = buildAssetHref(row.id, { returnTo });
+                  const editHref = buildAssetHref(row.id, { section: "edit", returnTo });
                   const labelHref = buildAssetLabelHref(row.id, { returnTo });
 
                   return (
@@ -954,10 +1000,32 @@ export function AssetsGrid({
                         }
 
                         return (
-                          <div key={column.id} className={cellClass} onClick={(event) => event.stopPropagation()} style={stickyPlacement?.style}>
+                          <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
                             <div className="flex h-full w-full flex-nowrap items-center justify-end gap-2 overflow-hidden">
+                              <div className="flex justify-end" style={{ width: ICON_ACTION_STYLE.width }}>
+                                {canEditAssets ? (
+                                  <EditActionLink href={editHref} isSelected={isSelected} />
+                                ) : (
+                                  <span
+                                    aria-disabled="true"
+                                    aria-label="Edit asset unavailable"
+                                    className="inline-flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500"
+                                    style={ICON_ACTION_STYLE}
+                                    title="Edit asset unavailable"
+                                  >
+                                    <Pencil aria-hidden="true" className="h-4 w-4" />
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex justify-end" style={{ width: SECONDARY_ACTION_STYLE.width }}>
-                                <ActionLink href={viewHref} isSelected={isSelected} label="View" sizeStyle={SECONDARY_ACTION_STYLE} style={VIEW_ACTIVE_STYLE} />
+                                <ActionLink
+                                  activeStyle={VIEW_ACTIVE_STYLE}
+                                  hoverClassName="hover:!border-[#2f8f57] hover:!bg-[#3fb26d] hover:!text-white"
+                                  href={viewHref}
+                                  isSelected={isSelected}
+                                  label="View"
+                                  sizeStyle={SECONDARY_ACTION_STYLE}
+                                />
                               </div>
                               <div className="flex justify-end" style={{ width: PRIMARY_ACTION_STYLE.width }}>
                                 {canManageAssetTransfers ? (

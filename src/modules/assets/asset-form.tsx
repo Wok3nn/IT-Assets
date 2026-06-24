@@ -273,7 +273,7 @@ export function AssetForm({
         </div>
       </div>
 
-      {mode === "create" ? (
+      {mode === "create" || mode === "edit" ? (
         <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200">
           <input
             checked={useCategoryForMakeModel}
