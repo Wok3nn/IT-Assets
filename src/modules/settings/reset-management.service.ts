@@ -17,6 +17,7 @@ export type ResetActionKey = (typeof RESET_ACTIONS)[number];
 export type ResetOverview = {
   assets: number;
   users: number;
+  guestProfiles: number;
   categories: number;
   departments: number;
   labelTemplates: number;
@@ -87,16 +88,17 @@ export type ResetActionResult =
 type Tx = Prisma.TransactionClient;
 
 export async function getResetOverview(): Promise<ResetOverview> {
-  const [assets, users, categories, departments, labelTemplates, locations] = await Promise.all([
+  const [assets, users, guestProfiles, categories, departments, labelTemplates, locations] = await Promise.all([
     db.asset.count(),
     db.user.count(),
+    db.guestProfile.count(),
     db.category.count(),
     db.scope.count(),
     db.labelTemplate.count(),
     db.location.count(),
   ]);
 
-  return { assets, users, categories, departments, labelTemplates, locations };
+  return { assets, users, guestProfiles, categories, departments, labelTemplates, locations };
 }
 
 async function clearAssetsDataTx(tx: Tx) {
@@ -111,8 +113,16 @@ async function clearAssetsDataTx(tx: Tx) {
 
 async function clearUsersDataTx(tx: Tx) {
   const clearedAssignments = await tx.asset.updateMany({
-    where: { assignedUserId: { not: null } },
-    data: { assignedUserId: null },
+    where: {
+      OR: [
+        { assignedUserId: { not: null } },
+        { assignedGuestProfileId: { not: null } },
+      ],
+    },
+    data: {
+      assignedUserId: null,
+      assignedGuestProfileId: null,
+    },
   });
   const detachedAuditEntries = await tx.auditLog.updateMany({
     where: { actorUserId: { not: null } },
@@ -231,6 +241,7 @@ export async function resetFullAppData() {
 
     await clearAssetsDataTx(tx);
     await clearUsersDataTx(tx);
+    await tx.guestProfile.deleteMany({});
     await resetLabelTemplatesDataTx(tx);
     await resetCategoriesDataTx(tx);
     await resetLocationsDataTx(tx);

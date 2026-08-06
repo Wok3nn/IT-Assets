@@ -44,13 +44,23 @@ async function saveGeneralSettingsAction(formData: FormData) {
   const appTitle = String(formData.get("appTitle") ?? DEFAULT_APP_TITLE).trim() || DEFAULT_APP_TITLE;
   const sessionTimeoutMinutes = Number(formData.get("sessionTimeoutMinutes") ?? DEFAULT_SESSION_TIMEOUT_MINUTES);
   const startingAssetTagNumber = Number(formData.get("startingAssetTagNumber") ?? 5000);
+  const makeModelAutoEnabled = formData.get("makeModelAutoEnabled") === "true";
+  const makeModelMakeSourceLevel = String(formData.get("makeModelMakeSourceLevel") ?? "").trim();
+  const makeModelModelSourceLevel = String(formData.get("makeModelModelSourceLevel") ?? "").trim();
   const statusIds = formData.getAll("statusId").map((value) => String(value ?? "").trim());
   const statusNames = formData.getAll("statusName").map((value) => String(value ?? "").trim());
   const statusColors = formData.getAll("statusColor").map((value) => String(value ?? "").trim());
   const newStatusName = String(formData.get("newStatusName") ?? "").trim();
   const newStatusColor = String(formData.get("newStatusColor") ?? "#f59e0b").trim();
 
-  await updateGeneralSettings({ appTitle, sessionTimeoutMinutes, startingAssetTagNumber });
+  await updateGeneralSettings({
+    appTitle,
+    sessionTimeoutMinutes,
+    startingAssetTagNumber,
+    makeModelAutoEnabled,
+    makeModelMakeSourceLevel,
+    makeModelModelSourceLevel,
+  });
 
   for (let index = 0; index < statusNames.length; index += 1) {
     const name = statusNames[index] ?? "";

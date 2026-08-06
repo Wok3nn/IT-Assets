@@ -33,6 +33,21 @@ model User {
   auditEntries AuditLog[]
 }
 
+model GuestProfile {
+  id             String   @id @default(cuid())
+  displayName    String
+  guestType      String   @default("Guest")
+  notes          String?  @db.Text
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  assignedAssets Asset[]  @relation("AssignedGuestProfileAssets")
+
+  @@index([displayName])
+  @@index([guestType])
+  @@index([isActive])
+}
+
 model Session {
   id         String   @id @default(cuid())
   token      String   @unique
@@ -141,6 +156,7 @@ model Asset {
   categoryId         String?
   statusId           String?
   assignedUserId     String?
+  assignedGuestProfileId String?
   assignedLocationId String?
   labelTemplateId    String?
   createdAt          DateTime        @default(now())
@@ -148,9 +164,12 @@ model Asset {
   category           Category?       @relation(fields: [categoryId], references: [id])
   status             AssetStatus?    @relation(fields: [statusId], references: [id])
   assignedUser       User?           @relation("AssignedUserAssets", fields: [assignedUserId], references: [id])
+  assignedGuestProfile GuestProfile? @relation("AssignedGuestProfileAssets", fields: [assignedGuestProfileId], references: [id])
   assignedLocation   Location?       @relation("AssignedLocationAssets", fields: [assignedLocationId], references: [id])
   labelTemplate      LabelTemplate?  @relation(fields: [labelTemplateId], references: [id])
   scopes             AssetScope[]
+
+  @@index([assignedGuestProfileId])
 }
 
 model AssetScope {

@@ -5,6 +5,16 @@ import { useActionState, useEffect, useMemo, useState, type FormEvent, type Reac
 import { textFieldClassName } from "@/components/forms/text-field";
 import { insetCardClassName } from "@/components/layout/inset-card";
 import { Button } from "@/components/ui/button";
+import {
+  DEFAULT_MAKE_MODEL_AUTO_ENABLED,
+  DEFAULT_MAKE_MODEL_MAKE_SOURCE,
+  DEFAULT_MAKE_MODEL_MODEL_SOURCE,
+  MAKE_MODEL_SOURCE_OPTIONS,
+  getMakeModelSourceOption,
+  MAX_CATEGORY_PATH_LEVELS,
+  resolveMakeModelSource,
+  type MakeModelSourceLevel,
+} from "@/modules/assets/make-model-source";
 
 type CategoryOption = {
   id: string;
@@ -73,9 +83,13 @@ type AssetFormProps = {
   existingAssetTags?: Array<{ id: string; assetTag: string }>;
   initialValue?: AssetFormValue;
   layout?: "default" | "compact";
+  makeModelSettings?: {
+    autoEnabled: boolean;
+    makeSourceLevel: MakeModelSourceLevel;
+    modelSourceLevel: MakeModelSourceLevel;
+  };
 };
 
-const MAX_CATEGORY_LEVELS = 5;
 const scopeOptionClassName = "flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 transition hover:border-[#f0c48d] dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200 dark:hover:border-[#f0a853]";
 
 function buildLineage(categories: CategoryOption[], categoryId: string | null | undefined) {
@@ -92,7 +106,7 @@ function buildLineage(categories: CategoryOption[], categoryId: string | null | 
     current = current.parentId ? byId.get(current.parentId) ?? null : null;
   }
 
-  return lineage.slice(0, MAX_CATEGORY_LEVELS);
+  return lineage.slice(0, MAX_CATEGORY_PATH_LEVELS);
 }
 
 function buildLocationLabel(locations: LocationOption[], location: LocationOption) {
@@ -112,6 +126,28 @@ function getLevelLabel(index: number) {
   return index === 0 ? "Category" : `Sub-category ${index}`;
 }
 
+function getSourceSelectLabel(lineage: CategoryOption[], sourceLevel: MakeModelSourceLevel) {
+  const sourceOption = getMakeModelSourceOption(sourceLevel);
+  return `${sourceOption.label} - ${lineage[sourceOption.index]?.name ?? "Not selected"}`;
+}
+
+function isSourceLevelAvailable(lineage: CategoryOption[], sourceLevel: MakeModelSourceLevel) {
+  const sourceOption = getMakeModelSourceOption(sourceLevel);
+  return Boolean(lineage[sourceOption.index]);
+}
+
+function getMissingSourceMessage(fieldLabel: "Make" | "Model", sourceLevel: MakeModelSourceLevel | "", value: string) {
+  if (!sourceLevel) {
+    return `Choose a category-path value to automatically populate ${fieldLabel}.`;
+  }
+
+  if (value) {
+    return null;
+  }
+
+  return `Select ${getMakeModelSourceOption(sourceLevel).label} to automatically populate ${fieldLabel}.`;
+}
+
 export function AssetForm({
   mode,
   action,
@@ -126,6 +162,11 @@ export function AssetForm({
   existingAssetTags = [],
   initialValue,
   layout = "default",
+  makeModelSettings = {
+    autoEnabled: DEFAULT_MAKE_MODEL_AUTO_ENABLED,
+    makeSourceLevel: DEFAULT_MAKE_MODEL_MAKE_SOURCE,
+    modelSourceLevel: DEFAULT_MAKE_MODEL_MODEL_SOURCE,
+  },
 }: AssetFormProps) {
   const [formState, formAction] = useActionState(action, {});
   const initialLineage = useMemo(
@@ -134,7 +175,11 @@ export function AssetForm({
   );
 
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(initialLineage);
-  const [useCategoryForMakeModel, setUseCategoryForMakeModel] = useState(false);
+  const [makeModelMode, setMakeModelMode] = useState<"automatic" | "manual">(
+    mode === "create" && makeModelSettings.autoEnabled ? "automatic" : "manual",
+  );
+  const [perFormMakeSourceLevel, setPerFormMakeSourceLevel] = useState<MakeModelSourceLevel | "">("");
+  const [perFormModelSourceLevel, setPerFormModelSourceLevel] = useState<MakeModelSourceLevel | "">("");
   const [makeValue, setMakeValue] = useState(initialValue?.make ?? "");
   const [modelValue, setModelValue] = useState(initialValue?.model ?? "");
   const [assetTagValue, setAssetTagValue] = useState(mode === "create" ? defaultAssetTag ?? "" : initialValue?.assetTag ?? "");
@@ -151,8 +196,10 @@ export function AssetForm({
   );
 
   const deepestCategory = selectedLineage.at(-1) ?? null;
-  const topCategory = selectedLineage[0] ?? null;
   const selectedCategoryPath = selectedLineage.map((category) => category.name).join(" > ");
+  const isMakeModelAutomatic = makeModelMode === "automatic";
+  const isGlobalMakeModelAutomatic = isMakeModelAutomatic && makeModelSettings.autoEnabled;
+  const isPerFormMakeModelAutomatic = isMakeModelAutomatic && !makeModelSettings.autoEnabled;
   const isCompact = layout === "compact";
   const sectionClassName = insetCardClassName;
   const compactGridClassName = isCompact ? "grid gap-4 md:grid-cols-2" : "grid gap-4 sm:grid-cols-2";
@@ -173,7 +220,7 @@ export function AssetForm({
     const options: CategoryOption[][] = [];
     let parentId: string | null = null;
 
-    for (let index = 0; index < MAX_CATEGORY_LEVELS; index += 1) {
+    for (let index = 0; index < MAX_CATEGORY_PATH_LEVELS; index += 1) {
       const matching = categories.filter((category) => category.parentId === parentId);
       if (matching.length === 0) {
         break;
@@ -191,14 +238,37 @@ export function AssetForm({
     return options;
   }, [categories, selectedCategoryIds]);
 
+  const activeMakeSourceLevel = isPerFormMakeModelAutomatic ? perFormMakeSourceLevel : makeModelSettings.makeSourceLevel;
+  const activeModelSourceLevel = isPerFormMakeModelAutomatic ? perFormModelSourceLevel : makeModelSettings.modelSourceLevel;
+  const automaticMakeValue = useMemo(() => {
+    if (!isMakeModelAutomatic || !activeMakeSourceLevel) {
+      return "";
+    }
+
+    return resolveMakeModelSource(selectedLineage, activeMakeSourceLevel);
+  }, [activeMakeSourceLevel, isMakeModelAutomatic, selectedLineage]);
+  const automaticModelValue = useMemo(() => {
+    if (!isMakeModelAutomatic || !activeModelSourceLevel) {
+      return "";
+    }
+
+    return resolveMakeModelSource(selectedLineage, activeModelSourceLevel);
+  }, [activeModelSourceLevel, isMakeModelAutomatic, selectedLineage]);
+  const makeMissingMessage = isMakeModelAutomatic
+    ? getMissingSourceMessage("Make", activeMakeSourceLevel, automaticMakeValue)
+    : null;
+  const modelMissingMessage = isMakeModelAutomatic
+    ? getMissingSourceMessage("Model", activeModelSourceLevel, automaticModelValue)
+    : null;
+
   useEffect(() => {
-    if (!useCategoryForMakeModel) {
+    if (!isMakeModelAutomatic) {
       return;
     }
 
-    setMakeValue(topCategory?.name ?? "");
-    setModelValue(deepestCategory?.name ?? "");
-  }, [deepestCategory?.name, topCategory?.name, useCategoryForMakeModel]);
+    setMakeValue(automaticMakeValue);
+    setModelValue(automaticModelValue);
+  }, [automaticMakeValue, automaticModelValue, isMakeModelAutomatic]);
 
   useEffect(() => {
     setAssetTagValue(mode === "create" ? defaultAssetTag ?? "" : initialValue?.assetTag ?? "");
@@ -217,6 +287,17 @@ export function AssetForm({
 
     event.preventDefault();
     setAssetTagClientError("Asset tag already exists.");
+  }
+
+  function handleMakeModelModeChange(entryMode: "automatic" | "manual") {
+    if (entryMode === "automatic" && !makeModelSettings.autoEnabled) {
+      setPerFormMakeSourceLevel("");
+      setPerFormModelSourceLevel("");
+      setMakeValue("");
+      setModelValue("");
+    }
+
+    setMakeModelMode(entryMode);
   }
 
   return (
@@ -273,49 +354,132 @@ export function AssetForm({
         </div>
       </div>
 
-      {mode === "create" || mode === "edit" ? (
-        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200">
-          <input
-            checked={useCategoryForMakeModel}
-            className="ui-switch mt-0.5"
-            onChange={(event) => setUseCategoryForMakeModel(event.target.checked)}
-            type="checkbox"
-          />
-          <span>
-            <span className="block font-medium text-slate-800 dark:text-slate-100">Use category path for make/model</span>
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Top-level category becomes Make, and the selected category becomes Model while enabled.</span>
-          </span>
-        </label>
-      ) : null}
+      <fieldset className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200">
+        <legend className="sr-only">Make and model entry</legend>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium text-slate-800 dark:text-slate-100">Make and model entry</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {makeModelSettings.autoEnabled
+                ? "Automatic uses the General Settings source levels. Manual keeps these fields editable."
+                : "Automatic lets you choose source levels for this form. Manual keeps these fields editable."}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 dark:border-[#4b5255] dark:bg-[#262b2e]">
+            {(["automatic", "manual"] as const).map((entryMode) => {
+              const isSelected = makeModelMode === entryMode;
+              return (
+                <label
+                  key={entryMode}
+                  className={`cursor-pointer rounded-xl px-3 py-2 text-center text-xs font-semibold capitalize transition ${isSelected ? "bg-white text-[#b56613] shadow-sm dark:bg-[#34393c] dark:text-[#ffd7ab]" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"}`}
+                >
+                  <input
+                    checked={isSelected}
+                    className="sr-only"
+                    name="makeModelEntryMode"
+                    onChange={() => handleMakeModelModeChange(entryMode)}
+                    type="radio"
+                    value={entryMode}
+                  />
+                  {entryMode}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      </fieldset>
 
-      <div className={compactGridClassName}>
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Make</span>
-          <input
-            className={`${textFieldClassName} ${useCategoryForMakeModel ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-[#262b2e] dark:text-slate-400" : ""}`}
-            name="make"
-            onChange={(event) => setMakeValue(event.target.value)}
-            placeholder="Dell"
-            readOnly={useCategoryForMakeModel}
-            type="text"
-            value={makeValue}
-          />
-          {!isCompact ? <p className="text-xs text-slate-500 dark:text-slate-400">Manufacturer or brand for the selected model.</p> : null}
-        </label>
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</span>
-          <input
-            className={`${textFieldClassName} ${useCategoryForMakeModel ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-[#262b2e] dark:text-slate-400" : ""}`}
-            name="model"
-            onChange={(event) => setModelValue(event.target.value)}
-            placeholder="Latitude 5420"
-            readOnly={useCategoryForMakeModel}
-            type="text"
-            value={modelValue}
-          />
-          {!isCompact ? <p className="text-xs text-slate-500 dark:text-slate-400">Primary device identity for create, edit, and import flows.</p> : null}
-        </label>
-      </div>
+      {isPerFormMakeModelAutomatic ? (
+        <div className={compactGridClassName}>
+          <input name="make" type="hidden" value={makeValue} />
+          <input name="model" type="hidden" value={modelValue} />
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Make source</span>
+            <select
+              aria-describedby={makeMissingMessage ? "make-automatic-message" : undefined}
+              className={textFieldClassName}
+              onChange={(event) => setPerFormMakeSourceLevel(event.target.value as MakeModelSourceLevel | "")}
+              value={perFormMakeSourceLevel}
+            >
+              <option value="">Select source</option>
+              {MAKE_MODEL_SOURCE_OPTIONS.map((option) => (
+                <option
+                  disabled={!isSourceLevelAvailable(selectedLineage, option.value)}
+                  key={option.value}
+                  value={option.value}
+                >
+                  {getSourceSelectLabel(selectedLineage, option.value)}
+                </option>
+              ))}
+            </select>
+            {makeMissingMessage ? <p id="make-automatic-message" className="text-xs font-medium text-[#b56613] dark:text-[#ffd1a0]">{makeMissingMessage}</p> : null}
+            {!isCompact && makeValue ? <p className="text-xs text-slate-500 dark:text-slate-400">Make will submit as {makeValue}.</p> : null}
+          </label>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Model source</span>
+            <select
+              aria-describedby={modelMissingMessage ? "model-automatic-message" : undefined}
+              className={textFieldClassName}
+              onChange={(event) => setPerFormModelSourceLevel(event.target.value as MakeModelSourceLevel | "")}
+              value={perFormModelSourceLevel}
+            >
+              <option value="">Select source</option>
+              {MAKE_MODEL_SOURCE_OPTIONS.map((option) => (
+                <option
+                  disabled={!isSourceLevelAvailable(selectedLineage, option.value)}
+                  key={option.value}
+                  value={option.value}
+                >
+                  {getSourceSelectLabel(selectedLineage, option.value)}
+                </option>
+              ))}
+            </select>
+            {modelMissingMessage ? <p id="model-automatic-message" className="text-xs font-medium text-[#b56613] dark:text-[#ffd1a0]">{modelMissingMessage}</p> : null}
+            {!isCompact && modelValue ? <p className="text-xs text-slate-500 dark:text-slate-400">Model will submit as {modelValue}.</p> : null}
+          </label>
+        </div>
+      ) : (
+        <div className={compactGridClassName}>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Make</span>
+            <input
+              aria-describedby={makeMissingMessage ? "make-automatic-message" : undefined}
+              className={`${textFieldClassName} ${isGlobalMakeModelAutomatic ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-[#262b2e] dark:text-slate-400" : ""}`}
+              name="make"
+              onChange={(event) => setMakeValue(event.target.value)}
+              placeholder="Dell"
+              readOnly={isGlobalMakeModelAutomatic}
+              type="text"
+              value={makeValue}
+            />
+            {makeMissingMessage ? <p id="make-automatic-message" className="text-xs font-medium text-[#b56613] dark:text-[#ffd1a0]">{makeMissingMessage}</p> : null}
+            {!isCompact ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {isGlobalMakeModelAutomatic ? `Using General Settings source: ${getMakeModelSourceOption(makeModelSettings.makeSourceLevel).label}.` : "Manufacturer or brand for the selected model."}
+              </p>
+            ) : null}
+          </label>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</span>
+            <input
+              aria-describedby={modelMissingMessage ? "model-automatic-message" : undefined}
+              className={`${textFieldClassName} ${isGlobalMakeModelAutomatic ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-[#262b2e] dark:text-slate-400" : ""}`}
+              name="model"
+              onChange={(event) => setModelValue(event.target.value)}
+              placeholder="Latitude 5420"
+              readOnly={isGlobalMakeModelAutomatic}
+              type="text"
+              value={modelValue}
+            />
+            {modelMissingMessage ? <p id="model-automatic-message" className="text-xs font-medium text-[#b56613] dark:text-[#ffd1a0]">{modelMissingMessage}</p> : null}
+            {!isCompact ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {isGlobalMakeModelAutomatic ? `Using General Settings source: ${getMakeModelSourceOption(makeModelSettings.modelSourceLevel).label}.` : "Primary device identity for create, edit, and import flows."}
+              </p>
+            ) : null}
+          </label>
+        </div>
+      )}
 
       <div className={compactGridClassName}>
         <label className="block space-y-2">

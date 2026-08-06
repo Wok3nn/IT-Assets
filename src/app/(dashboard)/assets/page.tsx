@@ -19,10 +19,12 @@ import {
   parseAssetsSort,
   type AssetPageSize,
 } from "@/modules/assets/assets-routing";
-import type { AssetListTransferState } from "@/modules/assets/asset-list-transfer-dialog";
-import { checkInAsset, checkOutAsset, deleteAsset, getAssetById, listAssetReferenceData, listAssets } from "@/modules/assets/asset.service";
+import type { AssetListTransferState, AssetTransferAssigneeOption } from "@/modules/assets/asset-list-transfer-dialog";
+import { checkInAsset, checkOutAsset, deleteAsset, getAssetById, listAssetReferenceData, listAssets, type AssetCheckoutAssignee } from "@/modules/assets/asset.service";
 import { AssetsFilterPanel } from "@/modules/assets/components/assets-filter-panel";
 import { AssetsIncludeRetiredPreference } from "@/modules/assets/components/assets-include-retired-preference";
+import { listActiveGuestProfilesForAssignment } from "@/modules/users/guest-profile.service";
+import { buildUserHref } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
 
 import { AssetsGrid, type AssetGridRow } from "./assets-grid";
@@ -104,6 +106,24 @@ function sortByLabel<T extends { label: string }>(items: T[]) {
   return [...items].sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base" }));
 }
 
+function parseCheckoutAssignee(formData: FormData): AssetCheckoutAssignee | null {
+  const assigneeType = String(formData.get("assigneeType") ?? "").trim();
+  const assigneeId = String(formData.get("assigneeId") ?? "").trim();
+
+  if (!assigneeType && !assigneeId) {
+    return null;
+  }
+
+  if ((assigneeType === "organization-user" || assigneeType === "guest-profile") && assigneeId) {
+    return {
+      type: assigneeType,
+      id: assigneeId,
+    };
+  }
+
+  throw new Error("Choose a valid assignee before checking out an asset.");
+}
+
 async function deleteAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
@@ -168,9 +188,10 @@ async function transferAssetFromListAction(
 
   try {
     if (mode === "checkout") {
+      const assignee = parseCheckoutAssignee(formData);
       await checkOutAsset({
         assetId,
-        assignedUserId: String(formData.get("assignedUserId") ?? ""),
+        assignee: assignee ?? undefined,
         notes,
         actorUserId: currentUser.id,
         accessScope: permissionContext.assetScope,
@@ -226,7 +247,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
   if (!currentUser) redirect("/login");
   if (!permissionContext.capabilities.viewAssets) notFound();
 
-  const [assetResults, referenceData] = await Promise.all([
+  const [assetResults, referenceData, activeGuestProfiles] = await Promise.all([
     listAssets({
       q: searchQuery,
       statusId,
@@ -241,6 +262,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
       accessScope: permissionContext.assetScope,
     }),
     listAssetReferenceData(),
+    listActiveGuestProfilesForAssignment(),
   ]);
 
   const categoryOptions = sortByLabel(referenceData.categories.map((category) => ({
@@ -259,6 +281,20 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
     ...user,
     label: user.name,
   })));
+  const assigneeOptions: AssetTransferAssigneeOption[] = sortByLabel([
+    ...referenceData.users.map((user) => ({
+      id: user.id,
+      label: user.name,
+      description: user.email,
+      type: "organization-user" as const,
+    })),
+    ...activeGuestProfiles.map((guestProfile) => ({
+      id: guestProfile.id,
+      label: guestProfile.displayName,
+      description: guestProfile.guestType,
+      type: "guest-profile" as const,
+    })),
+  ]);
   const statusOptions = sortByLabel(referenceData.statuses.map((status) => ({
     ...status,
     label: status.name,
@@ -278,15 +314,19 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
           color: asset.status.color,
         }
       : null,
-    userId: asset.assignedUser?.id ?? null,
-    user: asset.assignedUser?.name ?? "Unassigned",
+    assigneeHref: asset.assignedUser
+      ? buildUserHref(asset.assignedUser.id)
+      : asset.assignedGuestProfile
+        ? `/users/guests/${asset.assignedGuestProfile.id}`
+        : null,
+    assignee: asset.assignedUser?.name ?? asset.assignedGuestProfile?.displayName ?? "Unassigned",
     serialNumber: asset.serialNumber?.trim() || null,
     comments: asset.notes?.trim() || null,
     category: asset.category ? buildTreeLabel(referenceData.categories, asset.category.id) ?? asset.category.name : "Unassigned",
     location: asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) ?? asset.assignedLocation.name : "Unassigned",
     purchaseDate: formatDateLabel(asset.purchaseDate),
     warrantyExpiry: formatDateLabel(asset.warrantyExpiry),
-    checkLabel: asset.assignedUser || asset.status?.key === "ASSIGNED" ? "Check in" : "Check out",
+    checkLabel: asset.assignedUser || asset.assignedGuestProfile || asset.status?.key === "ASSIGNED" ? "Check in" : "Check out",
   }));
   const visibleRangeStart = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const visibleRangeEnd = totalCount === 0 ? 0 : Math.min(currentPage * pageSize, totalCount);
@@ -429,6 +469,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
 
             <AssetsGrid
               activeSort={sort}
+              assignees={assigneeOptions}
               canBulkEditAssets={permissionContext.capabilities.bulkEditAssets}
               canDeleteAssets={permissionContext.capabilities.deleteAssets}
               canEditAssets={permissionContext.capabilities.editAssets}
@@ -440,7 +481,6 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
               returnTo={returnTo}
               rows={assetGridRows}
               transferAction={transferAssetFromListAction}
-              users={userOptions}
             />
 
             <div className="flex flex-col gap-3 rounded-[26px] border border-[#d7dde4] bg-white/80 px-4 py-3 dark:border-[#556068] dark:bg-[#2c3134] sm:flex-row sm:items-center sm:justify-between">

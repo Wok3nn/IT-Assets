@@ -10,6 +10,7 @@ import { getCurrentUser } from "@/lib/session.server";
 import { AssetForm, type AssetFormState } from "@/modules/assets/asset-form";
 import { buildAssetsUrl, parseAssetsPage, parseAssetsPageSize, parseAssetsSort } from "@/modules/assets/assets-routing";
 import { AssetTagAlreadyExistsError, createAsset, getAssetById, listAssetReferenceData } from "@/modules/assets/asset.service";
+import { getGeneralSettings } from "@/modules/settings/settings.service";
 import { readSetupState } from "@/services/setup-state";
 
 export const dynamic = "force-dynamic";
@@ -117,9 +118,10 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
   if (!currentUser) redirect("/login");
   if (!permissionContext.capabilities.createAssets) notFound();
 
-  const [referenceData, duplicateAsset] = await Promise.all([
+  const [referenceData, duplicateAsset, generalSettings] = await Promise.all([
     listAssetReferenceData(),
     duplicateId ? getAssetById(duplicateId, { accessScope: permissionContext.assetScope }) : Promise.resolve(null),
+    getGeneralSettings(),
   ]);
 
   const backHref = buildAssetsUrl({ q: searchQuery || null, statusId, categoryId, scopeId, locationId, userId, sort, page, pageSize });
@@ -177,6 +179,7 @@ export default async function NewAssetPage({ searchParams }: NewAssetPageProps) 
             initialValue={initialValue}
             layout="compact"
             locations={referenceData.locations}
+            makeModelSettings={generalSettings.makeModel}
             mode="create"
             scopes={referenceData.scopes}
             statuses={referenceData.statuses}

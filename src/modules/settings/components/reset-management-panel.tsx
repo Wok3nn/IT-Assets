@@ -98,7 +98,7 @@ function buildSuccessMessage(key: ResetActionCardConfig["key"], summary: Record<
     case "locations":
       return `Reset ${summary.locationCount} location${summary.locationCount === 1 ? "" : "s"}. Cleared ${summary.clearedAssetLocationCount} asset location assignment${summary.clearedAssetLocationCount === 1 ? "" : "s"}.`;
     case "full-app":
-      return `Full app reset completed. Removed ${summary.assets} assets, ${summary.users} users, ${summary.categories} categories, ${summary.departments} departments, ${summary.labelTemplates} label templates, and ${summary.locations} locations.`;
+      return `Full app reset completed. Removed ${summary.assets} assets, ${summary.users} users, ${summary.guestProfiles} Guest Profiles, ${summary.categories} categories, ${summary.departments} departments, ${summary.labelTemplates} label templates, and ${summary.locations} locations.`;
   }
 }
 
@@ -262,10 +262,10 @@ export function ResetManagementPanel({ overview }: ResetManagementPanelProps) {
     {
       key: "full-app",
       title: "Full App Reset",
-      count: overview.assets + overview.users + overview.categories + overview.departments + overview.labelTemplates + overview.locations,
+      count: overview.assets + overview.users + overview.guestProfiles + overview.categories + overview.departments + overview.labelTemplates + overview.locations,
       description: "Removes every dataset managed in this reset surface and returns the app to a near-empty operational state.",
       warning: "This is the most destructive reset in the app. It removes all datasets listed on this page, ends the current admin session, and should only be used when intentionally returning the app to a near-empty operational state.",
-      impact: "The reset removes all assets, users, categories, departments, label templates, and locations. Asset/category/location/template assignments and user-related joins are cleared in a safe order before final deletion. Global settings, roles, statuses, and setup state are not removed in this pass.",
+      impact: "The reset removes all assets, users, Guest Profiles, categories, departments, label templates, and locations. Asset/category/location/template assignments and user-related joins are cleared in a safe order before final deletion. Global settings, roles, statuses, and setup state are not removed in this pass.",
       actionLabel: "Open full reset",
       confirmLabel: "Reset full app",
       confirmationPhrase: "RESET APP",
@@ -359,7 +359,7 @@ export function ResetManagementPanel({ overview }: ResetManagementPanelProps) {
               <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-400">{fullResetAction.description}</p>
               <div className={`mt-3 ${destructiveInfoPanelClassName}`}>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-200">Included datasets</p>
-                <p className="mt-1 text-[13px] leading-5 text-slate-600 dark:text-slate-400">Assets, users, categories, departments, label templates, and locations. Setup state, global settings, roles, and statuses stay in place.</p>
+                <p className="mt-1 text-[13px] leading-5 text-slate-600 dark:text-slate-400">Assets, users, Guest Profiles, categories, departments, label templates, and locations. Setup state, global settings, roles, and statuses stay in place.</p>
               </div>
             </div>
             <div className="xl:flex xl:w-[18.5rem]">

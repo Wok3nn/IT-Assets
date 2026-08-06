@@ -6,9 +6,11 @@ import { PanelCard } from "@/components/layout/panel-card";
 import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref } from "@/modules/assets/assets-routing";
+import type { AvailableAssetForAssignment } from "@/modules/assets/asset.service";
 import { buildUserEditHref, USERS_DIRECTORY_HREF } from "@/modules/users/users-routing";
 
 import { ScopeBadges } from "./scope-badges";
+import { UserAssignAssetDialog, type UserAssignAssetState } from "./user-assign-asset-dialog";
 import { UserAssetUnassignButton } from "./user-asset-unassign-button";
 
 type DetailUser = {
@@ -66,6 +68,9 @@ function FeedbackBanner({ message, tone }: { message: string; tone: "success" | 
 
 export function UserDetailPanel({
   assignedAssets,
+  assignAssetAction,
+  availableAssets,
+  canAssignAssets,
   canEditUser,
   canUnassignAssets,
   canViewAssets,
@@ -74,6 +79,9 @@ export function UserDetailPanel({
   user,
 }: {
   assignedAssets: AssignedAsset[];
+  assignAssetAction?: (state: UserAssignAssetState, formData: FormData) => Promise<UserAssignAssetState>;
+  availableAssets: AvailableAssetForAssignment[];
+  canAssignAssets: boolean;
   canEditUser: boolean;
   canUnassignAssets: boolean;
   canViewAssets: boolean;
@@ -152,10 +160,12 @@ export function UserDetailPanel({
                 {canViewAssets ? `${assignedAssets.length} asset${assignedAssets.length === 1 ? "" : "s"} visible for this user.` : "Asset viewing is not available for this role."}
               </p>
             </div>
-            {canViewAssets ? (
-              <Link href={`/assets?userId=${encodeURIComponent(user.id)}`}>
-                <Button type="button" variant="secondary">Open asset filter</Button>
-              </Link>
+            {canAssignAssets && assignAssetAction ? (
+              <UserAssignAssetDialog
+                action={assignAssetAction}
+                assets={availableAssets}
+                recipient={{ label: user.name, description: "Organization user" }}
+              />
             ) : null}
           </div>
 

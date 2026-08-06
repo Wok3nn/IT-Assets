@@ -6,17 +6,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { FieldLabel, FieldLabelText } from "@/components/forms/field-label";
+import { SelectField } from "@/components/forms/select-field";
 import { TextField } from "@/components/forms/text-field";
 import { PageHero } from "@/components/layout/page-hero";
 import { PanelCard } from "@/components/layout/panel-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
+import { MAKE_MODEL_SOURCE_OPTIONS, type MakeModelSourceLevel } from "@/modules/assets/make-model-source";
 
 type GeneralSettingsData = {
   appTitle: string;
   sessionTimeoutMinutes: number;
   startingAssetTagNumber: number;
+  makeModel: {
+    autoEnabled: boolean;
+    makeSourceLevel: MakeModelSourceLevel;
+    modelSourceLevel: MakeModelSourceLevel;
+  };
 };
 
 type AssetStatus = {
@@ -37,7 +44,7 @@ type EditableStatus = {
   assetCount: number;
 };
 
-type GeneralSettingsSectionKey = "appTitle" | "sessionTimeout" | "assetTag" | "statuses" | "newStatus";
+type GeneralSettingsSectionKey = "appTitle" | "sessionTimeout" | "assetTag" | "makeModel" | "statuses" | "newStatus";
 
 const SETTINGS_HUB_HREF = "/settings";
 const DEFAULT_NEW_STATUS_COLOR = "#f59e0b";
@@ -143,6 +150,9 @@ export function GeneralSettingsPanels({
   const initialAppTitle = generalSettings.appTitle;
   const initialSessionTimeoutMinutes = String(generalSettings.sessionTimeoutMinutes);
   const initialStartingAssetTagNumber = String(generalSettings.startingAssetTagNumber);
+  const initialMakeModelAutoEnabled = generalSettings.makeModel.autoEnabled;
+  const initialMakeModelMakeSourceLevel = generalSettings.makeModel.makeSourceLevel;
+  const initialMakeModelModelSourceLevel = generalSettings.makeModel.modelSourceLevel;
   const initialStatuses = useMemo(
     () => assetStatuses.map((status) => ({
       id: status.id,
@@ -157,6 +167,9 @@ export function GeneralSettingsPanels({
   const [appTitle, setAppTitle] = useState(initialAppTitle);
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(initialSessionTimeoutMinutes);
   const [startingAssetTagNumber, setStartingAssetTagNumber] = useState(initialStartingAssetTagNumber);
+  const [makeModelAutoEnabled, setMakeModelAutoEnabled] = useState(initialMakeModelAutoEnabled);
+  const [makeModelMakeSourceLevel, setMakeModelMakeSourceLevel] = useState(initialMakeModelMakeSourceLevel);
+  const [makeModelModelSourceLevel, setMakeModelModelSourceLevel] = useState(initialMakeModelModelSourceLevel);
   const [statuses, setStatuses] = useState<EditableStatus[]>(initialStatuses);
   const [newStatusName, setNewStatusName] = useState("");
   const [newStatusColor, setNewStatusColor] = useState(DEFAULT_NEW_STATUS_COLOR);
@@ -165,6 +178,7 @@ export function GeneralSettingsPanels({
     appTitle: false,
     sessionTimeout: false,
     assetTag: false,
+    makeModel: false,
     statuses: false,
     newStatus: false,
   });
@@ -220,6 +234,18 @@ export function GeneralSettingsPanels({
       return true;
     }
 
+    if (makeModelAutoEnabled !== initialMakeModelAutoEnabled) {
+      return true;
+    }
+
+    if (makeModelMakeSourceLevel !== initialMakeModelMakeSourceLevel) {
+      return true;
+    }
+
+    if (makeModelModelSourceLevel !== initialMakeModelModelSourceLevel) {
+      return true;
+    }
+
     if (statuses.length !== initialStatuses.length) {
       return true;
     }
@@ -237,9 +263,15 @@ export function GeneralSettingsPanels({
   }, [
     appTitle,
     initialAppTitle,
+    initialMakeModelAutoEnabled,
+    initialMakeModelMakeSourceLevel,
+    initialMakeModelModelSourceLevel,
     initialSessionTimeoutMinutes,
     initialStartingAssetTagNumber,
     initialStatuses,
+    makeModelAutoEnabled,
+    makeModelMakeSourceLevel,
+    makeModelModelSourceLevel,
     newStatusName,
     sessionTimeoutMinutes,
     startingAssetTagNumber,
@@ -251,6 +283,11 @@ export function GeneralSettingsPanels({
     : `Sidebar label will use ${initialAppTitle}.`;
   const sessionTimeoutSummary = `Users are signed out after ${sessionTimeoutMinutes || initialSessionTimeoutMinutes} minutes without an active session refresh.`;
   const assetTagSummary = `Starts from ${startingAssetTagNumber || initialStartingAssetTagNumber} and auto-increments to the next free numeric tag.`;
+  const makeModelMakeSourceLabel = MAKE_MODEL_SOURCE_OPTIONS.find((option) => option.value === makeModelMakeSourceLevel)?.label ?? "Sub-category 1";
+  const makeModelModelSourceLabel = MAKE_MODEL_SOURCE_OPTIONS.find((option) => option.value === makeModelModelSourceLevel)?.label ?? "Sub-category 2";
+  const makeModelSummary = makeModelAutoEnabled
+    ? `New assets start in Automatic mode. Make: ${makeModelMakeSourceLabel}; Model: ${makeModelModelSourceLabel}.`
+    : `New assets start in Manual mode. Saved sources are retained but not enforced.`;
   const statusSummary = `${statuses.length} status${statuses.length === 1 ? "" : "es"} configured across ${statuses.reduce((sum, status) => sum + status.assetCount, 0)} asset${statuses.reduce((sum, status) => sum + status.assetCount, 0) === 1 ? "" : "s"}.`;
   const newStatusSummary = newStatusName.trim()
     ? `Draft ready: ${newStatusName.trim()}`
@@ -353,6 +390,69 @@ export function GeneralSettingsPanels({
             </FieldLabel>
             <div className={compactNoteClassName}>
               Example: if this is `5000` and tags `5000` through `5100` already exist, the next new asset receives `5101`.
+            </div>
+          </div>
+        </GeneralSettingsSectionCard>
+
+        <GeneralSettingsSectionCard
+          description="Choose whether new assets automatically use the saved category-path sources for Make and Model."
+          isOpen={openSections.makeModel}
+          onToggle={() => toggleSection("makeModel")}
+          summary={makeModelSummary}
+          title="Automatic make and model"
+        >
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-700 dark:border-[#4b5255] dark:bg-[#2f3437] dark:text-slate-200">
+              <input
+                checked={makeModelAutoEnabled}
+                className="ui-switch mt-0.5"
+                name="makeModelAutoEnabled"
+                onChange={(event) => {
+                  clearSavedState();
+                  setMakeModelAutoEnabled(event.target.checked);
+                }}
+                type="checkbox"
+                value="true"
+              />
+              <span>
+                <span className="block font-medium text-slate-800 dark:text-slate-100">Automatically derive make and model from category path for new assets</span>
+                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">When enabled, new asset forms start in Automatic mode and use these saved source levels. Existing asset edits still open in Manual mode.</span>
+              </span>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FieldLabel>
+                <FieldLabelText>Make source</FieldLabelText>
+                <SelectField
+                  name="makeModelMakeSourceLevel"
+                  onChange={(event) => {
+                    clearSavedState();
+                    setMakeModelMakeSourceLevel(event.target.value as MakeModelSourceLevel);
+                  }}
+                  value={makeModelMakeSourceLevel}
+                >
+                  {MAKE_MODEL_SOURCE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </SelectField>
+              </FieldLabel>
+              <FieldLabel>
+                <FieldLabelText>Model source</FieldLabelText>
+                <SelectField
+                  name="makeModelModelSourceLevel"
+                  onChange={(event) => {
+                    clearSavedState();
+                    setMakeModelModelSourceLevel(event.target.value as MakeModelSourceLevel);
+                  }}
+                  value={makeModelModelSourceLevel}
+                >
+                  {MAKE_MODEL_SOURCE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </SelectField>
+              </FieldLabel>
+            </div>
+            <div className={compactNoteClassName}>
+              When automatic derivation is off, these saved source levels are retained for later but asset forms do not enforce them; choosing Automatic in a form shows per-form source selectors instead.
             </div>
           </div>
         </GeneralSettingsSectionCard>
