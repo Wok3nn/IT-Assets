@@ -33,6 +33,7 @@ LABEL org.opencontainers.image.description="A modern self-hosted asset managemen
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma/providers ./prisma/providers
 COPY --from=builder /app/prisma/data ./prisma/data
