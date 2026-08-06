@@ -16,6 +16,7 @@ import {
   listAssetReferenceData,
   updateAsset,
 } from "@/modules/assets/asset.service";
+import { getGeneralSettings } from "@/modules/settings/settings.service";
 import { buildUserHref } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
 
@@ -110,9 +111,10 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
   if (!currentUser) redirect("/login");
   if (!permissionContext.capabilities.editAssets) notFound();
 
-  const [referenceData, asset] = await Promise.all([
+  const [referenceData, asset, generalSettings] = await Promise.all([
     listAssetReferenceData(),
     getAssetById(assetId, { accessScope: permissionContext.assetScope }),
+    getGeneralSettings(),
   ]);
 
   if (!asset) notFound();
@@ -179,6 +181,7 @@ export default async function EditAssetPage({ params, searchParams }: EditAssetP
             }}
             layout="compact"
             locations={referenceData.locations}
+            makeModelSettings={generalSettings.makeModel}
             mode="edit"
             scopes={referenceData.scopes}
             statuses={referenceData.statuses}
