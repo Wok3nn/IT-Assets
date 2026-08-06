@@ -135,7 +135,7 @@ async function assignAssetToUserAction(
     };
   }
 
-  if (asset.assignedUserId || asset.status?.key !== "IN_STOCK") {
+  if (asset.assignedUserId || asset.assignedGuestProfileId || asset.status?.key !== "IN_STOCK") {
     return {
       ok: false,
       message: "This asset is no longer available.",
@@ -145,7 +145,7 @@ async function assignAssetToUserAction(
   try {
     await checkOutAsset({
       assetId,
-      assignedUserId: targetUser.id,
+      assignee: { type: "organization-user", id: targetUser.id },
       notes,
       actorUserId: currentUser.id,
       accessScope: permissionContext.assetScope,

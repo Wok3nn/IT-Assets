@@ -23,6 +23,13 @@ type TransferOption = {
   label: string;
 };
 
+export type AssetTransferAssigneeOption = {
+  id: string;
+  label: string;
+  description?: string;
+  type: "organization-user" | "guest-profile";
+};
+
 type AssetListTransferDialogProps = {
   action: (state: AssetListTransferState, formData: FormData) => Promise<AssetListTransferState>;
   asset: {
@@ -32,10 +39,10 @@ type AssetListTransferDialogProps = {
     model: string | null;
     checkLabel: "Check out" | "Check in";
   };
+  assignees: AssetTransferAssigneeOption[];
   isActive: boolean;
   locations: TransferOption[];
   returnTo: string;
-  users: TransferOption[];
 };
 
 const actionButtonStyle = { width: "96px", height: "36px" } as const;
@@ -60,25 +67,32 @@ function SubmitButton({ disabled = false, label }: { disabled?: boolean; label: 
 export function AssetListTransferDialog({
   action,
   asset,
+  assignees,
   isActive,
   locations,
   returnTo,
-  users,
 }: AssetListTransferDialogProps) {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState<AssetListTransferState | null>(null);
-  const [selectedUser, setSelectedUser] = useState<SearchComboboxOption | null>(null);
+  const [selectedAssignee, setSelectedAssignee] = useState<(SearchComboboxOption & { assigneeId: string; assigneeType: AssetTransferAssigneeOption["type"] }) | null>(null);
   const [state, formAction] = useActionState(action, initialAssetListTransferState);
   const mode = asset.checkLabel === "Check in" ? "checkin" : "checkout";
   const isCheckOut = mode === "checkout";
   const title = isCheckOut ? "Check Out Asset" : "Check In Asset";
   const summary = getAssetSummary(asset);
 
-  const userOptions = useMemo<SearchComboboxOption[]>(
-    () => users.map((user) => ({ id: user.id, label: user.label, kind: "User" })),
-    [users],
+  const assigneeOptions = useMemo<Array<SearchComboboxOption & { assigneeId: string; assigneeType: AssetTransferAssigneeOption["type"] }>>(
+    () => assignees.map((assignee) => ({
+      id: `${assignee.type}:${assignee.id}`,
+      assigneeId: assignee.id,
+      assigneeType: assignee.type,
+      label: assignee.label,
+      description: assignee.description,
+      kind: assignee.type === "organization-user" ? "User" : "Guest Profile",
+    })),
+    [assignees],
   );
 
   useEffect(() => {
@@ -109,7 +123,7 @@ export function AssetListTransferDialog({
 
   useEffect(() => {
     if (!open) {
-      setSelectedUser(null);
+      setSelectedAssignee(null);
     }
   }, [open]);
 
@@ -158,17 +172,24 @@ export function AssetListTransferDialog({
           <input name="assetId" type="hidden" value={asset.id} />
           <input name="mode" type="hidden" value={mode} />
           <input name="returnTo" type="hidden" value={returnTo} />
-          {isCheckOut ? <input name="assignedUserId" type="hidden" value={selectedUser?.id ?? ""} /> : null}
+          {isCheckOut ? (
+            <>
+              <input name="assigneeType" type="hidden" value={selectedAssignee?.assigneeType ?? ""} />
+              <input name="assigneeId" type="hidden" value={selectedAssignee?.assigneeId ?? ""} />
+            </>
+          ) : null}
 
           {isCheckOut ? (
             <div className="space-y-2">
               <SearchCombobox
-                emptyMessage="No users match that search."
-                label="Assign to user"
-                onChange={setSelectedUser}
-                options={userOptions}
-                placeholder="Search users"
-                value={selectedUser?.id ?? null}
+                emptyMessage="No users or Guest Profiles match that search."
+                label="Assign to"
+                onChange={(option) => {
+                  setSelectedAssignee(option as typeof selectedAssignee);
+                }}
+                options={assigneeOptions}
+                placeholder="Search users or Guest Profiles"
+                value={selectedAssignee?.id ?? null}
               />
             </div>
           ) : (
@@ -208,7 +229,7 @@ export function AssetListTransferDialog({
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button onClick={() => setOpen(false)} type="button" variant="ghost">Cancel</Button>
-            <SubmitButton disabled={isCheckOut && !selectedUser} label={isCheckOut ? "Check out asset" : "Check in asset"} />
+            <SubmitButton disabled={isCheckOut && !selectedAssignee} label={isCheckOut ? "Check out asset" : "Check in asset"} />
           </div>
         </form>
       </div>

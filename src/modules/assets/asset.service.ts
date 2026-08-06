@@ -113,6 +113,14 @@ const assetListSelect = Prisma.validator<Prisma.AssetSelect>()({
       email: true,
     },
   },
+  assignedGuestProfileId: true,
+  assignedGuestProfile: {
+    select: {
+      id: true,
+      displayName: true,
+      guestType: true,
+    },
+  },
   assignedLocation: {
     select: {
       id: true,
@@ -181,6 +189,10 @@ type AssetAuditEntry = {
   summary: string;
   payload?: unknown;
 };
+
+export type AssetCheckoutAssignee =
+  | { type: "organization-user"; id: string }
+  | { type: "guest-profile"; id: string };
 
 function buildAssetAccessWhere(accessScope?: AssetAccessScope | null): Prisma.AssetWhereInput | null {
   if (!accessScope || accessScope.accessMode === "all") {
@@ -283,6 +295,8 @@ function buildUserSearchClauses(query: string): Prisma.AssetWhereInput[] {
   return [
     { assignedUser: { name: { contains: query } } },
     { assignedUser: { email: { contains: query } } },
+    { assignedGuestProfile: { displayName: { contains: query } } },
+    { assignedGuestProfile: { guestType: { contains: query } } },
   ];
 }
 
@@ -757,6 +771,7 @@ export async function listAssets(options?: {
           {
             OR: [
               { assignedUserId: { not: null } },
+              { assignedGuestProfileId: { not: null } },
               { assignedLocationId: { not: null } },
               { status: { key: "ASSIGNED" } },
             ],
@@ -919,6 +934,14 @@ export async function getAssetById(assetId: string, options?: { accessScope?: As
           email: true,
         },
       },
+      assignedGuestProfileId: true,
+      assignedGuestProfile: {
+        select: {
+          id: true,
+          displayName: true,
+          guestType: true,
+        },
+      },
       assignedLocationId: true,
       assignedLocation: {
         select: {
@@ -1031,6 +1054,25 @@ export async function listAssetsAssignedToUser(userId: string, options?: { acces
   });
 }
 
+export async function listAssetsAssignedToGuestProfile(guestProfileId: string, options?: { accessScope?: AssetAccessScope | null }) {
+  const parsedGuestProfileId = requiredIdSchema.parse(guestProfileId);
+  const accessWhere = buildAssetAccessWhere(options?.accessScope);
+  const where: Prisma.AssetWhereInput = accessWhere
+    ? {
+        assignedGuestProfileId: parsedGuestProfileId,
+        AND: [accessWhere],
+      }
+    : {
+        assignedGuestProfileId: parsedGuestProfileId,
+      };
+
+  return db.asset.findMany({
+    where,
+    select: assetListSelect,
+    orderBy: [{ assetTag: "asc" }, { name: "asc" }],
+  });
+}
+
 export async function listAvailableAssetsForAssignment(options?: {
   accessScope?: AssetAccessScope | null;
   limit?: number;
@@ -1040,6 +1082,7 @@ export async function listAvailableAssetsForAssignment(options?: {
   const accessWhere = buildAssetAccessWhere(options?.accessScope);
   const availableWhere: Prisma.AssetWhereInput = {
     assignedUserId: null,
+    assignedGuestProfileId: null,
     status: {
       key: AVAILABLE_ASSET_STATUS_KEY,
     },
@@ -1199,6 +1242,7 @@ export async function updateAsset(input: {
         assetTag: true,
         statusId: true,
         assignedUserId: true,
+        assignedGuestProfileId: true,
         assignedLocationId: true,
         scopes: {
           select: {
@@ -1216,6 +1260,11 @@ export async function updateAsset(input: {
     if (parsed.assetTag) {
       await ensureAssetTagAvailable(tx, parsed.assetTag, existingAsset.id);
     }
+
+    if (parsed.assignedUserId && existingAsset.assignedGuestProfileId) {
+      throw new Error("Check in the asset before assigning it to an organization user.");
+    }
+
     const resolvedName = resolveAssetDisplayName({
       name: parsed.name,
       make: parsed.make,
@@ -1260,6 +1309,7 @@ export async function updateAsset(input: {
           assetTag: existingAsset.assetTag,
           statusId: existingAsset.statusId,
           assignedUserId: existingAsset.assignedUserId,
+          assignedGuestProfileId: existingAsset.assignedGuestProfileId,
           assignedLocationId: existingAsset.assignedLocationId,
           scopeIds: existingAsset.scopes.map((scope) => scope.scopeId).sort(),
         },
@@ -1270,6 +1320,7 @@ export async function updateAsset(input: {
           assetTag: asset.assetTag,
           statusId: parsed.statusId,
           assignedUserId: parsed.assignedUserId,
+          assignedGuestProfileId: existingAsset.assignedGuestProfileId,
           assignedLocationId: parsed.assignedLocationId,
           scopeIds: parsed.scopeIds.slice().sort(),
         },
@@ -1512,6 +1563,7 @@ export async function unassignAssetFromUser(input: {
 
 export async function checkOutAsset(input: {
   assetId: string;
+  assignee?: AssetCheckoutAssignee;
   assignedUserId?: string;
   assignedLocationId?: string;
   notes?: string;
@@ -1533,6 +1585,7 @@ export async function checkOutAsset(input: {
         id: true,
         assetTag: true,
         assignedUserId: true,
+        assignedGuestProfileId: true,
         assignedLocationId: true,
         statusId: true,
         status: {
@@ -1549,10 +1602,15 @@ export async function checkOutAsset(input: {
     }
 
     const assignedUserId = normalizeOptional(input.assignedUserId);
+    const assignee = input.assignee ?? (assignedUserId ? { type: "organization-user" as const, id: assignedUserId } : undefined);
     const assignedLocationId = normalizeOptional(input.assignedLocationId);
     const note = normalizeOptional(input.notes);
 
-    if (asset.assignedUserId) {
+    if (input.assignee && assignedUserId) {
+      throw new Error("Select one assignee before checking out an asset.");
+    }
+
+    if (asset.assignedUserId || asset.assignedGuestProfileId) {
       throw new Error("This asset is no longer available.");
     }
 
@@ -1560,25 +1618,73 @@ export async function checkOutAsset(input: {
       throw new Error("This asset is no longer available.");
     }
 
-    if (!assignedUserId && !assignedLocationId) {
-      throw new Error("Select a user or location before checking out an asset.");
+    if (!assignee && !assignedLocationId) {
+      throw new Error("Select an assignee or location before checking out an asset.");
     }
 
-    const [validatedAssignedUserId, validatedAssignedLocationId, assignedStatus] = await Promise.all([
-      ensureEntityExists(tx, "user", assignedUserId, "Assigned user"),
+    const [validatedAssignedLocationId, assignedStatus] = await Promise.all([
       ensureEntityExists(tx, "location", assignedLocationId, "Assigned location"),
       getStatusByKey(tx, "ASSIGNED"),
     ]);
+    let validatedAssignedUserId: string | null = null;
+    let validatedAssignedGuestProfileId: string | null = null;
+    let assigneePayload: {
+      assigneeType: "organization-user" | "guest-profile" | null;
+      assigneeId: string | null;
+      assigneeDisplayName: string | null;
+      guestType?: string | null;
+    } = {
+      assigneeType: null,
+      assigneeId: null,
+      assigneeDisplayName: null,
+    };
+
+    if (assignee?.type === "organization-user") {
+      const user = await tx.user.findUnique({
+        where: { id: assignee.id },
+        select: { id: true, name: true },
+      });
+
+      if (!user) {
+        throw new Error("Assigned user no longer exists.");
+      }
+
+      validatedAssignedUserId = user.id;
+      assigneePayload = {
+        assigneeType: "organization-user",
+        assigneeId: user.id,
+        assigneeDisplayName: user.name,
+      };
+    } else if (assignee?.type === "guest-profile") {
+      const guestProfile = await tx.guestProfile.findUnique({
+        where: { id: assignee.id },
+        select: { id: true, displayName: true, guestType: true, isActive: true },
+      });
+
+      if (!guestProfile || !guestProfile.isActive) {
+        throw new Error("Guest Profile is no longer available for assignment.");
+      }
+
+      validatedAssignedGuestProfileId = guestProfile.id;
+      assigneePayload = {
+        assigneeType: "guest-profile",
+        assigneeId: guestProfile.id,
+        assigneeDisplayName: guestProfile.displayName,
+        guestType: guestProfile.guestType,
+      };
+    }
 
     const updateResult = await tx.asset.updateMany({
       where: {
         id: asset.id,
         assignedUserId: null,
+        assignedGuestProfileId: null,
         statusId: asset.status.id,
       },
       data: {
         statusId: assignedStatus.id,
         assignedUserId: validatedAssignedUserId,
+        assignedGuestProfileId: validatedAssignedGuestProfileId,
         assignedLocationId: validatedAssignedLocationId,
       },
     });
@@ -1602,8 +1708,11 @@ export async function checkOutAsset(input: {
       summary: `Checked out asset ${updatedAsset.assetTag}.`,
       payload: {
         previousAssignedUserId: asset.assignedUserId,
+        previousAssignedGuestProfileId: asset.assignedGuestProfileId,
         previousAssignedLocationId: asset.assignedLocationId,
         assignedUserId: validatedAssignedUserId,
+        assignedGuestProfileId: validatedAssignedGuestProfileId,
+        ...assigneePayload,
         assignedLocationId: validatedAssignedLocationId,
         note,
       },
@@ -1635,6 +1744,20 @@ export async function checkInAsset(input: {
         id: true,
         assetTag: true,
         assignedUserId: true,
+        assignedGuestProfileId: true,
+        assignedUser: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        assignedGuestProfile: {
+          select: {
+            id: true,
+            displayName: true,
+            guestType: true,
+          },
+        },
         assignedLocationId: true,
       },
     });
@@ -1656,6 +1779,7 @@ export async function checkInAsset(input: {
       data: {
         statusId: inStockStatus.id,
         assignedUserId: null,
+        assignedGuestProfileId: null,
         assignedLocationId: validatedLocationId,
       },
     });
@@ -1667,6 +1791,11 @@ export async function checkInAsset(input: {
       summary: `Checked in asset ${updatedAsset.assetTag}.`,
       payload: {
         previousAssignedUserId: asset.assignedUserId,
+        previousAssignedGuestProfileId: asset.assignedGuestProfileId,
+        previousAssigneeType: asset.assignedUserId ? "organization-user" : asset.assignedGuestProfileId ? "guest-profile" : null,
+        previousAssigneeId: asset.assignedUserId ?? asset.assignedGuestProfileId,
+        previousAssigneeDisplayName: asset.assignedUser?.name ?? asset.assignedGuestProfile?.displayName ?? null,
+        previousGuestType: asset.assignedGuestProfile?.guestType ?? null,
         previousAssignedLocationId: asset.assignedLocationId,
         locationId: validatedLocationId,
         note,

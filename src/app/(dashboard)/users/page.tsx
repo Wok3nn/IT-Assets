@@ -11,6 +11,7 @@ import { RoleCardsGrid } from "@/modules/users/components/role-cards-grid";
 import { UsersDirectoryList } from "@/modules/users/components/users-directory-list";
 import { UsersFilterBar } from "@/modules/users/components/users-filter-bar";
 import { UsersHeader } from "@/modules/users/components/users-header";
+import { UsersSectionNav } from "@/modules/users/components/users-section-nav";
 import {
   buildRoleFilteredUsersUrl,
   buildUserHref,
@@ -260,6 +261,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     <AppShell>
       <div className="space-y-6">
         <UsersHeader rolesViewHref={rolesViewHref} selectedRoleName={null} usersViewHref={usersViewHref} view={view} />
+        <UsersSectionNav active="organization-users" />
 
         <section className="space-y-6">
           <PanelCard>

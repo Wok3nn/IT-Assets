@@ -7,10 +7,9 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
-import { AssetListTransferDialog, type AssetListTransferState } from "@/modules/assets/asset-list-transfer-dialog";
+import { AssetListTransferDialog, type AssetListTransferState, type AssetTransferAssigneeOption } from "@/modules/assets/asset-list-transfer-dialog";
 import { ASSET_BULK_EDIT_HREF, buildAssetHref, buildAssetLabelHref } from "@/modules/assets/assets-routing";
 import type { AssetSortOption } from "@/modules/assets/asset.service";
-import { buildUserHref } from "@/modules/users/users-routing";
 
 export type AssetGridRow = {
   id: string;
@@ -19,8 +18,8 @@ export type AssetGridRow = {
   make: string | null;
   model: string | null;
   status: { label: string; color: string | null } | null;
-  userId: string | null;
-  user: string;
+  assigneeHref: string | null;
+  assignee: string;
   serialNumber: string | null;
   comments: string | null;
   category: string;
@@ -72,9 +71,9 @@ type AssetsGridProps = {
   canEditAssets: boolean;
   canManageAssetTransfers: boolean;
   canPrintLabels: boolean;
+  assignees: AssetTransferAssigneeOption[];
   locations: Array<{ id: string; label: string }>;
   transferAction: (state: AssetListTransferState, formData: FormData) => Promise<AssetListTransferState>;
-  users: Array<{ id: string; label: string }>;
 };
 
 const DEBUG_RESIZE = false;
@@ -108,7 +107,7 @@ const columns: ColumnDefinition[] = [
   { id: "assetTag", label: DEBUG_RESIZE ? "Asset tag (140 fixed)" : "Asset Tag", defaultWidth: 140, minWidth: 140, maxWidth: 140, resizable: false, justify: "start", cellPadding: "px-3", fixed: true },
   { id: "assetModel", label: DEBUG_RESIZE ? "Make / Model (244)" : "Make / Model", defaultWidth: 244, minWidth: 120, maxWidth: 440, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "status", label: DEBUG_RESIZE ? "Status (124)" : "Status", defaultWidth: 124, minWidth: 96, maxWidth: 260, resizable: true, justify: "start", cellPadding: "px-3.5" },
-  { id: "user", label: DEBUG_RESIZE ? "User (144)" : "User", defaultWidth: 144, minWidth: 96, maxWidth: 320, resizable: true, justify: "start", cellPadding: "px-3.5" },
+  { id: "user", label: DEBUG_RESIZE ? "Assignee (144)" : "Assignee", defaultWidth: 144, minWidth: 96, maxWidth: 320, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "serialNumber", label: DEBUG_RESIZE ? "Serial Number (184)" : "Serial Number", defaultWidth: 184, minWidth: 144, maxWidth: 320, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "comments", label: "Comments", defaultWidth: 220, minWidth: 120, maxWidth: 440, resizable: true, justify: "start", cellPadding: "px-3.5" },
   { id: "category", label: "Category", defaultWidth: 168, minWidth: 96, maxWidth: 360, resizable: true, justify: "start", cellPadding: "px-3.5" },
@@ -389,9 +388,9 @@ export function AssetsGrid({
   canEditAssets,
   canManageAssetTransfers,
   canPrintLabels,
+  assignees,
   locations,
   transferAction,
-  users,
 }: AssetsGridProps) {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(rows[0]?.id ?? null);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
@@ -958,17 +957,17 @@ export function AssetsGrid({
                         if (column.id === "user") {
                           return (
                             <div key={column.id} className={cellClass} style={stickyPlacement?.style}>
-                              {row.userId ? (
+                              {row.assigneeHref ? (
                                 <Link
                                   className="block truncate text-sm font-medium text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]"
-                                  href={buildUserHref(row.userId)}
+                                  href={row.assigneeHref}
                                   onClick={(event) => event.stopPropagation()}
-                                  title={row.user}
+                                  title={row.assignee}
                                 >
-                                  {row.user}
+                                  {row.assignee}
                                 </Link>
                               ) : (
-                                <span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.user}>{row.user}</span>
+                                <span className="block truncate text-sm text-slate-600 dark:text-slate-300" title={row.assignee}>{row.assignee}</span>
                               )}
                             </div>
                           );
@@ -1031,11 +1030,11 @@ export function AssetsGrid({
                                 {canManageAssetTransfers ? (
                                   <AssetListTransferDialog
                                     action={transferAction}
+                                    assignees={assignees}
                                     asset={row}
                                     isActive={isSelected}
                                     locations={locations}
                                     returnTo={returnTo}
-                                    users={users}
                                   />
                                 ) : null}
                               </div>

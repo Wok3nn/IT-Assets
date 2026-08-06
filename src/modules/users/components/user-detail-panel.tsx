@@ -164,7 +164,7 @@ export function UserDetailPanel({
               <UserAssignAssetDialog
                 action={assignAssetAction}
                 assets={availableAssets}
-                user={{ id: user.id, name: user.name }}
+                recipient={{ label: user.name, description: "Organization user" }}
               />
             ) : null}
           </div>

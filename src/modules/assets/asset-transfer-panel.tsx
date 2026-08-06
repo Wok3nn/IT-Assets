@@ -2,15 +2,17 @@
 
 import { ArrowLeftRight } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { SearchCombobox, type SearchComboboxOption } from "@/components/forms/search-combobox";
 import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
-import { buildUserHref } from "@/modules/users/users-routing";
 
-type UserOption = {
+export type AssetTransferPanelAssigneeOption = {
   id: string;
-  name: string;
+  label: string;
+  description?: string;
+  type: "organization-user" | "guest-profile";
 };
 
 type LocationOption = {
@@ -24,12 +26,11 @@ type AssetTransferPanelProps = {
   initialMode?: "checkout" | "checkin" | null;
   statusLabel: string;
   statusColor?: string | null;
-  userLabel: string;
-  userId?: string | null;
+  assigneeLabel: string;
+  assigneeHref?: string | null;
   locationLabel: string;
-  initialAssignedUserId?: string | null;
   initialAssignedLocationId?: string | null;
-  users: UserOption[];
+  assignees: AssetTransferPanelAssigneeOption[];
   locations: LocationOption[];
   fieldClass: string;
   cardClass: string;
@@ -53,12 +54,11 @@ export function AssetTransferPanel({
   initialMode,
   statusLabel,
   statusColor,
-  userLabel,
-  userId,
+  assigneeLabel,
+  assigneeHref,
   locationLabel,
-  initialAssignedUserId,
   initialAssignedLocationId,
-  users,
+  assignees,
   locations,
   fieldClass,
   cardClass,
@@ -78,6 +78,7 @@ export function AssetTransferPanel({
 
     return null;
   });
+  const [selectedAssignee, setSelectedAssignee] = useState<(SearchComboboxOption & { assigneeId: string; assigneeType: AssetTransferPanelAssigneeOption["type"] }) | null>(null);
 
   const currentState = isCheckedOut ? "checkout" : "checkin";
   const checkoutActive = activeMode === "checkout";
@@ -85,6 +86,17 @@ export function AssetTransferPanel({
 
   const mutedClass = "border-slate-200/80 bg-slate-100/80 text-slate-400 opacity-60 dark:border-[#454c50] dark:bg-[#2b3033] dark:text-slate-500";
   const activeClass = "border-[#f0c48d] bg-white shadow-[0_14px_24px_rgba(15,23,42,0.08)] dark:border-[#f0a853] dark:bg-[#2f3437]";
+  const assigneeOptions = useMemo<Array<SearchComboboxOption & { assigneeId: string; assigneeType: AssetTransferPanelAssigneeOption["type"] }>>(
+    () => assignees.map((assignee) => ({
+      id: `${assignee.type}:${assignee.id}`,
+      assigneeId: assignee.id,
+      assigneeType: assignee.type,
+      label: assignee.label,
+      description: assignee.description,
+      kind: assignee.type === "organization-user" ? "User" : "Guest Profile",
+    })),
+    [assignees],
+  );
 
   const hiddenFields = (
     <>
@@ -124,17 +136,18 @@ export function AssetTransferPanel({
               {hiddenFields}
               <div>
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Check out asset</h4>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Assign to a user, a location, or both.</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Assign to a person, a location, or both.</p>
               </div>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">User</span>
-                <select className={fieldClass} defaultValue={initialAssignedUserId ?? ""} name="checkoutAssignedUserId">
-                  <option value="">Nobody</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>{user.name}</option>
-                  ))}
-                </select>
-              </label>
+              <input name="checkoutAssigneeType" type="hidden" value={selectedAssignee?.assigneeType ?? ""} />
+              <input name="checkoutAssigneeId" type="hidden" value={selectedAssignee?.assigneeId ?? ""} />
+              <SearchCombobox
+                emptyMessage="No users or Guest Profiles match that search."
+                label="Assign to"
+                onChange={(option) => setSelectedAssignee(option as typeof selectedAssignee)}
+                options={assigneeOptions}
+                placeholder="Search users or Guest Profiles"
+                value={selectedAssignee?.id ?? null}
+              />
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Location</span>
                 <select className={fieldClass} defaultValue={initialAssignedLocationId ?? ""} name="checkoutLocationId">
@@ -158,12 +171,12 @@ export function AssetTransferPanel({
               <div>
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Checked out</h4>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  User{" "}
-                  {userId ? (
-                    <Link className="font-medium text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildUserHref(userId)}>
-                      {userLabel}
+                  Assignee{" "}
+                  {assigneeHref ? (
+                    <Link className="font-medium text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={assigneeHref}>
+                      {assigneeLabel}
                     </Link>
-                  ) : userLabel}
+                  ) : assigneeLabel}
                 </p>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Location {locationLabel}</p>
               </div>
@@ -184,7 +197,7 @@ export function AssetTransferPanel({
               {hiddenFields}
               <div>
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Check in asset</h4>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Clear the assigned user and set a return location if needed.</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Clear the assigned person and set a return location if needed.</p>
               </div>
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Return location</span>

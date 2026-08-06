@@ -11,7 +11,7 @@ import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref, buildAssetLabelHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
-import { AssetTransferPanel } from "@/modules/assets/asset-transfer-panel";
+import { AssetTransferPanel, type AssetTransferPanelAssigneeOption } from "@/modules/assets/asset-transfer-panel";
 import {
   checkInAsset,
   checkOutAsset,
@@ -19,7 +19,9 @@ import {
   getAssetAuditPayloadNote,
   getAssetById,
   listAssetReferenceData,
+  type AssetCheckoutAssignee,
 } from "@/modules/assets/asset.service";
+import { listActiveGuestProfilesForAssignment } from "@/modules/users/guest-profile.service";
 import { buildUserHref } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
 
@@ -64,6 +66,24 @@ function appendAssetPageError(href: string, message: string) {
   return `${href}${separator}error=${encodeURIComponent(message)}`;
 }
 
+function parseCheckoutAssignee(formData: FormData): AssetCheckoutAssignee | null {
+  const assigneeType = String(formData.get("checkoutAssigneeType") ?? "").trim();
+  const assigneeId = String(formData.get("checkoutAssigneeId") ?? "").trim();
+
+  if (!assigneeType && !assigneeId) {
+    return null;
+  }
+
+  if ((assigneeType === "organization-user" || assigneeType === "guest-profile") && assigneeId) {
+    return {
+      type: assigneeType,
+      id: assigneeId,
+    };
+  }
+
+  throw new Error("Choose a valid assignee before checking out an asset.");
+}
+
 async function checkOutAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
@@ -83,9 +103,10 @@ async function checkOutAssetAction(formData: FormData) {
   }
 
   try {
+    const assignee = parseCheckoutAssignee(formData);
     await checkOutAsset({
       assetId,
-      assignedUserId: formData.get("checkoutAssignedUserId")?.toString() ?? "",
+      assignee: assignee ?? undefined,
       assignedLocationId: formData.get("checkoutLocationId")?.toString() ?? "",
       notes: formData.get("checkoutNote")?.toString() ?? "",
       actorUserId: currentUser.id,
@@ -144,8 +165,9 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
   if (!currentUser) redirect("/login");
   if (!permissionContext.capabilities.viewAssets) notFound();
 
-  const [referenceData, asset] = await Promise.all([
+  const [referenceData, activeGuestProfiles, asset] = await Promise.all([
     listAssetReferenceData(),
+    listActiveGuestProfilesForAssignment(),
     getAssetById(assetId, { accessScope: permissionContext.assetScope }),
   ]);
 
@@ -154,6 +176,26 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
   const history = await getAssetAuditHistory(assetId, undefined, { accessScope: permissionContext.assetScope });
 
   const recentHistory = history.slice(0, 3);
+  const assigneeOptions: AssetTransferPanelAssigneeOption[] = [
+    ...referenceData.users.map((user) => ({
+      id: user.id,
+      label: user.name,
+      description: user.email,
+      type: "organization-user" as const,
+    })),
+    ...activeGuestProfiles.map((guestProfile) => ({
+      id: guestProfile.id,
+      label: guestProfile.displayName,
+      description: guestProfile.guestType,
+      type: "guest-profile" as const,
+    })),
+  ].sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base" }));
+  const currentAssigneeHref = asset.assignedUser
+    ? buildUserHref(asset.assignedUser.id)
+    : asset.assignedGuestProfile
+      ? `/users/guests/${asset.assignedGuestProfile.id}`
+      : null;
+  const currentAssigneeLabel = asset.assignedUser?.name ?? asset.assignedGuestProfile?.displayName ?? "Nobody";
 
   return (
     <AppShell>
@@ -210,18 +252,17 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
               checkOutAction={checkOutAssetAction}
               fieldClass={textFieldClassName}
               filterState={{ q: "", statusId: null, categoryId: null, scopeId: null, locationId: null, userId: null, sort: "updated-desc" }}
+              assignees={assigneeOptions}
               initialAssignedLocationId={asset.assignedLocationId}
-              initialAssignedUserId={asset.assignedUserId}
               initialMode={transferMode}
-              isCheckedOut={Boolean(asset.assignedUserId || asset.status?.key === "ASSIGNED")}
+              isCheckedOut={Boolean(asset.assignedUserId || asset.assignedGuestProfileId || asset.status?.key === "ASSIGNED")}
               locationLabel={asset.assignedLocation ? buildTreeLabel(referenceData.locations, asset.assignedLocation.id) ?? "No location" : "No location"}
               locations={referenceData.locations.map((location) => ({ id: location.id, label: buildTreeLabel(referenceData.locations, location.id) ?? location.name }))}
               returnTo={returnTo}
               statusColor={asset.status?.color ?? null}
               statusLabel={asset.status?.name ?? "No status"}
-              userId={asset.assignedUser?.id ?? null}
-              userLabel={asset.assignedUser?.name ?? "Nobody"}
-              users={referenceData.users}
+              assigneeHref={currentAssigneeHref}
+              assigneeLabel={currentAssigneeLabel}
             />
           ) : (
             <section className={insetCardClassName}>
@@ -254,11 +295,11 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
                 <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{buildTreeLabel(referenceData.categories, asset.categoryId) ?? "Unassigned"}</p>
               </div>
               <div className={insetCardClassName}>
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Assigned user</p>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Current assignee</p>
                 <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">
-                  {asset.assignedUser ? (
-                    <Link className="text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildUserHref(asset.assignedUser.id)}>
-                      {asset.assignedUser.name}
+                  {currentAssigneeHref ? (
+                    <Link className="text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={currentAssigneeHref}>
+                      {currentAssigneeLabel}
                     </Link>
                   ) : "Unassigned"}
                 </p>

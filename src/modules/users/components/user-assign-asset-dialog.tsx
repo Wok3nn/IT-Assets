@@ -21,9 +21,9 @@ export const initialUserAssignAssetState: UserAssignAssetState = {
 type UserAssignAssetDialogProps = {
   action: (state: UserAssignAssetState, formData: FormData) => Promise<UserAssignAssetState>;
   assets: AvailableAssetForAssignment[];
-  user: {
-    id: string;
-    name: string;
+  recipient: {
+    label: string;
+    description?: string;
   };
 };
 
@@ -55,7 +55,7 @@ function SubmitButton({ disabled = false }: { disabled?: boolean }) {
   );
 }
 
-export function UserAssignAssetDialog({ action, assets, user }: UserAssignAssetDialogProps) {
+export function UserAssignAssetDialog({ action, assets, recipient }: UserAssignAssetDialogProps) {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -147,8 +147,9 @@ export function UserAssignAssetDialog({ action, assets, user }: UserAssignAssetD
           <div>
             <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">Assign asset</h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Assign asset to: <span className="font-medium text-slate-950 dark:text-slate-100">{user.name}</span>
+              Assign asset to: <span className="font-medium text-slate-950 dark:text-slate-100">{recipient.label}</span>
             </p>
+            {recipient.description ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{recipient.description}</p> : null}
           </div>
           <button
             aria-label="Close"

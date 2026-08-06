@@ -42,6 +42,8 @@ export default async function AssetLookupPage({ params }: AssetLookupPageProps) 
     notFound();
   }
 
+  const assigneeLabel = asset.assignedUser?.name ?? asset.assignedGuestProfile?.displayName ?? "Unassigned";
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.08),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2f6_100%)] px-4 py-6 dark:bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.12),_transparent_42%),linear-gradient(180deg,#2f3437_0%,#252a2d_100%)] sm:px-6">
       <div className="mx-auto max-w-2xl space-y-5">
@@ -61,7 +63,7 @@ export default async function AssetLookupPage({ params }: AssetLookupPageProps) 
           <LookupField label="Asset name" value={asset.name} />
           <LookupField label="Serial number" value={asset.serialNumber?.trim() || "Not recorded"} />
           <LookupField label="Category" value={asset.category?.name ?? "Unassigned"} />
-          <LookupField label="Assigned user" value={asset.assignedUser?.name ?? "Unassigned"} />
+          <LookupField label="Current assignee" value={assigneeLabel} />
           <LookupField label="Location" value={asset.assignedLocation?.name ?? "Unassigned"} />
           <LookupField label="Status" value={asset.status?.name ?? "No status"} />
           <LookupField label="Lookup path" value={buildAssetLookupPath(asset.id)} />
