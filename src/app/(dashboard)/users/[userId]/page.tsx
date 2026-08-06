@@ -4,8 +4,9 @@ import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/navigation/app-shell";
 import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
-import { listAssetsAssignedToUser, unassignAssetFromUser } from "@/modules/assets/asset.service";
+import { checkOutAsset, getAssetById, listAssetsAssignedToUser, listAvailableAssetsForAssignment, unassignAssetFromUser } from "@/modules/assets/asset.service";
 import { UserDetailPanel } from "@/modules/users/components/user-detail-panel";
+import type { UserAssignAssetState } from "@/modules/users/components/user-assign-asset-dialog";
 import { getUserById } from "@/modules/users/user.service";
 import { buildUserHref, USERS_DIRECTORY_HREF } from "@/modules/users/users-routing";
 import { readSetupState } from "@/services/setup-state";
@@ -24,6 +25,10 @@ type UserDetailPageProps = {
 
 function canUnassignUserAssets(capabilities: Awaited<ReturnType<typeof getCurrentUserAssetPermissionContext>>["capabilities"]) {
   return capabilities.editAssets || capabilities.editUsers || capabilities.manageAssetTransfers;
+}
+
+function canAssignUserAssets(capabilities: Awaited<ReturnType<typeof getCurrentUserAssetPermissionContext>>["capabilities"]) {
+  return capabilities.manageAssetTransfers;
 }
 
 function buildFeedback(searchParams?: { unassigned?: string; error?: string }) {
@@ -80,6 +85,90 @@ async function unassignUserAssetAction(formData: FormData) {
   redirect(`${detailHref}?unassigned=true`);
 }
 
+async function assignAssetToUserAction(
+  targetUserId: string,
+  _state: UserAssignAssetState,
+  formData: FormData,
+): Promise<UserAssignAssetState> {
+  "use server";
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    redirect("/login");
+  }
+
+  const permissionContext = await getCurrentUserAssetPermissionContext();
+
+  if (!permissionContext.capabilities.viewUsers || !canAssignUserAssets(permissionContext.capabilities)) {
+    return {
+      ok: false,
+      message: "You do not have permission to assign assets.",
+    };
+  }
+
+  const targetUser = await getUserById(targetUserId);
+
+  if (!targetUser) {
+    return {
+      ok: false,
+      message: "User was not found.",
+    };
+  }
+
+  const assetId = String(formData.get("assetId") ?? "").trim();
+  const notes = String(formData.get("transferNote") ?? "");
+
+  if (!assetId) {
+    return {
+      ok: false,
+      message: "Choose an available asset before assigning.",
+    };
+  }
+
+  const asset = await getAssetById(assetId, { accessScope: permissionContext.assetScope });
+
+  if (!asset) {
+    return {
+      ok: false,
+      message: "Asset was not found or is no longer available.",
+    };
+  }
+
+  if (asset.assignedUserId || asset.status?.key !== "IN_STOCK") {
+    return {
+      ok: false,
+      message: "This asset is no longer available.",
+    };
+  }
+
+  try {
+    await checkOutAsset({
+      assetId,
+      assignedUserId: targetUser.id,
+      notes,
+      actorUserId: currentUser.id,
+      accessScope: permissionContext.assetScope,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Asset could not be assigned.",
+    };
+  }
+
+  const detailHref = buildUserHref(targetUser.id);
+  revalidatePath(detailHref);
+  revalidatePath("/assets");
+  revalidatePath(`/assets/${assetId}`);
+  revalidatePath(`/assets/${assetId}/history`);
+
+  return {
+    ok: true,
+    message: "Asset assigned.",
+  };
+}
+
 export default async function UserDetailPage({ params, searchParams }: UserDetailPageProps) {
   const [{ userId }, resolvedSearchParams] = await Promise.all([
     params,
@@ -105,11 +194,15 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
   }
 
   const canUnassignAssets = canUnassignUserAssets(permissionContext.capabilities);
+  const canAssignAssets = canAssignUserAssets(permissionContext.capabilities);
   const canViewAssignedAssets = permissionContext.capabilities.viewAssets || canUnassignAssets;
-  const [user, assignedAssets] = await Promise.all([
+  const [user, assignedAssets, availableAssets] = await Promise.all([
     getUserById(userId),
     canViewAssignedAssets
       ? listAssetsAssignedToUser(userId, { accessScope: permissionContext.assetScope })
+      : Promise.resolve([]),
+    canAssignAssets
+      ? listAvailableAssetsForAssignment({ accessScope: permissionContext.assetScope })
       : Promise.resolve([]),
   ]);
 
@@ -121,6 +214,9 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
     <AppShell>
       <UserDetailPanel
         assignedAssets={assignedAssets}
+        assignAssetAction={assignAssetToUserAction.bind(null, user.id)}
+        availableAssets={availableAssets}
+        canAssignAssets={canAssignAssets}
         canEditUser={permissionContext.capabilities.editUsers}
         canUnassignAssets={canUnassignAssets}
         canViewAssets={canViewAssignedAssets}

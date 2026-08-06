@@ -9,6 +9,7 @@ import {
 import { db } from "@/services/database";
 
 const MAX_CATEGORY_LEVELS = 5;
+const AVAILABLE_ASSET_STATUS_KEY = "IN_STOCK";
 const optionalIdSchema = z.union([z.string().trim().cuid(), z.literal("")]).optional();
 const optionalTextSchema = z.union([z.string().trim().max(240), z.literal("")]).optional();
 const optionalDateSchema = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal("")]).optional();
@@ -162,6 +163,17 @@ export type AssetAccessScope = {
   locationIds: string[];
 };
 
+export type AvailableAssetForAssignment = {
+  id: string;
+  assetTag: string;
+  name: string;
+  make: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  categoryPath: string | null;
+  assignedLocationName: string | null;
+};
+
 type AssetAuditEntry = {
   actorUserId?: string;
   action: string;
@@ -285,6 +297,26 @@ function buildAssetSearchClauses(query: string): Prisma.AssetWhereInput[] {
     ...buildUserSearchClauses(query),
     ...buildCategorySearchClauses(query),
   ];
+}
+
+function buildCategoryPath(
+  categories: Array<{ id: string; name: string; parentId: string | null }>,
+  categoryId: string | null | undefined,
+) {
+  if (!categoryId) {
+    return null;
+  }
+
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const labels: string[] = [];
+  let current = byId.get(categoryId) ?? null;
+
+  while (current) {
+    labels.unshift(current.name);
+    current = current.parentId ? byId.get(current.parentId) ?? null : null;
+  }
+
+  return labels.length > 0 ? labels.join(" > ") : null;
 }
 
 function buildAssetListWhere(options?: {
@@ -999,6 +1031,66 @@ export async function listAssetsAssignedToUser(userId: string, options?: { acces
   });
 }
 
+export async function listAvailableAssetsForAssignment(options?: {
+  accessScope?: AssetAccessScope | null;
+  limit?: number;
+}) {
+  await ensureDefaultAssetStatuses();
+
+  const accessWhere = buildAssetAccessWhere(options?.accessScope);
+  const availableWhere: Prisma.AssetWhereInput = {
+    assignedUserId: null,
+    status: {
+      key: AVAILABLE_ASSET_STATUS_KEY,
+    },
+  };
+  const where: Prisma.AssetWhereInput = accessWhere
+    ? {
+        AND: [availableWhere, accessWhere],
+      }
+    : availableWhere;
+
+  const [categories, assets] = await db.$transaction([
+    db.category.findMany({
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+      },
+    }),
+    db.asset.findMany({
+      where,
+      select: {
+        id: true,
+        assetTag: true,
+        name: true,
+        make: true,
+        model: true,
+        serialNumber: true,
+        categoryId: true,
+        assignedLocation: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ assetTag: "asc" }, { name: "asc" }],
+      take: Math.max(1, Math.min(options?.limit ?? 250, 500)),
+    }),
+  ]);
+
+  return assets.map((asset): AvailableAssetForAssignment => ({
+    id: asset.id,
+    assetTag: asset.assetTag,
+    name: asset.name,
+    make: asset.make,
+    model: asset.model,
+    serialNumber: asset.serialNumber,
+    categoryPath: buildCategoryPath(categories, asset.categoryId),
+    assignedLocationName: asset.assignedLocation?.name ?? null,
+  }));
+}
+
 export async function createAsset(input: {
   name?: string;
   make?: string;
@@ -1442,6 +1534,13 @@ export async function checkOutAsset(input: {
         assetTag: true,
         assignedUserId: true,
         assignedLocationId: true,
+        statusId: true,
+        status: {
+          select: {
+            id: true,
+            key: true,
+          },
+        },
       },
     });
 
@@ -1453,6 +1552,14 @@ export async function checkOutAsset(input: {
     const assignedLocationId = normalizeOptional(input.assignedLocationId);
     const note = normalizeOptional(input.notes);
 
+    if (asset.assignedUserId) {
+      throw new Error("This asset is no longer available.");
+    }
+
+    if (asset.status?.key !== AVAILABLE_ASSET_STATUS_KEY) {
+      throw new Error("This asset is no longer available.");
+    }
+
     if (!assignedUserId && !assignedLocationId) {
       throw new Error("Select a user or location before checking out an asset.");
     }
@@ -1463,12 +1570,28 @@ export async function checkOutAsset(input: {
       getStatusByKey(tx, "ASSIGNED"),
     ]);
 
-    const updatedAsset = await tx.asset.update({
-      where: { id: asset.id },
+    const updateResult = await tx.asset.updateMany({
+      where: {
+        id: asset.id,
+        assignedUserId: null,
+        statusId: asset.status.id,
+      },
       data: {
         statusId: assignedStatus.id,
         assignedUserId: validatedAssignedUserId,
         assignedLocationId: validatedAssignedLocationId,
+      },
+    });
+
+    if (updateResult.count !== 1) {
+      throw new Error("This asset is no longer available.");
+    }
+
+    const updatedAsset = await tx.asset.findUniqueOrThrow({
+      where: { id: asset.id },
+      select: {
+        id: true,
+        assetTag: true,
       },
     });
 

@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 
 type AssetViewPageProps = {
   params: Promise<{ assetId: string }>;
-  searchParams?: Promise<{ transfer?: string; returnTo?: string }>;
+  searchParams?: Promise<{ transfer?: string; returnTo?: string; error?: string }>;
 };
 
 function formatDateTimeLabel(value?: Date | null) {
@@ -59,6 +59,11 @@ function parseTransferMode(value?: string) {
   return value === "checkin" || value === "checkout" ? value : null;
 }
 
+function appendAssetPageError(href: string, message: string) {
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}error=${encodeURIComponent(message)}`;
+}
+
 async function checkOutAssetAction(formData: FormData) {
   "use server";
   const currentUser = await getCurrentUser();
@@ -77,14 +82,19 @@ async function checkOutAssetAction(formData: FormData) {
     redirect(returnTo);
   }
 
-  await checkOutAsset({
-    assetId,
-    assignedUserId: formData.get("checkoutAssignedUserId")?.toString() ?? "",
-    assignedLocationId: formData.get("checkoutLocationId")?.toString() ?? "",
-    notes: formData.get("checkoutNote")?.toString() ?? "",
-    actorUserId: currentUser.id,
-    accessScope: permissionContext.assetScope,
-  });
+  try {
+    await checkOutAsset({
+      assetId,
+      assignedUserId: formData.get("checkoutAssignedUserId")?.toString() ?? "",
+      assignedLocationId: formData.get("checkoutLocationId")?.toString() ?? "",
+      notes: formData.get("checkoutNote")?.toString() ?? "",
+      actorUserId: currentUser.id,
+      accessScope: permissionContext.assetScope,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Asset could not be checked out.";
+    redirect(appendAssetPageError(buildAssetHref(assetId, { returnTo }), message));
+  }
 
   redirect(buildAssetHref(assetId, { returnTo }));
 }
@@ -123,6 +133,7 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
   const search = (await searchParams) ?? {};
   const transferMode = parseTransferMode(search.transfer);
   const returnTo = normalizeAssetsReturnTo(search.returnTo ?? null);
+  const errorMessage = search.error?.trim() || null;
 
   const [setupState, currentUser, permissionContext] = await Promise.all([
     readSetupState(),
@@ -183,6 +194,12 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
             </div>
           </div>
         </PageHero>
+
+        {errorMessage ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+            {errorMessage}
+          </div>
+        ) : null}
 
         <div className="mx-auto w-full max-w-3xl space-y-6">
           {permissionContext.capabilities.manageAssetTransfers ? (

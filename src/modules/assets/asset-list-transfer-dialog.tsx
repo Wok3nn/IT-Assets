@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { createPortal, useFormStatus } from "react-dom";
 
+import { SearchCombobox, type SearchComboboxOption } from "@/components/forms/search-combobox";
 import { Button } from "@/components/ui/button";
 
 export type AssetListTransferState = {
@@ -46,16 +47,6 @@ function getAssetSummary(asset: AssetListTransferDialogProps["asset"]) {
   return asset.model?.trim() || asset.assetName.trim() || asset.assetTag;
 }
 
-function filterOptions(options: TransferOption[], query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
-
-  if (!normalizedQuery) {
-    return options;
-  }
-
-  return options.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
-}
-
 function SubmitButton({ disabled = false, label }: { disabled?: boolean; label: string }) {
   const { pending } = useFormStatus();
 
@@ -78,16 +69,17 @@ export function AssetListTransferDialog({
   const [isMounted, setIsMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState<AssetListTransferState | null>(null);
-  const [userQuery, setUserQuery] = useState("");
-  const [selectedUser, setSelectedUser] = useState<TransferOption | null>(null);
+  const [selectedUser, setSelectedUser] = useState<SearchComboboxOption | null>(null);
   const [state, formAction] = useActionState(action, initialAssetListTransferState);
   const mode = asset.checkLabel === "Check in" ? "checkin" : "checkout";
   const isCheckOut = mode === "checkout";
   const title = isCheckOut ? "Check Out Asset" : "Check In Asset";
   const summary = getAssetSummary(asset);
 
-  const filteredUsers = useMemo(() => filterOptions(users, userQuery), [userQuery, users]);
-  const visibleUsers = filteredUsers.slice(0, 8);
+  const userOptions = useMemo<SearchComboboxOption[]>(
+    () => users.map((user) => ({ id: user.id, label: user.label, kind: "User" })),
+    [users],
+  );
 
   useEffect(() => {
     setIsMounted(true);
@@ -117,7 +109,6 @@ export function AssetListTransferDialog({
 
   useEffect(() => {
     if (!open) {
-      setUserQuery("");
       setSelectedUser(null);
     }
   }, [open]);
@@ -171,75 +162,14 @@ export function AssetListTransferDialog({
 
           {isCheckOut ? (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor={`checkout-user-search-${asset.id}`}>
-                Assign to user
-              </label>
-              <input
-                aria-controls={`checkout-user-results-${asset.id}`}
-                aria-describedby={selectedUser ? `checkout-user-selected-${asset.id}` : undefined}
-                autoComplete="off"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#F69629]/70 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-100"
-                id={`checkout-user-search-${asset.id}`}
-                onChange={(event) => setUserQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && visibleUsers.length === 1) {
-                    event.preventDefault();
-                    setSelectedUser(visibleUsers[0]);
-                    setUserQuery("");
-                  }
-                }}
+              <SearchCombobox
+                emptyMessage="No users match that search."
+                label="Assign to user"
+                onChange={setSelectedUser}
+                options={userOptions}
                 placeholder="Search users"
-                role="combobox"
-                aria-expanded="true"
-                type="search"
-                value={userQuery}
+                value={selectedUser?.id ?? null}
               />
-              <div
-                className="max-h-52 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 dark:border-[#4b5255] dark:bg-[#34393c]"
-                id={`checkout-user-results-${asset.id}`}
-                role="listbox"
-              >
-                {visibleUsers.length > 0 ? (
-                  visibleUsers.map((user) => {
-                    const isSelected = selectedUser?.id === user.id;
-                    return (
-                      <button
-                        aria-selected={isSelected}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${isSelected ? "bg-[#fff4e8] text-[#b56613] dark:bg-[rgba(246,150,41,0.18)] dark:text-[#ffd7ab]" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3c4347]"}`}
-                        key={user.id}
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setUserQuery("");
-                        }}
-                        role="option"
-                        type="button"
-                      >
-                        <span className="min-w-0 truncate">{user.label}</span>
-                        {isSelected ? <span className="ml-3 shrink-0 text-xs font-medium">Selected</span> : null}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">No users match that search.</p>
-                )}
-              </div>
-              {selectedUser ? (
-                <div
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-[#f0d3b4] bg-[#fff8f0] px-3 py-2 text-sm text-slate-700 dark:border-[#6f5530] dark:bg-[rgba(246,150,41,0.12)] dark:text-slate-200"
-                  id={`checkout-user-selected-${asset.id}`}
-                >
-                  <span className="min-w-0 truncate">Selected: <span className="font-medium text-slate-950 dark:text-slate-100">{selectedUser.label}</span></span>
-                  <button
-                    className="shrink-0 rounded-full px-2 py-1 text-xs font-medium text-[#b56613] transition hover:bg-white/70 dark:text-[#ffd7ab] dark:hover:bg-white/10"
-                    onClick={() => setSelectedUser(null)}
-                    type="button"
-                  >
-                    Clear
-                  </button>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400">Choose a user from the results before checking out.</p>
-              )}
             </div>
           ) : (
             <div className="space-y-2">
