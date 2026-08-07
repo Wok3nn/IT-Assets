@@ -9,13 +9,18 @@ import { readSetupState } from "@/services/setup-state";
 export const dynamic = "force-dynamic";
 
 const latestUpdates = [
+  "Fix: Make and model automatic assignment (Global option added to settings).",
+  "Fix: When selecting user, arrow key navigation is now enabled.",
+  "Fix: Asset assignment can now be done while viewing User properties.",
+  "Feature: Guest Users can now be added via the Roles tab.",
+];
+
+const previousUpdates = [
+  "Version v0.5.2",
   "Fixed Assets list check-in/check-out button state.",
   "Added Use category path for make/model to Edit Asset.",
   "Improved Assets list action buttons so row actions can be used without selecting the asset first, with clearer per-button hover states and better empty-space row selection.",
   "Added icon-only Edit pencil shortcut to the Assets list Actions column.",
-];
-
-const previousUpdates = [
   "Version v0.5.1",
   "Added icon-only copy button beside Serial number with copied confirmation",
   "Version v0.5.0",
