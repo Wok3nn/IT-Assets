@@ -30,6 +30,9 @@ model User {
   userRoles    UserRole[]
   userScopes   UserScope[]
   assets       Asset[]        @relation("AssignedUserAssets")
+  borrowedItems BorrowedItem[] @relation("BorrowedItemBorrower")
+  issuedBorrowedItems BorrowedItem[] @relation("BorrowedItemIssuedBy")
+  returnedBorrowedItems BorrowedItem[] @relation("BorrowedItemReturnedBy")
   auditEntries AuditLog[]
 }
 
@@ -168,8 +171,38 @@ model Asset {
   assignedLocation   Location?       @relation("AssignedLocationAssets", fields: [assignedLocationId], references: [id])
   labelTemplate      LabelTemplate?  @relation(fields: [labelTemplateId], references: [id])
   scopes             AssetScope[]
+  borrowedItems      BorrowedItem[]   @relation("BorrowedItemAsset")
+  activeBorrowedItem BorrowedItem?    @relation("BorrowedItemActiveAsset")
 
   @@index([assignedGuestProfileId])
+}
+
+model BorrowedItem {
+  id               String   @id @default(cuid())
+  assetId          String?
+  activeAssetId    String?  @unique
+  itemName         String?
+  quantity         Int      @default(1)
+  borrowerUserId   String
+  borrowedAt       DateTime @default(now())
+  dueAt            DateTime
+  returnedAt       DateTime?
+  issuedByUserId   String
+  returnedByUserId String?
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  asset            Asset?   @relation("BorrowedItemAsset", fields: [assetId], references: [id], onUpdate: Restrict)
+  activeAsset      Asset?   @relation("BorrowedItemActiveAsset", fields: [activeAssetId], references: [id], onUpdate: Restrict)
+  borrowerUser     User     @relation("BorrowedItemBorrower", fields: [borrowerUserId], references: [id])
+  issuedByUser     User     @relation("BorrowedItemIssuedBy", fields: [issuedByUserId], references: [id])
+  returnedByUser   User?    @relation("BorrowedItemReturnedBy", fields: [returnedByUserId], references: [id])
+
+  @@index([assetId])
+  @@index([borrowerUserId, returnedAt])
+  @@index([dueAt])
+  @@index([issuedByUserId])
+  @@index([returnedByUserId])
 }
 
 model AssetScope {

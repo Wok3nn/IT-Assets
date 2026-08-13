@@ -11,6 +11,8 @@ export const PERMISSION_CAPABILITY_OPTIONS = [
   { key: "editAssets", label: "Edit assets", description: "Update asset details and related assignments." },
   { key: "deleteAssets", label: "Delete assets", description: "Remove asset records from the app." },
   { key: "manageAssetTransfers", label: "Check in / check out", description: "Use the transfer workflow to assign or return assets." },
+  { key: "viewBorrowedItems", label: "View borrowed items", description: "Browse borrowed item records and loan history." },
+  { key: "manageBorrowedItems", label: "Manage borrowed items", description: "Create borrowed item records and mark items returned." },
   { key: "bulkEditAssets", label: "Bulk edit assets", description: "Run limited multi-asset updates from the dedicated bulk editor." },
   { key: "printLabels", label: "Print labels", description: "Open label preview and print flows for assets." },
   { key: "viewUsers", label: "View users", description: "Browse the users directory and role-based user views." },
@@ -30,6 +32,7 @@ export const PERMISSION_CAPABILITY_OPTIONS = [
 export const PERMISSION_NAV_OPTIONS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
   { key: "assets", label: "Assets", href: "/assets" },
+  { key: "borrowedItems", label: "Borrowed Items", href: "/borrowed-items" },
   { key: "categories", label: "Categories", href: "/categories" },
   { key: "departments", label: "Departments", href: "/scopes" },
   { key: "labels", label: "Labels", href: "/labels" },

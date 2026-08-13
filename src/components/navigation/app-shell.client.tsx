@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, ChevronLeft, ChevronRight, FileText, FolderTree, LayoutDashboard, LogOut, MapPin, Settings2, Shield, Tags, Users } from "lucide-react";
+import { Boxes, ChevronLeft, ChevronRight, FileText, FolderTree, HandCoins, LayoutDashboard, LogOut, MapPin, Settings2, Shield, Tags, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppLogo } from "@/components/branding/app-logo";
@@ -17,6 +17,7 @@ let cachedSidebarCollapsed: boolean | null = null;
 const navItems = [
   { id: "dashboard", href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "assets", href: "/assets", label: "Assets", icon: Boxes },
+  { id: "borrowedItems", href: "/borrowed-items", label: "Borrowed Items", icon: HandCoins },
   { id: "categories", href: "/categories", label: "Categories", icon: FolderTree },
   { id: "departments", href: "/scopes", label: "Departments", icon: Shield },
   { id: "labels", href: "/labels", label: "Labels", icon: Tags },

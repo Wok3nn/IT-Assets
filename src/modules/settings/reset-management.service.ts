@@ -102,6 +102,11 @@ export async function getResetOverview(): Promise<ResetOverview> {
 }
 
 async function clearAssetsDataTx(tx: Tx) {
+  await tx.borrowedItem.deleteMany({
+    where: {
+      assetId: { not: null },
+    },
+  });
   const detachedScopes = await tx.assetScope.deleteMany({});
   const deletedAssets = await tx.asset.deleteMany({});
 
@@ -112,6 +117,7 @@ async function clearAssetsDataTx(tx: Tx) {
 }
 
 async function clearUsersDataTx(tx: Tx) {
+  await tx.borrowedItem.deleteMany({});
   const clearedAssignments = await tx.asset.updateMany({
     where: {
       OR: [

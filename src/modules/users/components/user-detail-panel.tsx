@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref } from "@/modules/assets/assets-routing";
 import type { AvailableAssetForAssignment } from "@/modules/assets/asset.service";
+import { getBorrowedItemStatus, type BorrowedItemListRecord } from "@/modules/borrowed-items/borrowed-items.shared";
 import { buildUserEditHref, USERS_DIRECTORY_HREF } from "@/modules/users/users-routing";
 
 import { ScopeBadges } from "./scope-badges";
@@ -49,6 +50,22 @@ function getAssetDisplayName(asset: AssignedAsset) {
   return asset.model?.trim() || asset.name.trim() || asset.assetTag;
 }
 
+function getBorrowedItemDisplayName(item: BorrowedItemListRecord) {
+  return item.asset?.model?.trim() || item.asset?.name.trim() || item.asset?.assetTag || item.itemName || "Borrowed item";
+}
+
+function BorrowedItemStatusPill({ label }: { label: string }) {
+  const className = label === "Returned"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+    : label === "Overdue"
+      ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
+      : label === "Due Today"
+        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+        : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200";
+
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${className}`}>{label}</span>;
+}
+
 function ProfileField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="rounded-3xl border border-[#ece7df] bg-[#f8f9fb] p-4 dark:border-[#4b5255] dark:bg-[#34393c]">
@@ -70,10 +87,12 @@ export function UserDetailPanel({
   assignedAssets,
   assignAssetAction,
   availableAssets,
+  borrowedItems,
   canAssignAssets,
   canEditUser,
   canUnassignAssets,
   canViewAssets,
+  canViewBorrowedItems,
   feedback,
   unassignAction,
   user,
@@ -81,10 +100,12 @@ export function UserDetailPanel({
   assignedAssets: AssignedAsset[];
   assignAssetAction?: (state: UserAssignAssetState, formData: FormData) => Promise<UserAssignAssetState>;
   availableAssets: AvailableAssetForAssignment[];
+  borrowedItems: BorrowedItemListRecord[];
   canAssignAssets: boolean;
   canEditUser: boolean;
   canUnassignAssets: boolean;
   canViewAssets: boolean;
+  canViewBorrowedItems: boolean;
   feedback?: { message: string; tone: "success" | "error" } | null;
   unassignAction: (formData: FormData) => void | Promise<void>;
   user: DetailUser;
@@ -230,6 +251,63 @@ export function UserDetailPanel({
           )}
         </PanelCard>
       </div>
+
+      {canViewBorrowedItems ? (
+        <PanelCard className="p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Borrowed items</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-100">Borrowing history</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{borrowedItems.length} borrowing record{borrowedItems.length === 1 ? "" : "s"} visible for this user.</p>
+            </div>
+            <Link href={`/borrowed-items?q=${encodeURIComponent(user.name)}`}>
+              <Button type="button" variant="secondary">Open borrowed items</Button>
+            </Link>
+          </div>
+
+          {borrowedItems.length === 0 ? (
+            <div className="mt-5 rounded-3xl border border-dashed border-[#ece7df] bg-[#f8f9fb] px-5 py-8 text-center text-sm text-slate-500 dark:border-[#4b5255] dark:bg-[#34393c] dark:text-slate-400">
+              No borrowed items are recorded for this user.
+            </div>
+          ) : (
+            <div className="mt-5 overflow-hidden rounded-[28px] border border-[#ece7df] dark:border-[#4b5255]">
+              <div className="w-full overflow-x-auto">
+                <table className="min-w-[760px] w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                  <thead className="bg-[#f8f9fb] dark:bg-[#34393c]">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Item</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Quantity</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Borrowed</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Expected Return</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white/96 dark:divide-slate-800 dark:bg-[#34393c]">
+                    {borrowedItems.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3">
+                          {item.asset ? (
+                            <Link className="font-semibold text-[#b56613] underline-offset-4 transition hover:underline dark:text-[#ffd7ab]" href={buildAssetHref(item.asset.id)}>
+                              {item.asset.assetTag}
+                            </Link>
+                          ) : (
+                            <span className="font-semibold text-slate-950 dark:text-slate-100">{item.itemName}</span>
+                          )}
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{getBorrowedItemDisplayName(item)}</p>
+                        </td>
+                        <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{item.quantity}</td>
+                        <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{formatDateTimeLabel(item.borrowedAt)}</td>
+                        <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{formatDateTimeLabel(item.dueAt)}</td>
+                        <td className="px-4 py-3"><BorrowedItemStatusPill label={getBorrowedItemStatus(item)} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </PanelCard>
+      ) : null}
     </div>
   );
 }

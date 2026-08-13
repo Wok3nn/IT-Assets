@@ -435,6 +435,7 @@ export async function deleteUser(userId: string, actorUserId?: string) {
         select: {
           assets: true,
           auditEntries: true,
+          borrowedItems: true,
         },
       },
     },
@@ -444,8 +445,8 @@ export async function deleteUser(userId: string, actorUserId?: string) {
     return;
   }
 
-  if (user._count.assets > 0 || user._count.auditEntries > 0) {
-    throw new Error("User cannot be deleted while they are linked to assets or audit history.");
+  if (user._count.assets > 0 || user._count.auditEntries > 0 || user._count.borrowedItems > 0) {
+    throw new Error("User cannot be deleted while they are linked to assets, borrowed items, or audit history.");
   }
 
   await db.user.delete({

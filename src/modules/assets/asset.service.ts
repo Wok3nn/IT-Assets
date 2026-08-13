@@ -194,7 +194,7 @@ export type AssetCheckoutAssignee =
   | { type: "organization-user"; id: string }
   | { type: "guest-profile"; id: string };
 
-function buildAssetAccessWhere(accessScope?: AssetAccessScope | null): Prisma.AssetWhereInput | null {
+export function buildAssetAccessWhere(accessScope?: AssetAccessScope | null): Prisma.AssetWhereInput | null {
   if (!accessScope || accessScope.accessMode === "all") {
     return null;
   }
@@ -1083,6 +1083,7 @@ export async function listAvailableAssetsForAssignment(options?: {
   const availableWhere: Prisma.AssetWhereInput = {
     assignedUserId: null,
     assignedGuestProfileId: null,
+    activeBorrowedItem: null,
     status: {
       key: AVAILABLE_ASSET_STATUS_KEY,
     },
@@ -1243,6 +1244,11 @@ export async function updateAsset(input: {
         statusId: true,
         assignedUserId: true,
         assignedGuestProfileId: true,
+        activeBorrowedItem: {
+          select: {
+            id: true,
+          },
+        },
         assignedLocationId: true,
         scopes: {
           select: {
@@ -1263,6 +1269,10 @@ export async function updateAsset(input: {
 
     if (parsed.assignedUserId && existingAsset.assignedGuestProfileId) {
       throw new Error("Check in the asset before assigning it to an organization user.");
+    }
+
+    if (parsed.assignedUserId && existingAsset.activeBorrowedItem) {
+      throw new Error("Mark the borrowed asset returned before assigning it to an organization user.");
     }
 
     const resolvedName = resolveAssetDisplayName({
@@ -1467,11 +1477,20 @@ export async function deleteAsset(assetId: string, actorUserId?: string, accessS
         id: true,
         name: true,
         assetTag: true,
+        _count: {
+          select: {
+            borrowedItems: true,
+          },
+        },
       },
     });
 
     if (!existingAsset) {
       return;
+    }
+
+    if (existingAsset._count.borrowedItems > 0) {
+      throw new Error("Asset cannot be deleted while it is linked to borrowed item history.");
     }
 
     await createAssetAuditEntry(tx, {
@@ -1586,6 +1605,11 @@ export async function checkOutAsset(input: {
         assetTag: true,
         assignedUserId: true,
         assignedGuestProfileId: true,
+        activeBorrowedItem: {
+          select: {
+            id: true,
+          },
+        },
         assignedLocationId: true,
         statusId: true,
         status: {
@@ -1610,7 +1634,7 @@ export async function checkOutAsset(input: {
       throw new Error("Select one assignee before checking out an asset.");
     }
 
-    if (asset.assignedUserId || asset.assignedGuestProfileId) {
+    if (asset.assignedUserId || asset.assignedGuestProfileId || asset.activeBorrowedItem) {
       throw new Error("This asset is no longer available.");
     }
 
@@ -1679,6 +1703,7 @@ export async function checkOutAsset(input: {
         id: asset.id,
         assignedUserId: null,
         assignedGuestProfileId: null,
+        activeBorrowedItem: null,
         statusId: asset.status.id,
       },
       data: {

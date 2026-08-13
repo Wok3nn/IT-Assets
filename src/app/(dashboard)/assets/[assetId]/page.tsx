@@ -12,6 +12,7 @@ import { getCurrentUser } from "@/lib/session.server";
 import { AssetStatusPill } from "@/modules/assets/asset-status-pill";
 import { buildAssetHref, buildAssetLabelHref, normalizeAssetsReturnTo } from "@/modules/assets/assets-routing";
 import { AssetTransferPanel, type AssetTransferPanelAssigneeOption } from "@/modules/assets/asset-transfer-panel";
+import { getActiveBorrowedItemForAsset } from "@/modules/borrowed-items/borrowed-items.service";
 import {
   checkInAsset,
   checkOutAsset,
@@ -173,7 +174,12 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
 
   if (!asset) notFound();
 
-  const history = await getAssetAuditHistory(assetId, undefined, { accessScope: permissionContext.assetScope });
+  const [history, activeBorrowedItem] = await Promise.all([
+    getAssetAuditHistory(assetId, undefined, { accessScope: permissionContext.assetScope }),
+    permissionContext.capabilities.viewBorrowedItems
+      ? getActiveBorrowedItemForAsset(assetId, { accessScope: permissionContext.assetScope })
+      : Promise.resolve(null),
+  ]);
 
   const recentHistory = history.slice(0, 3);
   const assigneeOptions: AssetTransferPanelAssigneeOption[] = [
@@ -270,6 +276,31 @@ export default async function AssetViewPage({ params, searchParams }: AssetViewP
               <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">This role does not have check in / check out access.</p>
             </section>
           )}
+
+          {activeBorrowedItem ? (
+            <section className={insetCardClassName}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Currently Borrowed</p>
+                  <h2 className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-100">{activeBorrowedItem.borrowerUser.name}</h2>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">This loan is tracked separately from normal asset assignment.</p>
+                </div>
+                <Link href={`/borrowed-items?q=${encodeURIComponent(asset.assetTag)}`}>
+                  <Button type="button" variant="secondary">Open borrowing record</Button>
+                </Link>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[#ece7df] bg-[#f8f9fb] px-4 py-3 dark:border-[#4b5255] dark:bg-[#34393c]">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Borrowed Date</p>
+                  <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{formatDateTimeLabel(activeBorrowedItem.borrowedAt)}</p>
+                </div>
+                <div className="rounded-2xl border border-[#ece7df] bg-[#f8f9fb] px-4 py-3 dark:border-[#4b5255] dark:bg-[#34393c]">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Expected Return Date</p>
+                  <p className="mt-2 text-sm font-medium text-slate-950 dark:text-slate-100">{formatDateTimeLabel(activeBorrowedItem.dueAt)}</p>
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           <PageHero>
             <div>

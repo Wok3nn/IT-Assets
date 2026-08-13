@@ -5,6 +5,7 @@ import { AppShell } from "@/components/navigation/app-shell";
 import { getCurrentUserAssetPermissionContext } from "@/lib/permissions.server";
 import { getCurrentUser } from "@/lib/session.server";
 import { checkOutAsset, getAssetById, listAssetsAssignedToUser, listAvailableAssetsForAssignment, unassignAssetFromUser } from "@/modules/assets/asset.service";
+import { listBorrowedItemsForUser } from "@/modules/borrowed-items/borrowed-items.service";
 import { UserDetailPanel } from "@/modules/users/components/user-detail-panel";
 import type { UserAssignAssetState } from "@/modules/users/components/user-assign-asset-dialog";
 import { getUserById } from "@/modules/users/user.service";
@@ -196,13 +197,16 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
   const canUnassignAssets = canUnassignUserAssets(permissionContext.capabilities);
   const canAssignAssets = canAssignUserAssets(permissionContext.capabilities);
   const canViewAssignedAssets = permissionContext.capabilities.viewAssets || canUnassignAssets;
-  const [user, assignedAssets, availableAssets] = await Promise.all([
+  const [user, assignedAssets, availableAssets, borrowedItems] = await Promise.all([
     getUserById(userId),
     canViewAssignedAssets
       ? listAssetsAssignedToUser(userId, { accessScope: permissionContext.assetScope })
       : Promise.resolve([]),
     canAssignAssets
       ? listAvailableAssetsForAssignment({ accessScope: permissionContext.assetScope })
+      : Promise.resolve([]),
+    permissionContext.capabilities.viewBorrowedItems
+      ? listBorrowedItemsForUser(userId, { accessScope: permissionContext.assetScope })
       : Promise.resolve([]),
   ]);
 
@@ -216,10 +220,12 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
         assignedAssets={assignedAssets}
         assignAssetAction={assignAssetToUserAction.bind(null, user.id)}
         availableAssets={availableAssets}
+        borrowedItems={borrowedItems}
         canAssignAssets={canAssignAssets}
         canEditUser={permissionContext.capabilities.editUsers}
         canUnassignAssets={canUnassignAssets}
         canViewAssets={canViewAssignedAssets}
+        canViewBorrowedItems={permissionContext.capabilities.viewBorrowedItems}
         feedback={buildFeedback(resolvedSearchParams)}
         unassignAction={unassignUserAssetAction}
         user={user}

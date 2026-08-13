@@ -25,6 +25,7 @@ const roleAssetScopeRuleSchema = z.object({
 });
 const navigationCapabilityMap: Partial<Record<PermissionNavigationKey, PermissionCapabilityKey>> = {
   assets: "viewAssets",
+  borrowedItems: "viewBorrowedItems",
   categories: "viewCategories",
   departments: "viewDepartments",
   labels: "viewLabels",
