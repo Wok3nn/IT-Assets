@@ -78,8 +78,18 @@ All running **locally with Docker** — no cloud dependency required.
 - Change:
   - APP_URL: http://YOUR-IP:4050
   - SESSION_SECRET: change-me
+  - APP_SETTINGS_ENCRYPTION_KEY: generate a persistent 32-byte key
   - MARIADB_PASSWORD: change-me
   - MARIADB_ROOT_PASSWORD: change-me-root
+  - Optional Exchange Email Service credentials are configured later in Settings -> Exchange Email Service
+
+  Generate `APP_SETTINGS_ENCRYPTION_KEY` once and keep it stable across restarts/redeployments:
+
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+  ```
+
+  Changing this key after saving encrypted settings, such as the Exchange Email Service Client Secret, will make those encrypted values unreadable until they are re-entered.
 
 ### 4. Start the app
   

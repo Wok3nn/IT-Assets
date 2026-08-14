@@ -14,6 +14,11 @@ import {
 } from "@/modules/borrowed-items/borrowed-items-routing";
 import { BorrowedItemsPanel, type BorrowedItemsActionState } from "@/modules/borrowed-items/components/borrowed-items-panel";
 import {
+  buildNotificationWarning,
+  sendBorrowedItemCreatedNotifications,
+  sendBorrowedItemReturnedNotifications,
+} from "@/modules/borrowed-items/borrowed-item-notifications.service";
+import {
   createBorrowedItem,
   listAssetsAvailableForBorrowing,
   listBorrowedItems,
@@ -73,7 +78,16 @@ async function createBorrowedItemAction(
     revalidatePath(`/users/${created.borrowerUserId}`);
     if (created.assetId) revalidatePath(`/assets/${created.assetId}`);
 
-    return { ok: true, message: "Borrowing record created." };
+    const notificationSummary = await sendBorrowedItemCreatedNotifications(created);
+    const notificationWarning = buildNotificationWarning(notificationSummary);
+    revalidatePath(BORROWED_ITEMS_HREF);
+
+    return {
+      ok: true,
+      message: notificationWarning
+        ? `Borrowing record created, but ${notificationWarning.toLowerCase()}`
+        : "Borrowing record created.",
+    };
   } catch (error) {
     return buildActionState(error, "Borrowing record could not be created.");
   }
@@ -105,7 +119,16 @@ async function markBorrowedItemReturnedAction(
     revalidatePath(`/users/${returned.borrowerUserId}`);
     if (returned.assetId) revalidatePath(`/assets/${returned.assetId}`);
 
-    return { ok: true, message: "Item marked returned." };
+    const notificationSummary = await sendBorrowedItemReturnedNotifications(returned);
+    const notificationWarning = buildNotificationWarning(notificationSummary);
+    revalidatePath(BORROWED_ITEMS_HREF);
+
+    return {
+      ok: true,
+      message: notificationWarning
+        ? `Item marked returned, but ${notificationWarning.toLowerCase()}`
+        : "Item marked returned.",
+    };
   } catch (error) {
     return buildActionState(error, "Item could not be marked returned.");
   }

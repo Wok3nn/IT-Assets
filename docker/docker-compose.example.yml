@@ -45,6 +45,9 @@ services:
       DB_PROVIDER: mariadb
       DATABASE_URL: mysql://it_assets:change-me@mariadb:3306/it_assets
       APP_DATA_DIR: /data
+      # Generate once and keep stable; changing it makes encrypted app settings unreadable until re-entered.
+      # Example: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+      APP_SETTINGS_ENCRYPTION_KEY: ""
     volumes:
       # App runtime state and uploads.
       - /opt/docker/data/it-assets-tracker/app:/data

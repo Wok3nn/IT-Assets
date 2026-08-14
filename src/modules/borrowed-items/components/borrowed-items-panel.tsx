@@ -2,8 +2,8 @@
 
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
-import { useActionState } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { SearchCombobox, type SearchComboboxOption } from "@/components/forms/search-combobox";
 import { textFieldClassName } from "@/components/forms/text-field";
@@ -63,6 +63,42 @@ const statusFilters: Array<{ key: BorrowedItemsStatusFilter; label: string }> = 
   { key: "returned", label: "Returned" },
 ];
 
+const dialogOverlayClassName = "fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/25 p-4 backdrop-blur-[2px] dark:bg-black/35";
+
+function BorrowedItemsDialogLayer({
+  children,
+  className,
+  onClose,
+}: {
+  children: ReactNode;
+  className: string;
+  onClose: () => void;
+}) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      aria-modal="true"
+      className={dialogOverlayClassName}
+      onClick={onClose}
+      role="dialog"
+    >
+      <div className={className} onClick={(event) => event.stopPropagation()}>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function getItemLabel(item: BorrowedItemListRecord) {
   if (item.asset) {
     return item.asset.model?.trim() || item.asset.name.trim() || item.asset.assetTag;
@@ -73,6 +109,24 @@ function getItemLabel(item: BorrowedItemListRecord) {
 
 function formatDateTimeLabel(value?: Date | null) {
   return value ? value.toLocaleString() : "Not recorded";
+}
+
+function formatNotificationTypeLabel(type: string) {
+  return type
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function NotificationStatusPill({ status }: { status: string }) {
+  const className = status === "SENT"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+    : status === "FAILED"
+      ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
+      : "border-slate-200 bg-slate-50 text-slate-600 dark:border-[#596166] dark:bg-[#2f3437] dark:text-slate-300";
+
+  return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${className}`}>{status}</span>;
 }
 
 function StatusPill({ label }: { label: string }) {
@@ -135,8 +189,10 @@ function BorrowItemDialog({
     <>
       <Button onClick={() => setIsOpen(true)} type="button">Borrow Item</Button>
       {isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-[#ece7df] bg-white p-5 shadow-2xl dark:border-[#4b5255] dark:bg-[#2f3437]">
+        <BorrowedItemsDialogLayer
+          className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-[#ece7df] bg-white p-5 shadow-2xl dark:border-[#4b5255] dark:bg-[#2f3437]"
+          onClose={closeDialog}
+        >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Borrowed Items</p>
@@ -228,8 +284,7 @@ function BorrowItemDialog({
                 <Button onClick={closeDialog} type="button" variant="ghost">Close</Button>
               </div>
             </form>
-          </div>
-        </div>
+        </BorrowedItemsDialogLayer>
       ) : null}
     </>
   );
@@ -250,8 +305,10 @@ function MarkReturnedButton({
     <>
       <Button onClick={() => setIsOpen(true)} type="button" variant="secondary">Mark Returned</Button>
       {isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[28px] border border-[#ece7df] bg-white p-5 shadow-2xl dark:border-[#4b5255] dark:bg-[#2f3437]">
+        <BorrowedItemsDialogLayer
+          className="w-full max-w-md rounded-[28px] border border-[#ece7df] bg-white p-5 shadow-2xl dark:border-[#4b5255] dark:bg-[#2f3437]"
+          onClose={() => setIsOpen(false)}
+        >
             <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-100">Mark returned</h2>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{getItemLabel(item)}</p>
             <form
@@ -275,8 +332,7 @@ function MarkReturnedButton({
                 <Button onClick={() => setIsOpen(false)} type="button" variant="ghost">Cancel</Button>
               </div>
             </form>
-          </div>
-        </div>
+        </BorrowedItemsDialogLayer>
       ) : null}
     </>
   );
@@ -369,6 +425,22 @@ export function BorrowedItemsPanel({
                           <span className="font-semibold text-slate-950 dark:text-slate-100">{item.itemName}</span>
                         )}
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{getItemLabel(item)}</p>
+                        {item.notifications.length > 0 ? (
+                          <div className="mt-3 space-y-2 rounded-2xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 dark:border-[#4b5255] dark:bg-[#2f3437]/90">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Notifications</p>
+                            {item.notifications.slice(0, 4).map((notification) => (
+                              <div key={notification.id} className="grid gap-1 text-xs text-slate-600 dark:text-slate-300">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium text-slate-800 dark:text-slate-100">{formatNotificationTypeLabel(notification.type)}</span>
+                                  <NotificationStatusPill status={notification.status} />
+                                </div>
+                                <div className="truncate">{notification.recipient}</div>
+                                <div className="text-slate-500 dark:text-slate-400">{formatDateTimeLabel(notification.sentAt ?? notification.createdAt)}</div>
+                                {notification.error ? <div className="text-red-600 dark:text-red-300">{notification.error}</div> : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{item.quantity}</td>
                       <td className="px-3 py-3">

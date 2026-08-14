@@ -548,4 +548,20 @@ const borrowedItemSelect = Prisma.validator<Prisma.BorrowedItemSelect>()({
       email: true,
     },
   },
+  notifications: {
+    select: {
+      id: true,
+      borrowedItemId: true,
+      type: true,
+      recipient: true,
+      status: true,
+      sentAt: true,
+      error: true,
+      createdAt: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 8,
+  },
 });

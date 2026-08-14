@@ -34,6 +34,11 @@ const baseSettingsCards = [
     description: "Configure local sign-in, Microsoft Entra provider settings, SSO options, and group-to-role mapping.",
   },
   {
+    href: "/settings/exchange-email",
+    title: "Exchange Email Service",
+    description: "Configure Microsoft Graph mail, immediate borrowed-item notifications, and test email delivery.",
+  },
+  {
     href: "/settings/branding",
     title: "Branding",
     description: "Configure app logos and browser icons used on the login screen, sidebar, and browser tab.",

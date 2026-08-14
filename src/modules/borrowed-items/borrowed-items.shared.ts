@@ -33,6 +33,18 @@ export type BorrowedItemListRecord = {
     name: string;
     email: string;
   } | null;
+  notifications: BorrowedItemNotificationRecord[];
+};
+
+export type BorrowedItemNotificationRecord = {
+  id: string;
+  borrowedItemId: string | null;
+  type: string;
+  recipient: string;
+  status: string;
+  sentAt: Date | null;
+  error: string | null;
+  createdAt: Date;
 };
 
 function getTodayBounds(now = new Date()) {

@@ -197,12 +197,29 @@ model BorrowedItem {
   borrowerUser     User     @relation("BorrowedItemBorrower", fields: [borrowerUserId], references: [id])
   issuedByUser     User     @relation("BorrowedItemIssuedBy", fields: [issuedByUserId], references: [id])
   returnedByUser   User?    @relation("BorrowedItemReturnedBy", fields: [returnedByUserId], references: [id])
+  notifications    BorrowedItemNotification[]
 
   @@index([assetId])
   @@index([borrowerUserId, returnedAt])
   @@index([dueAt])
   @@index([issuedByUserId])
   @@index([returnedByUserId])
+}
+
+model BorrowedItemNotification {
+  id             String        @id @default(cuid())
+  borrowedItemId String?
+  type           String
+  recipient      String
+  status         String
+  sentAt         DateTime?
+  error          String?
+  createdAt      DateTime      @default(now())
+  borrowedItem   BorrowedItem? @relation(fields: [borrowedItemId], references: [id], onDelete: SetNull)
+
+  @@index([borrowedItemId, type, status])
+  @@index([type, status, createdAt])
+  @@index([recipient])
 }
 
 model AssetScope {
