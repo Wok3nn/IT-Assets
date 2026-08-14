@@ -1,5 +1,3 @@
-import "server-only";
-
 import type { BorrowedItemListRecord } from "@/modules/borrowed-items/borrowed-items.shared";
 import {
   getExchangeEmailRuntimeConfig,
@@ -14,12 +12,15 @@ export const BORROWED_ITEM_NOTIFICATION_TYPES = {
   RETURNED_USER: "RETURNED_USER",
   RETURNED_ADMIN: "RETURNED_ADMIN",
   TEST_EMAIL: "TEST_EMAIL",
+  DUE_REMINDER: "DUE_REMINDER",
+  OVERDUE_REMINDER: "OVERDUE_REMINDER",
 } as const;
 
 export const BORROWED_ITEM_NOTIFICATION_STATUSES = {
   SENT: "SENT",
   FAILED: "FAILED",
   SKIPPED: "SKIPPED",
+  PENDING: "PENDING",
 } as const;
 
 type NotificationType = (typeof BORROWED_ITEM_NOTIFICATION_TYPES)[keyof typeof BORROWED_ITEM_NOTIFICATION_TYPES];
@@ -34,6 +35,7 @@ type NotificationSummary = {
 
 type NotificationMessage = {
   borrowedItemId?: string | null;
+  dedupeKey?: string | null;
   type: NotificationType;
   to?: string | null;
   subject: string;
@@ -90,6 +92,7 @@ function formatDateTimeLabel(value?: Date | null) {
 
 async function recordNotification(input: {
   borrowedItemId?: string | null;
+  dedupeKey?: string | null;
   type: NotificationType;
   recipient: string;
   status: NotificationStatus;
@@ -99,11 +102,29 @@ async function recordNotification(input: {
   await db.borrowedItemNotification.create({
     data: {
       borrowedItemId: input.borrowedItemId ?? null,
+      dedupeKey: input.dedupeKey ?? null,
       type: input.type,
       recipient: input.recipient,
       status: input.status,
       sentAt: input.sentAt ?? null,
       error: input.error ? sanitizeHistoryError(input.error) : null,
+    },
+  });
+}
+
+async function updateReminderDedupe(input: {
+  dedupeKey: string;
+  notificationId?: string | null;
+  status: NotificationStatus;
+}) {
+  await db.borrowedItemReminderDedupe.update({
+    where: {
+      dedupeKey: input.dedupeKey,
+    },
+    data: {
+      notificationId: input.notificationId ?? null,
+      status: input.status,
+      lastAttemptAt: new Date(),
     },
   });
 }
@@ -158,6 +179,88 @@ async function sendTrackedNotification(message: NotificationMessage): Promise<No
       status: BORROWED_ITEM_NOTIFICATION_STATUSES.FAILED,
       error: sanitizeMailError(error),
     });
+    return { attempted: 1, sent: 0, failed: 1, skipped: 0 };
+  }
+}
+
+export async function sendScheduledReminderNotification(message: NotificationMessage & { dedupeKey: string }): Promise<NotificationSummary> {
+  const recipient = sanitizeRecipient(message.to);
+
+  if (!recipient) {
+    const notification = await db.borrowedItemNotification.create({
+      data: {
+        borrowedItemId: message.borrowedItemId ?? null,
+        dedupeKey: message.dedupeKey,
+        type: message.type,
+        recipient: "Not configured",
+        status: BORROWED_ITEM_NOTIFICATION_STATUSES.SKIPPED,
+        error: "No borrower email address was configured.",
+      },
+      select: {
+        id: true,
+      },
+    });
+    await updateReminderDedupe({ dedupeKey: message.dedupeKey, notificationId: notification.id, status: BORROWED_ITEM_NOTIFICATION_STATUSES.SKIPPED });
+    return { attempted: 0, sent: 0, failed: 0, skipped: 1 };
+  }
+
+  const runtimeConfig = await getExchangeEmailRuntimeConfig();
+
+  if (!runtimeConfig) {
+    const notification = await db.borrowedItemNotification.create({
+      data: {
+        borrowedItemId: message.borrowedItemId ?? null,
+        dedupeKey: message.dedupeKey,
+        type: message.type,
+        recipient,
+        status: BORROWED_ITEM_NOTIFICATION_STATUSES.SKIPPED,
+        error: "Exchange Email Service credentials or sender mailbox are not fully configured.",
+      },
+      select: {
+        id: true,
+      },
+    });
+    await updateReminderDedupe({ dedupeKey: message.dedupeKey, notificationId: notification.id, status: BORROWED_ITEM_NOTIFICATION_STATUSES.SKIPPED });
+    return { attempted: 0, sent: 0, failed: 0, skipped: 1 };
+  }
+
+  try {
+    await sendGraphMail(runtimeConfig, {
+      to: recipient,
+      subject: message.subject,
+      textBody: message.textBody,
+      htmlBody: message.htmlBody ?? textToHtml(message.textBody),
+    });
+    const notification = await db.borrowedItemNotification.create({
+      data: {
+        borrowedItemId: message.borrowedItemId ?? null,
+        dedupeKey: message.dedupeKey,
+        type: message.type,
+        recipient,
+        status: BORROWED_ITEM_NOTIFICATION_STATUSES.SENT,
+        sentAt: new Date(),
+      },
+      select: {
+        id: true,
+      },
+    });
+    await updateReminderDedupe({ dedupeKey: message.dedupeKey, notificationId: notification.id, status: BORROWED_ITEM_NOTIFICATION_STATUSES.SENT });
+    return { attempted: 1, sent: 1, failed: 0, skipped: 0 };
+  } catch (error) {
+    const notification = await db.borrowedItemNotification.create({
+      data: {
+        borrowedItemId: message.borrowedItemId ?? null,
+        dedupeKey: message.dedupeKey,
+        type: message.type,
+        recipient,
+        status: BORROWED_ITEM_NOTIFICATION_STATUSES.FAILED,
+        error: sanitizeMailError(error),
+      },
+      select: {
+        id: true,
+      },
+    });
+    await updateReminderDedupe({ dedupeKey: message.dedupeKey, notificationId: notification.id, status: BORROWED_ITEM_NOTIFICATION_STATUSES.FAILED });
     return { attempted: 1, sent: 0, failed: 1, skipped: 0 };
   }
 }

@@ -102,13 +102,6 @@ export async function getResetOverview(): Promise<ResetOverview> {
 }
 
 async function clearAssetsDataTx(tx: Tx) {
-  await tx.borrowedItemNotification.deleteMany({
-    where: {
-      borrowedItem: {
-        assetId: { not: null },
-      },
-    },
-  });
   await tx.borrowedItem.deleteMany({
     where: {
       assetId: { not: null },
@@ -124,11 +117,6 @@ async function clearAssetsDataTx(tx: Tx) {
 }
 
 async function clearUsersDataTx(tx: Tx) {
-  await tx.borrowedItemNotification.deleteMany({
-    where: {
-      borrowedItemId: { not: null },
-    },
-  });
   await tx.borrowedItem.deleteMany({});
   const clearedAssignments = await tx.asset.updateMany({
     where: {
@@ -257,7 +245,6 @@ export async function resetFullAppData() {
   return db.$transaction(async (tx) => {
     const overview = await getResetOverview();
 
-    await tx.borrowedItemNotification.deleteMany({});
     await clearAssetsDataTx(tx);
     await clearUsersDataTx(tx);
     await tx.guestProfile.deleteMany({});

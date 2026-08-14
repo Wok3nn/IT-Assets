@@ -39,6 +39,7 @@ export type BorrowedItemListRecord = {
 export type BorrowedItemNotificationRecord = {
   id: string;
   borrowedItemId: string | null;
+  dedupeKey: string | null;
   type: string;
   recipient: string;
   status: string;

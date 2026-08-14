@@ -1,7 +1,7 @@
 export const BORROWED_ITEMS_HREF = "/borrowed-items";
 export const BORROWED_ITEMS_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
-export type BorrowedItemsStatusFilter = "active" | "due-today" | "overdue" | "returned";
+export type BorrowedItemsStatusFilter = "all" | "active" | "due-today" | "overdue" | "returned";
 export type BorrowedItemsPageSize = (typeof BORROWED_ITEMS_PAGE_SIZE_OPTIONS)[number];
 
 export type BorrowedItemsFilterState = {
@@ -12,7 +12,7 @@ export type BorrowedItemsFilterState = {
 };
 
 export function parseBorrowedItemsStatus(value?: string): BorrowedItemsStatusFilter {
-  return value === "due-today" || value === "overdue" || value === "returned" ? value : "active";
+  return value === "active" || value === "due-today" || value === "overdue" || value === "returned" ? value : "all";
 }
 
 export function parseBorrowedItemsPage(value?: string) {
@@ -31,7 +31,7 @@ export function buildBorrowedItemsUrl(options?: BorrowedItemsFilterState) {
   const params = new URLSearchParams();
 
   if (options?.q) params.set("q", options.q);
-  if (options?.status && options.status !== "active") params.set("status", options.status);
+  if (options?.status && options.status !== "all") params.set("status", options.status);
   if (options?.pageSize && options.pageSize !== 25) params.set("pageSize", String(options.pageSize));
   if (options?.page && options.page > 1) params.set("page", String(options.page));
 

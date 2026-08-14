@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { buildAssetAccessWhere, type AssetAccessScope } from "@/modules/assets/asset.service";
+import { getBorrowedItemCalendarStatus, getApplicationTimeZone, getCalendarDateKey, getDaysBetweenCalendarDates } from "@/modules/borrowed-items/borrowed-items-calendar";
 import type { BorrowedItemsPageSize, BorrowedItemsStatusFilter } from "@/modules/borrowed-items/borrowed-items-routing";
 import type { BorrowedItemListRecord } from "@/modules/borrowed-items/borrowed-items.shared";
 import { db } from "@/services/database";
@@ -75,6 +76,10 @@ function getTodayBounds(now = new Date()) {
 
 function buildStatusWhere(status: BorrowedItemsStatusFilter, now = new Date()): Prisma.BorrowedItemWhereInput {
   const { start, tomorrow } = getTodayBounds(now);
+
+  if (status === "all") {
+    return {};
+  }
 
   if (status === "returned") {
     return { returnedAt: { not: null } };
@@ -176,7 +181,8 @@ export async function listBorrowedItems(input: {
   accessScope?: AssetAccessScope | null;
 }) {
   const search = input.q?.trim();
-  const clauses: Prisma.BorrowedItemWhereInput[] = [buildStatusWhere(input.status)];
+  const statusWhere = buildStatusWhere(input.status);
+  const clauses: Prisma.BorrowedItemWhereInput[] = Object.keys(statusWhere).length > 0 ? [statusWhere] : [];
   const accessWhere = buildBorrowedItemAssetAccessWhere(input.accessScope);
 
   if (accessWhere) {
@@ -235,6 +241,63 @@ export async function listBorrowedItemsForUser(userId: string, options?: { acces
     orderBy: [{ returnedAt: "asc" }, { dueAt: "asc" }, { borrowedAt: "desc" }],
     take: 50,
   }) satisfies Promise<BorrowedItemListRecord[]>;
+}
+
+export async function getBorrowedItemsDashboardSummary() {
+  const now = new Date();
+  const timeZone = getApplicationTimeZone();
+  const todayKey = getCalendarDateKey(now, timeZone);
+  const activeItems = await db.borrowedItem.findMany({
+    where: {
+      returnedAt: null,
+    },
+    select: {
+      id: true,
+      itemName: true,
+      quantity: true,
+      dueAt: true,
+      returnedAt: true,
+      asset: {
+        select: {
+          assetTag: true,
+          name: true,
+          make: true,
+          model: true,
+        },
+      },
+      borrowerUser: {
+        select: {
+          name: true,
+        },
+      },
+    },
+    orderBy: [{ dueAt: "asc" }, { borrowedAt: "asc" }],
+  });
+  const dueTodayItems = activeItems.filter((item) => getBorrowedItemCalendarStatus(item, now, timeZone) === "Due Today");
+  const overdueItems = activeItems.filter((item) => getBorrowedItemCalendarStatus(item, now, timeZone) === "Overdue");
+  const priorityItems = [...overdueItems, ...dueTodayItems].slice(0, 4).map((item) => {
+    const dueKey = getCalendarDateKey(item.dueAt, timeZone);
+    const daysPastDue = getDaysBetweenCalendarDates(dueKey, todayKey);
+    const itemLabel = item.asset
+      ? item.asset.model?.trim() || item.asset.name.trim() || item.asset.assetTag
+      : item.itemName ?? "Borrowed item";
+
+    return {
+      id: item.id,
+      itemLabel,
+      quantity: item.quantity,
+      borrowerName: item.borrowerUser.name,
+      statusLabel: daysPastDue > 0 ? `${daysPastDue} day${daysPastDue === 1 ? "" : "s"} overdue` : "Due today",
+      tone: daysPastDue > 0 ? "overdue" as const : "due-today" as const,
+    };
+  });
+
+  return {
+    currentlyOut: activeItems.length,
+    dueToday: dueTodayItems.length,
+    overdue: overdueItems.length,
+    priorityItems,
+  };
 }
 
 export async function getActiveBorrowedItemForAsset(assetId: string, options?: { accessScope?: AssetAccessScope | null }) {
@@ -552,6 +615,7 @@ const borrowedItemSelect = Prisma.validator<Prisma.BorrowedItemSelect>()({
     select: {
       id: true,
       borrowedItemId: true,
+      dedupeKey: true,
       type: true,
       recipient: true,
       status: true,

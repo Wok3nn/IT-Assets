@@ -159,6 +159,9 @@ export function ExchangeEmailSettingsPanel({
   const [notifyBorrowerOnReturn, setNotifyBorrowerOnReturn] = useState(settings.notifyBorrowerOnReturn);
   const [notifyAdminOnBorrow, setNotifyAdminOnBorrow] = useState(settings.notifyAdminOnBorrow);
   const [notifyAdminOnReturn, setNotifyAdminOnReturn] = useState(settings.notifyAdminOnReturn);
+  const [dueReminderEnabled, setDueReminderEnabled] = useState(settings.dueReminderEnabled);
+  const [overdueRemindersEnabled, setOverdueRemindersEnabled] = useState(settings.overdueRemindersEnabled);
+  const [overdueReminderIntervalDays, setOverdueReminderIntervalDays] = useState(String(settings.overdueReminderIntervalDays));
   const [isSaved, setIsSaved] = useState(initialSaved);
   const [isClearSecretOpen, setIsClearSecretOpen] = useState(false);
   const [testState, testAction, testPending] = useActionState(sendTestEmailAction, { ok: false, message: "" });
@@ -174,7 +177,10 @@ export function ExchangeEmailSettingsPanel({
     notifyBorrowerOnBorrow !== settings.notifyBorrowerOnBorrow ||
     notifyBorrowerOnReturn !== settings.notifyBorrowerOnReturn ||
     notifyAdminOnBorrow !== settings.notifyAdminOnBorrow ||
-    notifyAdminOnReturn !== settings.notifyAdminOnReturn;
+    notifyAdminOnReturn !== settings.notifyAdminOnReturn ||
+    dueReminderEnabled !== settings.dueReminderEnabled ||
+    overdueRemindersEnabled !== settings.overdueRemindersEnabled ||
+    overdueReminderIntervalDays !== String(settings.overdueReminderIntervalDays);
 
   const clearSavedTimeout = () => {
     if (savedTimeoutRef.current) {
@@ -354,6 +360,26 @@ export function ExchangeEmailSettingsPanel({
             <div className="mt-5 space-y-3">
               <ToggleField checked={notifyBorrowerOnBorrow} label="Send email when an item is borrowed" name="notifyBorrowerOnBorrow" onChange={(checked) => { clearSavedState(); setNotifyBorrowerOnBorrow(checked); }} />
               <ToggleField checked={notifyBorrowerOnReturn} label="Send email when an item is returned" name="notifyBorrowerOnReturn" onChange={(checked) => { clearSavedState(); setNotifyBorrowerOnReturn(checked); }} />
+              <ToggleField checked={dueReminderEnabled} label="Send reminder on expected return date" name="dueReminderEnabled" onChange={(checked) => { clearSavedState(); setDueReminderEnabled(checked); }} />
+              <ToggleField checked={overdueRemindersEnabled} label="Send recurring overdue reminders" name="overdueRemindersEnabled" onChange={(checked) => { clearSavedState(); setOverdueRemindersEnabled(checked); }} />
+              <FieldLabel>
+                <FieldLabelText>Repeat overdue reminders every</FieldLabelText>
+                <div className="flex max-w-xs items-center gap-3">
+                  <TextField
+                    min={1}
+                    max={365}
+                    name="overdueReminderIntervalDays"
+                    onChange={(event) => {
+                      clearSavedState();
+                      setOverdueReminderIntervalDays(event.target.value);
+                    }}
+                    step={1}
+                    type="number"
+                    value={overdueReminderIntervalDays}
+                  />
+                  <span className="text-sm text-slate-500 dark:text-slate-400">days</span>
+                </div>
+              </FieldLabel>
             </div>
           </PanelCard>
 

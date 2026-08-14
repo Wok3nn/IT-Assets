@@ -198,6 +198,7 @@ model BorrowedItem {
   issuedByUser     User     @relation("BorrowedItemIssuedBy", fields: [issuedByUserId], references: [id])
   returnedByUser   User?    @relation("BorrowedItemReturnedBy", fields: [returnedByUserId], references: [id])
   notifications    BorrowedItemNotification[]
+  reminderDedupeRecords BorrowedItemReminderDedupe[]
 
   @@index([assetId])
   @@index([borrowerUserId, returnedAt])
@@ -209,6 +210,7 @@ model BorrowedItem {
 model BorrowedItemNotification {
   id             String        @id @default(cuid())
   borrowedItemId String?
+  dedupeKey      String?
   type           String
   recipient      String
   status         String
@@ -218,8 +220,25 @@ model BorrowedItemNotification {
   borrowedItem   BorrowedItem? @relation(fields: [borrowedItemId], references: [id], onDelete: SetNull)
 
   @@index([borrowedItemId, type, status])
+  @@index([dedupeKey])
   @@index([type, status, createdAt])
   @@index([recipient])
+}
+
+model BorrowedItemReminderDedupe {
+  dedupeKey      String        @id
+  borrowedItemId String?
+  type           String
+  scheduledFor   DateTime
+  status         String
+  notificationId String?
+  lastAttemptAt  DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  borrowedItem   BorrowedItem? @relation(fields: [borrowedItemId], references: [id], onDelete: SetNull)
+
+  @@index([borrowedItemId, type, scheduledFor])
+  @@index([type, status, scheduledFor])
 }
 
 model AssetScope {

@@ -57,6 +57,7 @@ type BorrowedItemsPanelProps = {
 };
 
 const statusFilters: Array<{ key: BorrowedItemsStatusFilter; label: string }> = [
+  { key: "all", label: "All" },
   { key: "active", label: "Active" },
   { key: "due-today", label: "Due Today" },
   { key: "overdue", label: "Overdue" },

@@ -1,5 +1,3 @@
-import "server-only";
-
 import { z } from "zod";
 
 import {
@@ -21,6 +19,9 @@ const EXCHANGE_NOTIFY_BORROWER_ON_BORROW_KEY = "mail.notifyBorrowerOnBorrow";
 const EXCHANGE_NOTIFY_BORROWER_ON_RETURN_KEY = "mail.notifyBorrowerOnReturn";
 const EXCHANGE_NOTIFY_ADMIN_ON_BORROW_KEY = "mail.notifyAdminOnBorrow";
 const EXCHANGE_NOTIFY_ADMIN_ON_RETURN_KEY = "mail.notifyAdminOnReturn";
+const EXCHANGE_DUE_REMINDER_ENABLED_KEY = "mail.dueReminderEnabled";
+const EXCHANGE_OVERDUE_REMINDERS_ENABLED_KEY = "mail.overdueRemindersEnabled";
+const EXCHANGE_OVERDUE_REMINDER_INTERVAL_DAYS_KEY = "mail.overdueReminderIntervalDays";
 
 const EXCHANGE_EMAIL_SETTINGS_KEYS = [
   EXCHANGE_ENABLED_KEY,
@@ -33,6 +34,9 @@ const EXCHANGE_EMAIL_SETTINGS_KEYS = [
   EXCHANGE_NOTIFY_BORROWER_ON_RETURN_KEY,
   EXCHANGE_NOTIFY_ADMIN_ON_BORROW_KEY,
   EXCHANGE_NOTIFY_ADMIN_ON_RETURN_KEY,
+  EXCHANGE_DUE_REMINDER_ENABLED_KEY,
+  EXCHANGE_OVERDUE_REMINDERS_ENABLED_KEY,
+  EXCHANGE_OVERDUE_REMINDER_INTERVAL_DAYS_KEY,
 ] as const;
 
 const optionalEmailSchema = z.union([z.string().trim().email().max(240), z.literal("")]);
@@ -52,6 +56,9 @@ const exchangeEmailSettingsSchema = z.object({
   notifyBorrowerOnReturn: z.boolean(),
   notifyAdminOnBorrow: z.boolean(),
   notifyAdminOnReturn: z.boolean(),
+  dueReminderEnabled: z.boolean(),
+  overdueRemindersEnabled: z.boolean(),
+  overdueReminderIntervalDays: z.coerce.number().int().min(1).max(365),
 });
 
 export type ExchangeEmailSettings = z.infer<typeof exchangeEmailSettingsSchema> & {
@@ -76,6 +83,11 @@ function parseBooleanSetting(value: string | undefined, fallback: boolean) {
   if (value === "true") return true;
   if (value === "false") return false;
   return fallback;
+}
+
+function parseIntegerSetting(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : fallback;
 }
 
 async function upsertExchangeEmailSetting(key: string, value: string) {
@@ -127,6 +139,9 @@ export async function getExchangeEmailSettings() {
     notifyBorrowerOnReturn: parseBooleanSetting(settingsByKey.get(EXCHANGE_NOTIFY_BORROWER_ON_RETURN_KEY), true),
     notifyAdminOnBorrow: parseBooleanSetting(settingsByKey.get(EXCHANGE_NOTIFY_ADMIN_ON_BORROW_KEY), false),
     notifyAdminOnReturn: parseBooleanSetting(settingsByKey.get(EXCHANGE_NOTIFY_ADMIN_ON_RETURN_KEY), false),
+    dueReminderEnabled: parseBooleanSetting(settingsByKey.get(EXCHANGE_DUE_REMINDER_ENABLED_KEY), true),
+    overdueRemindersEnabled: parseBooleanSetting(settingsByKey.get(EXCHANGE_OVERDUE_REMINDERS_ENABLED_KEY), true),
+    overdueReminderIntervalDays: parseIntegerSetting(settingsByKey.get(EXCHANGE_OVERDUE_REMINDER_INTERVAL_DAYS_KEY), 3),
     credentialStatus: getExchangeEmailCredentialStatus(settingsByKey),
   } satisfies ExchangeEmailSettings;
 }
@@ -151,6 +166,9 @@ export async function updateExchangeEmailSettings(input: Omit<ExchangeEmailSetti
     upsertExchangeEmailSetting(EXCHANGE_NOTIFY_BORROWER_ON_RETURN_KEY, String(parsed.notifyBorrowerOnReturn)),
     upsertExchangeEmailSetting(EXCHANGE_NOTIFY_ADMIN_ON_BORROW_KEY, String(parsed.notifyAdminOnBorrow)),
     upsertExchangeEmailSetting(EXCHANGE_NOTIFY_ADMIN_ON_RETURN_KEY, String(parsed.notifyAdminOnReturn)),
+    upsertExchangeEmailSetting(EXCHANGE_DUE_REMINDER_ENABLED_KEY, String(parsed.dueReminderEnabled)),
+    upsertExchangeEmailSetting(EXCHANGE_OVERDUE_REMINDERS_ENABLED_KEY, String(parsed.overdueRemindersEnabled)),
+    upsertExchangeEmailSetting(EXCHANGE_OVERDUE_REMINDER_INTERVAL_DAYS_KEY, String(parsed.overdueReminderIntervalDays)),
   ]);
 
   if (replacementSecret) {

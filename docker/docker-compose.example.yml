@@ -45,10 +45,40 @@ services:
       DB_PROVIDER: mariadb
       DATABASE_URL: mysql://it_assets:change-me@mariadb:3306/it_assets
       APP_DATA_DIR: /data
+      APP_TIME_ZONE: ""
       # Generate once and keep stable; changing it makes encrypted app settings unreadable until re-entered.
       # Example: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
       APP_SETTINGS_ENCRYPTION_KEY: ""
     volumes:
       # App runtime state and uploads.
+      - /opt/docker/data/it-assets-tracker/app:/data
+    restart: unless-stopped
+
+  # Background worker for due-date and overdue borrowed-item reminders.
+  it-assets-reminder-worker:
+    container_name: IT-Assets-Reminder-Worker
+    build:
+      context: /opt/docker/apps/It-Assets-Tracker
+      dockerfile: docker/Dockerfile
+      args:
+        DB_MODE: local
+        DB_PROVIDER: mariadb
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    command: ["npm", "run", "worker:borrowed-reminders"]
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:4050}
+      DB_MODE: local
+      DB_PROVIDER: mariadb
+      DATABASE_URL: mysql://it_assets:change-me@mariadb:3306/it_assets
+      APP_DATA_DIR: /data
+      APP_TIME_ZONE: ""
+      APP_SETTINGS_ENCRYPTION_KEY: ""
+      # Optional. Defaults to 30 minutes. Keep reminder eligibility calendar-based.
+      BORROWED_REMINDER_POLL_INTERVAL_MS: 1800000
+      # Set true only for explicit non-production dry-run validation.
+      BORROWED_REMINDER_DRY_RUN: "false"
+    volumes:
       - /opt/docker/data/it-assets-tracker/app:/data
     restart: unless-stopped

@@ -45,6 +45,9 @@ async function saveExchangeEmailSettingsAction(formData: FormData) {
       notifyBorrowerOnReturn: getBooleanFormValue(formData, "notifyBorrowerOnReturn"),
       notifyAdminOnBorrow: getBooleanFormValue(formData, "notifyAdminOnBorrow"),
       notifyAdminOnReturn: getBooleanFormValue(formData, "notifyAdminOnReturn"),
+      dueReminderEnabled: getBooleanFormValue(formData, "dueReminderEnabled"),
+      overdueRemindersEnabled: getBooleanFormValue(formData, "overdueRemindersEnabled"),
+      overdueReminderIntervalDays: Number(formData.get("overdueReminderIntervalDays") ?? 3),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Exchange Email Service settings could not be saved.";

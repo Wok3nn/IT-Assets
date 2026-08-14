@@ -1,5 +1,3 @@
-import "server-only";
-
 import type { ExchangeEmailRuntimeConfig } from "@/modules/settings/exchange-email-settings.service";
 
 type GraphTokenResponse = {

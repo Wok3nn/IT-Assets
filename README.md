@@ -91,6 +91,12 @@ All running **locally with Docker** — no cloud dependency required.
 
   Changing this key after saving encrypted settings, such as the Exchange Email Service Client Secret, will make those encrypted values unreadable until they are re-entered.
 
+  The compose example also includes `it-assets-reminder-worker`, a background worker that processes Borrowed Items due-date and overdue reminders. It uses the same database and `APP_SETTINGS_ENCRYPTION_KEY` as the web app.
+
+  Optional worker settings:
+  - `BORROWED_REMINDER_POLL_INTERVAL_MS`: defaults to 30 minutes.
+  - `BORROWED_REMINDER_DRY_RUN`: keep `false` in production; use `true` only for non-live validation where no Microsoft Graph email should be sent.
+
 ### 4. Start the app
   
 - mkdir -p /opt/docker/data/it-assets-tracker/app

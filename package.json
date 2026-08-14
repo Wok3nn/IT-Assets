@@ -8,6 +8,8 @@
     "typecheck": "tsc --noEmit",
     "start": "next start -p 4050",
     "lint": "eslint . --ignore-pattern .next --ignore-pattern next-env.d.ts --ignore-pattern scripts/seed.js",
+    "worker:borrowed-reminders": "tsx src/workers/borrowed-reminders-worker.ts",
+    "worker:borrowed-reminders:dry-run": "tsx src/workers/borrowed-reminders-worker.ts --once --dry-run",
     "db:generate": "node scripts/prisma-provider.mjs generate",
     "db:migrate": "node scripts/prisma-provider.mjs migrate dev",
     "db:deploy": "node scripts/prisma-provider.mjs migrate deploy",
