@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw } from "lucide-react";
+import { Mail, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -112,24 +112,6 @@ function formatDateTimeLabel(value?: Date | null) {
   return value ? value.toLocaleString() : "Not recorded";
 }
 
-function formatNotificationTypeLabel(type: string) {
-  return type
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function NotificationStatusPill({ status }: { status: string }) {
-  const className = status === "SENT"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-    : status === "FAILED"
-      ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
-      : "border-slate-200 bg-slate-50 text-slate-600 dark:border-[#596166] dark:bg-[#2f3437] dark:text-slate-300";
-
-  return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${className}`}>{status}</span>;
-}
-
 function StatusPill({ label }: { label: string }) {
   const className = label === "Returned"
     ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
@@ -140,6 +122,23 @@ function StatusPill({ label }: { label: string }) {
         : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200";
 
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${className}`}>{label}</span>;
+}
+
+function EmailStatusIcon({ item }: { item: BorrowedItemListRecord }) {
+  const hasSentNotification = item.notifications.some((notification) => notification.status === "SENT");
+  const hasFailedNotification = item.notifications.some((notification) => notification.status === "FAILED");
+  const title = hasSentNotification ? "Email sent" : hasFailedNotification ? "Email failed" : "No email sent";
+  const className = hasSentNotification
+    ? "text-emerald-600 dark:text-emerald-300"
+    : hasFailedNotification
+      ? "text-red-600 dark:text-red-300"
+      : "text-slate-400 dark:text-slate-500";
+
+  return (
+    <span className="inline-flex w-full justify-center" title={title}>
+      <Mail aria-label={title} className={`h-4 w-4 ${className}`} />
+    </span>
+  );
 }
 
 function BorrowItemDialog({
@@ -407,6 +406,7 @@ export function BorrowedItemsPanel({
                   <th className="px-3 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Borrowed</th>
                   <th className="px-3 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Expected Return</th>
                   <th className="px-3 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Status</th>
+                  <th className="px-3 py-2.5 text-center font-medium text-slate-500 dark:text-slate-400">Email</th>
                   <th className="px-3 py-2.5 text-left font-medium text-slate-500 dark:text-slate-400">Issued By</th>
                   <th className="px-4 py-2.5 text-right font-medium text-slate-500 dark:text-slate-400">Actions</th>
                 </tr>
@@ -426,22 +426,6 @@ export function BorrowedItemsPanel({
                           <span className="font-semibold text-slate-950 dark:text-slate-100">{item.itemName}</span>
                         )}
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{getItemLabel(item)}</p>
-                        {item.notifications.length > 0 ? (
-                          <div className="mt-3 space-y-2 rounded-2xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 dark:border-[#4b5255] dark:bg-[#2f3437]/90">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Notifications</p>
-                            {item.notifications.slice(0, 4).map((notification) => (
-                              <div key={notification.id} className="grid gap-1 text-xs text-slate-600 dark:text-slate-300">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-medium text-slate-800 dark:text-slate-100">{formatNotificationTypeLabel(notification.type)}</span>
-                                  <NotificationStatusPill status={notification.status} />
-                                </div>
-                                <div className="truncate">{notification.recipient}</div>
-                                <div className="text-slate-500 dark:text-slate-400">{formatDateTimeLabel(notification.sentAt ?? notification.createdAt)}</div>
-                                {notification.error ? <div className="text-red-600 dark:text-red-300">{notification.error}</div> : null}
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
                       </td>
                       <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{item.quantity}</td>
                       <td className="px-3 py-3">
@@ -452,6 +436,7 @@ export function BorrowedItemsPanel({
                       <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{formatDateTimeLabel(item.borrowedAt)}</td>
                       <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{formatDateTimeLabel(item.dueAt)}</td>
                       <td className="px-3 py-3"><StatusPill label={statusLabel} /></td>
+                      <td className="px-3 py-3"><EmailStatusIcon item={item} /></td>
                       <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{item.issuedByUser.name}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end">
