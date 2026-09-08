@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "node scripts/test.mjs",
+    "test:db": "node scripts/test.mjs --database",
+    "db:validate": "node scripts/prisma-provider.mjs validate",
     "dev": "next dev -p 4050",
     "build": "npm run db:generate && next build",
     "typecheck": "tsc --noEmit",
@@ -13,23 +16,19 @@
     "db:generate": "node scripts/prisma-provider.mjs generate",
     "db:migrate": "node scripts/prisma-provider.mjs migrate dev",
     "db:deploy": "node scripts/prisma-provider.mjs migrate deploy",
-    "db:seed": "node scripts/seed.js",
+    "db:seed": "node scripts/prisma-provider.mjs db seed",
     "db:bootstrap": "node scripts/bootstrap.mjs"
-  },
-  "prisma": {
-    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "@prisma/client": "6.19.2",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.6.3",
     "jsbarcode": "^3.12.3",
     "lucide-react": "^0.511.0",
     "next": "^15.3.0",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "server-only": "^0.0.1",
     "tailwind-merge": "^3.3.0",
     "xlsx": "^0.18.5",
     "zod": "^3.24.3"

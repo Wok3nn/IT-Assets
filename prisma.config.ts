@@ -1,52 +1,14 @@
-import fs from "node:fs";
-import path from "node:path";
-
 import { defineConfig } from "prisma/config";
+import { assertScriptDatabaseSelection } from "./scripts/database-selection.mjs";
+import { loadProjectEnv } from "./scripts/load-env.mjs";
 
-function loadDotEnvFile(envPath: string) {
-  if (!fs.existsSync(envPath)) {
-    return;
-  }
-
-  const envContents = fs.readFileSync(envPath, "utf8");
-
-  for (const rawLine of envContents.split(/\r?\n/)) {
-    const line = rawLine.trim();
-
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex < 0) {
-      continue;
-    }
-
-    const key = line.slice(0, separatorIndex).trim();
-    if (!key || process.env[key] !== undefined) {
-      continue;
-    }
-
-    let value = line.slice(separatorIndex + 1).trim();
-    if (
-      (value.startsWith("\"") && value.endsWith("\"")) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    process.env[key] = value;
-  }
-}
-
-loadDotEnvFile(path.resolve(process.cwd(), ".env"));
-
-const rawDbProvider = process.env.DB_PROVIDER?.trim().toLowerCase();
-const provider = rawDbProvider || "sqlite";
+loadProjectEnv();
+const selection = assertScriptDatabaseSelection();
 
 export default defineConfig({
-  schema: `prisma/providers/${provider}/schema.prisma`,
+  schema: selection.schemaPath,
   migrations: {
-    path: `prisma/migrations/${provider}`,
+    path: selection.providerMigrationsPath,
+    seed: "node scripts/seed.js",
   },
 });

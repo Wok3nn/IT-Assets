@@ -2,8 +2,10 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 
 import { assertScriptDatabaseSelection } from "./database-selection.mjs";
+import { loadProjectEnv } from "./load-env.mjs";
 
 const workspaceDir = path.resolve(import.meta.dirname, "..");
+loadProjectEnv(workspaceDir);
 const prismaCliPath = path.join(workspaceDir, "node_modules", "prisma", "build", "index.js");
 const selectedDatabase = assertScriptDatabaseSelection({ workspaceDir });
 
