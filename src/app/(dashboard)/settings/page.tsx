@@ -8,6 +8,7 @@ import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.serve
 import { getCurrentUser, getCurrentUserRoleKeys } from "@/lib/session.server";
 import { SettingsNavCard } from "@/modules/settings/components/settings-nav-card";
 import { readSetupState } from "@/services/setup-state";
+import { canManageIntegrations } from "@/modules/integrations/integrations.shared";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,10 @@ export default async function SettingsPage() {
 
     return true;
   });
+
+  if (canManageIntegrations({ isActive: currentUser.isActive, roleKeys, capabilities: permissionContext.capabilities })) {
+    settingsCards.push({ href: "/settings/integrations", title: "Integrations", description: "Manage approved applications, credentials, and read-only user assignment access." });
+  }
 
   if (canManageSettings(roleKeys)) {
     settingsCards.push({
