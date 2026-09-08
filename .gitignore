@@ -20,7 +20,6 @@ tsconfig.tsbuildinfo
 !/data/db/.gitkeep
 
 # Local development / AI guidance files
-docs/architecture.md
 AGENTS.md
 
 

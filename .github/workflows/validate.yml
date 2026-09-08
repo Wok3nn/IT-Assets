@@ -9,6 +9,26 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      DB_MODE: local
+      DB_PROVIDER: mariadb
+      DATABASE_URL: mysql://root:ci-only-password@127.0.0.1:3306/it_assets_ci_test
+      APP_DATA_DIR: ./data
+      SESSION_SECRET: ci-only-session-secret
+      BORROWED_REMINDER_DRY_RUN: "true"
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: it_assets_ci_test
+          MARIADB_ROOT_PASSWORD: ci-only-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
 
     steps:
       - name: Check out repository
@@ -23,8 +43,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate schema and generate client
+        run: |
+          npm run db:validate
+          npm run db:generate
+
+      - name: Unit and UI tests
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
       - name: Type check
         run: npm run typecheck
+
+      - name: Disposable database migrations and seed
+        run: |
+          npm run db:deploy
+          npm run db:deploy
+          npm run db:seed
+          npm run db:seed
+
+      - name: Database integration and workflow tests
+        run: npm run test:db
 
       - name: Production build
         run: npm run build

@@ -64,3 +64,102 @@ are required for the initial settings-backed foundation.
 
 Final phase outcomes, exact validation results and remaining limitations are recorded
 below as work completes.
+
+## Completed phases and changed files
+
+- **Phase 1:** full Markdown/source/history review and clean baseline recorded before
+  code changes (`11527c1`).
+- **Phase 2:** removed verified unused asset types/validators, auth stub, role-members
+  component, navigation types, duplicate TS bootstrap/seed entry points and unused
+  animation/class-variance dependencies. Shared tree-label logic now terminates on
+  cycles while preserving the old exports. Prisma wrapper/config share `.env` loading
+  and MariaDB selection; deprecated package seed configuration removed only after
+  generation, disposable migrations and seed dispatch passed (`dba8524`).
+- **Phase 3:** added integrations module, versioned route, settings page/card, hashed
+  credentials, explicit user grants, lifecycle/audit, bounded projection and rate
+  protection. Added security/UI and database-backed workflow tests (`fb7f194`). No
+  source files moved and no mature asset UI rewritten.
+- **Phase 4:** rewrote README setup/deployment guidance; updated architecture and added
+  the detailed plugin contract. Architecture is now tracked so README links work in
+  fresh clones. AGENTS.md and progress.md remain local/ignored. CI now explicitly
+  generates Prisma before checks and includes lint/tests plus isolated MariaDB
+  migrations, repeated seeding and database tests. Local audit files are excluded from
+  Git, lint and Docker build context.
+
+No Prisma schema or migration SQL was changed. Production Docker startup, provider
+migration copies, reminder worker entry point, application port and authentication
+behavior remain intact. No real email or production external service was called.
+
+## Final validation (2026-09-08)
+
+Host: Windows, Node 24.14.0. Docker/CI baseline is Node 20; the new CI job has not run
+here. Explicit shell database variables prevented existing environment files from
+selecting configured databases. Production build used MariaDB with an unreachable
+loopback port 1 URL; it did not require a database connection.
+
+| Check | Result and limits |
+| --- | --- |
+| `npm test` | PASS: 11 root tests; tree cycles/paths, make/model depth, calendar DST, passwords, credential/identity/admin/limiter behavior, rendered UI, provider selection, environment priority. |
+| `npm run lint` | PASS, including new module and tests. |
+| `npm run typecheck` | PASS after explicit MariaDB generation. |
+| `npm run db:validate` | PASS for supported MariaDB schema. |
+| `npm run db:generate` | PASS for MariaDB and SQLite; workspace restored to MariaDB. |
+| `npm run build` | PASS, Next 15.5.12; 21 static pages, dynamic integration page/API included. Shared first-load JS remains 102 kB. |
+| Disposable migration replay | PASS: all 11 existing SQLite migrations on a new local `.audit-runtime/migrations.db`; repeat reports no pending migrations. This does not verify MariaDB or establish SQLite schema parity. |
+| Seed dispatch/repetition | PASS: `db:seed` via new Prisma config, repeated on disposable migration and current-schema SQLite databases. |
+| `npm run test:db` | PASS repeatedly on disposable current-schema SQLite, including scope rejection, setup 503, empty/deleted/inactive users, tenant isolation, cursor projection, rotation/expiry/revocation, audit secrecy, checkout/check-in, loans and guests. |
+| Development HTTP smoke | PASS on port 4050: actual password login for disposable SUPER_ADMIN and VIEWER users; admin integrations 200 with DeskMap/Not configured, viewer 307, anonymous page 307, API 401, mutation method 405. Test sessions deleted and own server stopped. |
+| Reminder dry-run | PASS: eligible/claimed/attempted/sent/failed/skipped all 0 against disposable DB; no credentials or live mail transport. Does not validate live Graph delivery. |
+| `git diff --check` | PASS (Git's normal LF/CRLF conversion notices only). |
+| Dependency audit | COMPLETED, nonzero exit for 18 vulnerabilities: 15 high, 1 moderate, 2 low, no critical. Not a passing security audit. |
+| MariaDB execution / Docker | BLOCKED on this host: Docker/MariaDB absent; official MariaDB 11.4.9 portable archive hash verified but installer execution denied even with escalation. No MariaDB service was started. CI and a Docker-capable staging host must complete this acceptance check. |
+
+SQLite current-schema workflow fixtures use `db push` solely on a disposable database;
+its older migration history does not include every current model. No production reset,
+`db push`, migration or seed was attempted. Migration replay/seed passed after creating
+an empty SQLite file; initial engine invocations returned a generic schema-engine error.
+The full schema workflow suite is independent of that history replay.
+
+Removed warnings: deprecated `package.json#prisma` and duplicate-config override.
+Remaining build warning: Browserslist/caniuse-lite data six months old. Prisma's
+"config detected, skipping environment variable loading" is expected: the repository
+loads `.env` explicitly before selection. Unlike Next.js, script loading does not read
+`.env.local`; README now states this difference and requires consistent DB settings.
+
+No full browser printing/accessibility acceptance, concurrent MariaDB loan/checkout
+race test, container build/restart, real Entra tenant login or live email delivery was
+performed. Existing source behavior was preserved; tests do not imply complete workflow
+coverage. These are review/staging checks, not reasons to run against production.
+
+## Dependency security follow-up
+
+The registry audit on 2026-09-08 reports direct affected packages `next`, `xlsx`,
+`postcss`, and `prisma`, plus transitive tooling/runtime dependencies. Counts are
+package vulnerability entries, not 18 independent exploitable application paths.
+Examples: Next server-action denial of service
+([GHSA-m99w-x7hq-7vfj](https://github.com/advisories/GHSA-m99w-x7hq-7vfj)), SheetJS
+prototype pollution ([GHSA-4r6h-8v6p-xvw6](https://github.com/advisories/GHSA-4r6h-8v6p-xvw6))
+and ReDoS ([GHSA-5pgg-2g8v-p4x9](https://github.com/advisories/GHSA-5pgg-2g8v-p4x9)).
+The local raw report is ignored at `.audit-runtime/dependency-audit.json`; recreate with
+`npm audit --json` for current details.
+
+Prioritize a dedicated dependency/security update before broader exposure. Audit
+suggests fixes for many entries, but suggests a Prisma downgrade across its config
+boundary and provides no npm fix for xlsx. Do not use `npm audit fix --force` blindly.
+Validate Next server actions/auth/caching, Prisma config/startup/migrations, and real
+spreadsheet import fixtures before changing these dependencies. This branch removes
+unused dependencies but deliberately does not mix that compatibility work into the
+architectural cleanup. Existing permissive role defaults and export visibility remain
+the highest application-policy follow-ups.
+
+## Review and remaining acceptance
+
+1. Review `git diff main...HEAD` and the four logical commits.
+2. Run the documented source checks and the MariaDB CI job on Node 20.
+3. On a separate staging stack, verify fresh migrations, bootstrap/restarts, printing,
+   imports, permission matrices, Entra login and reminder dry-run with realistic fixtures.
+4. Decide the permission-default/export policy and dependency remediation release.
+5. Implement DeskMap's backend token storage, viewer authorization, identity contract,
+   timeout handling and click-card UI; jointly test before granting real users.
+
+No branch push or deployment was performed.

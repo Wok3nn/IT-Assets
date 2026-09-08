@@ -1,135 +1,200 @@
-# 🖥️ IT Asset Tracker
+# IT Asset Tracker
 
-<p align="center">
-  <img src="./IT-Assets%20Logo/asset-tracker-logo-dark-transparent%20256x256.png" width="180" alt="IT Asset Tracker Logo" />
-</p>
+Self-hosted asset management for internal IT teams: inventory, user and guest
+assignments, check-in/out, labels and printing, imports/exports, Borrowed Items,
+reminders, audit history, configurable permissions, and optional Microsoft Entra login.
+The application runs on **port 4050**.
 
-<p align="center">
-  A modern, self-hosted IT asset management system built for internal teams.
-</p>
+Built with Next.js App Router, React, TypeScript, Tailwind, Zod and Prisma 6.
+**MariaDB 11.4 is the supported production database.** SQLite is a development/test
+compatibility option; external SQL Server remains experimental and paused.
 
----
+## Local development
 
-## ✨ What is this?
+Prerequisites: Git, Node.js 20 (the Docker/CI baseline), npm, and an isolated MariaDB
+11.4 database. Never use a production database for development, migrations or tests.
 
-**IT Asset Tracker** helps you manage:
+```sh
+git clone https://github.com/Wok3nn/IT-Assets.git It-Assets-Tracker
+cd It-Assets-Tracker
+npm ci
+```
 
-- Devices (laptops, desktops, equipment)
-- Who has what assigned
-- Locations and departments
-- Asset status (In Use, Available, Retired)
-- Labels with QR / Barcode
-- Imports / exports
+Copy `.env.example` to `.env` (`cp .env.example .env` on Unix,
+`Copy-Item .env.example .env` in PowerShell). Set:
 
-All running **locally with Docker** — no cloud dependency required.
+```dotenv
+APP_URL=http://localhost:4050
+DB_MODE=local
+DB_PROVIDER=mariadb
+DATABASE_URL=mysql://it_assets_dev:local-dev-password@127.0.0.1:43306/it_assets_dev
+APP_DATA_DIR=./data
+SESSION_SECRET=replace-with-a-random-secret
+APP_SETTINGS_ENCRYPTION_KEY=replace-with-a-separate-random-key
+```
 
----
+Generate each secret separately:
 
-## 🔥 Core Features
+```sh
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
 
-- 🧾 **Asset Management**
-  - Assign assets to users
-  - Track status, category, location
-- 👤 **User Management**
-  - View assigned assets per user
-- ⚡ **Quick Check In / Check Out**
-  - Fast modal workflow (no page switching)
-- 🏷 **Label Printing**
-  - QR codes + barcodes
-- 📥 **CSV Import / Export**
-- 🎨 **Clean UI + Dark Mode**
-- 🔐 **Optional Microsoft Entra Login**
-- 🐳 **Docker-first deployment**
+Keep the encryption key stable across restarts and backups. Changing it makes saved
+encrypted settings unreadable until re-entered. Never commit `.env`, credentials,
+database copies or bearer tokens. URL-encode special characters in database passwords.
+Explicit shell environment variables take precedence over environment files.
+Prisma scripts load `.env`; Next.js also loads `.env.local`, which takes precedence
+over `.env`. Keep database selection out of `.env.local`, or explicitly set identical
+shell values for both commands, to avoid selecting different databases.
 
----
+### Start a disposable local MariaDB
 
-## 📸 Screenshots
+The following single-line command is valid in PowerShell and Unix shells. It exposes
+only loopback port 43306 and uses a dedicated development container and volume:
 
-> <img width="2552" height="1273" alt="image" src="https://github.com/user-attachments/assets/ed21d7a7-4500-44fc-8f78-e56897c687fb" />
+```sh
+docker run --name it-assets-dev-db -d -p 127.0.0.1:43306:3306 -e MARIADB_DATABASE=it_assets_dev -e MARIADB_USER=it_assets_dev -e MARIADB_PASSWORD=local-dev-password -e MARIADB_ROOT_PASSWORD=local-root-password -v it-assets-dev-db:/var/lib/mysql mariadb:11.4
+docker logs it-assets-dev-db
+```
 
-> <img width="2558" height="1276" alt="image" src="https://github.com/user-attachments/assets/f2e0a198-4352-4c3f-bc60-0ed04872128b" />
+Wait for MariaDB to report that it is ready. For subsequent starts use
+`docker start it-assets-dev-db`. These example passwords are for an isolated local
+instance only. If MariaDB is already installed, create an empty development database
+and a dedicated user with database-level privileges, and adjust the URL's port.
 
-> <img width="2557" height="1276" alt="image" src="https://github.com/user-attachments/assets/224ef192-a702-4ae1-98c3-2f3557077a14" />
+Apply **existing** migrations and seed the new database:
 
-> <img width="2557" height="1271" alt="image" src="https://github.com/user-attachments/assets/5997984a-c11b-4fe8-b014-3b50c97bf840" />
+```sh
+npm run db:generate
+npm run db:validate
+npm run db:deploy
+npm run db:seed
+npm run dev
+```
 
-> <img width="2558" height="1279" alt="image" src="https://github.com/user-attachments/assets/7c4b85ef-c655-479f-8ec5-71ece29ad953" />
+Open [localhost:4050](http://localhost:4050) and complete setup to create the initial
+administrator. Seeding creates/updates baseline reference data; it does not create
+an administrator. Use it deliberately: repeated seeding can restore default reference
+labels/colors. Production startup uses the separate bootstrap script.
 
----
+### Database permissions and new migrations
 
-## ⚡ Quick Start (2–3 minutes)
+Applying migrations requires DDL and DML privileges on the application database.
+The example MariaDB image grants its configured user access to that database.
+`db:deploy` applies committed migrations and does **not** need a shadow database.
 
-### 1. Clone the repo
+`npm run db:migrate -- --name descriptive_change` creates a migration with Prisma
+`migrate dev`. Prisma creates and drops a temporary shadow database, so the development
+account also needs `CREATE, ALTER, DROP, REFERENCES` globally. On the isolated example
+instance, grant these through its administrator:
 
-- mkdir -p /opt/docker/apps
-- cd /opt/docker/apps
-- git clone <repo-url> It-Assets-Tracker
+```sh
+docker exec -it it-assets-dev-db mariadb -uroot -p
+```
 
-### 2. Copy the Docker compose
+```sql
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'it_assets_dev'@'%';
+```
 
-- mkdir -p /opt/docker/compose
-- cp It-Assets-Tracker/docker/docker-compose.example.yml /opt/docker/compose/IT-Assets-Tracker.yml
+Use these broad privileges only on a dedicated development instance. If your database
+administrator disallows automatic shadow databases, agree on a separate shadow database
+and explicit Prisma shadow configuration before creating migrations. This repository
+does not currently configure a shadow URL. Never point a shadow database at application
+data. Do not run `migrate dev` against production.
 
-### 3. Edit config (VERY IMPORTANT)
+## Commands and validation
 
-- Open:
-  - nano /opt/docker/compose/IT-Assets-Tracker.yml
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Development server on 4050 |
+| `npm test` | Pure logic, security, setup and rendered integration UI tests |
+| `npm run test:db` | Destructive-fixture suite; requires an explicit disposable database URL |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript; generate Prisma first |
+| `npm run db:generate` | Generate client for selected provider |
+| `npm run db:validate` | Validate selected schema |
+| `npm run db:deploy` | Apply committed migrations |
+| `npm run db:migrate -- --name example` | Create/apply development migration; shadow DB required |
+| `npm run db:seed` | Seed baseline reference data |
+| `npm run db:bootstrap` | Startup reference-data bootstrap |
+| `npm run build` | Generate Prisma and build production app |
+| `npm start` | Run production build on 4050 |
+| `npm run worker:borrowed-reminders:dry-run` | Inspect eligible reminders without sending mail |
 
-- Change:
-  - APP_URL: http://YOUR-IP:4050
-  - SESSION_SECRET: change-me
-  - APP_SETTINGS_ENCRYPTION_KEY: generate a persistent 32-byte key
-  - MARIADB_PASSWORD: change-me
-  - MARIADB_ROOT_PASSWORD: change-me-root
-  - Optional Exchange Email Service credentials are configured later in Settings -> Exchange Email Service
+For a normal source check, run `db:generate`, `test`, `lint`, `typecheck`,
+`db:validate`, then `build`. For database tests, create a **separate empty** loopback
+MariaDB database named `it_assets_ci_test` (or `it_assets_<name>_test`). Explicitly
+set `DB_MODE=local`, `DB_PROVIDER=mariadb` and `DATABASE_URL` in the shell, then run
+`db:generate`, `db:deploy`, `db:seed`, and `test:db`. The suite creates persistent test
+fixtures and refuses ordinary database names. It blocks external fetch calls.
+The CI workflow provides the complete isolated MariaDB example.
 
-  Generate `APP_SETTINGS_ENCRYPTION_KEY` once and keep it stable across restarts/redeployments:
+On PowerShell set variables with `$env:DB_PROVIDER='mariadb'`; on Unix use
+`export DB_PROVIDER=mariadb`. Restore your development variables and regenerate the
+client whenever changing providers. Database test success on SQLite does not establish
+MariaDB migration compatibility. See [validation results](docs/refactor-plan.md).
 
-  ```bash
-  node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-  ```
+## Docker production deployment
 
-  Changing this key after saving encrypted settings, such as the Exchange Email Service Client Secret, will make those encrypted values unreadable until they are re-entered.
+Use [docker/docker-compose.example.yml](docker/docker-compose.example.yml), which
+builds the web app and reminder worker alongside MariaDB. The example assumes:
 
-  The compose example also includes `it-assets-reminder-worker`, a background worker that processes Borrowed Items due-date and overdue reminders. It uses the same database and `APP_SETTINGS_ENCRYPTION_KEY` as the web app.
+- Repository at `/opt/docker/apps/It-Assets-Tracker` (edit `build.context` otherwise).
+- Persistent database at `/opt/docker/data/it-assets-tracker/mariadb`.
+- Persistent application data at `/opt/docker/data/it-assets-tracker/app`.
 
-  Optional worker settings:
-  - `BORROWED_REMINDER_POLL_INTERVAL_MS`: defaults to 30 minutes.
-  - `BORROWED_REMINDER_DRY_RUN`: keep `false` in production; use `true` only for non-live validation where no Microsoft Graph email should be sent.
+Copy the compose file to your deployment directory and edit its passwords, both
+matching database URLs, `SESSION_SECRET`, external `APP_URL`, and the same persistent
+`APP_SETTINGS_ENCRYPTION_KEY` for web and worker. `.env.example` is a reference;
+compose service environment values are the deployment configuration. Keep port 4050,
+or explicitly set `IT_ASSETS_HOST_PORT` for a separate test stack.
 
-### 4. Start the app
-  
-- mkdir -p /opt/docker/data/it-assets-tracker/app
-- mkdir -p /opt/docker/data/it-assets-tracker/mariadb
+```sh
+docker compose -f /path/to/IT-Assets-Tracker.yml up -d --build
+docker compose -f /path/to/IT-Assets-Tracker.yml logs --tail=100
+```
 
-- docker compose -f /opt/docker/compose/IT-Assets-Tracker.yml up -d --build
+Complete the setup wizard. For updates, back up first, fetch/review the intended
+release, then rebuild with the same compose command. Keep recoverable database backups
+using a consistent MariaDB backup/dump procedure, application state and encryption key;
+copying a running database directory alone is not a reliable backup. Branding uploads
+currently use the app's public directory and need separate persistence planning.
+Terminate HTTPS at your reverse proxy and set `APP_URL` to its external URL.
 
-### 5. Open the App
+The optional worker processes due/overdue reminders. Configure Exchange Email Service
+in Settings; keep its encryption key identical to the web app. Test only against a
+disposable database with `BORROWED_REMINDER_DRY_RUN=true`. Initial worker startup can
+race web migrations; inspect logs and restart the worker after first-time initialization
+if needed. Docker runtime validation remains required on a Docker-capable host.
 
-- http://YOUR-IP:4050
-- Run the setup wizard → create your admin account → done ✅
+## Integrations
 
-### 🔄️ Updating
+Settings → Integrations provides the IT Assets side of a controlled, read-only
+DeskMap connector. An active super-admin with settings/permissions capabilities can
+create a credential, approve user mappings and enable access. A fresh installation
+shows **Not configured**. DeskMap still needs its own server-side connector and card UI.
+See [the integration contract](docs/plugin-architecture.md).
 
-- cd /opt/docker/apps/It-Assets-Tracker
-- git pull
+## Troubleshooting
 
-- cd /opt/docker/compose
-- docker compose -f IT-Assets-Tracker.yml up -d --build
+- Connection refused: confirm MariaDB readiness, URL host/port and container logs.
+- Shadow database permission error: use `db:deploy` for existing migrations; new
+  migrations need the development permissions above.
+- Wrong Prisma provider or missing models: inspect explicit environment variables and
+  `.env.local`, then regenerate; do not mix generated clients between providers.
+- Port 4050 busy: stop the other development instance before starting this one.
+- Setup/sign-in redirects: confirm migrations and initial setup completed on the same
+  database used by the app. Do not bypass setup or change production permission defaults.
+- Decryption failure: restore the original encryption key or re-enter the affected
+  setting through its authorized settings page.
+- Integration 401/403: check credential expiry, rotation, enabled state and approved
+  mapping. Tokens belong in the caller's backend secret store, never browser code.
 
-### 💾 Backups (IMPORTANT)
+## Architecture and review
 
-- Backup this folder:
-  - /opt/docker/data/it-assets-tracker
+- [Architecture and ownership rules](docs/architecture.md)
+- [Integration architecture and API v1](docs/plugin-architecture.md)
+- [Audit findings, completed phases, validation and deferred work](docs/refactor-plan.md)
 
-### 🌐 Reverse Proxy (Optional)
-
-- Works great with:
-  - Nginx Proxy Manager
-  - Traefik
-  - Cloudflare Tunnel
-
-- Set:
-  - APP_URL=https://your-domain.com
-
-```bash
+Existing dependency advisories and permission-policy risks are recorded in the review
+plan. Review them before exposing a deployment to untrusted networks.
