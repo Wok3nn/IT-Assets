@@ -242,3 +242,4 @@ GitHub workflow provisions both service databases from scratch; it has not run l
   above before treating SQL Server as production-validated.
 - Observed non-blocking warnings: outdated Browserslist data and a tsx module-register
   deprecation under the installed Node 26.13.0. Managed Docker and CI specify Node 24.
+- Final developer handoff: the default managed development launcher served the first-run registration page at localhost:4050 with no operator enrolled and no active asset profile.

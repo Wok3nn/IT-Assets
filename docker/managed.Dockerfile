@@ -21,4 +21,3 @@ ENV NODE_ENV=production IT_ASSETS_CONTROL_DIR=/data/control IT_ASSETS_BIND=0.0.0
 USER node
 EXPOSE 4050
 CMD ["node","--import","tsx","scripts/managed-start.mjs"]
-

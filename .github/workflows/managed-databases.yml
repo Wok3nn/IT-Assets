@@ -56,4 +56,3 @@ jobs:
       - run: npm run test:managed-http
         env:
           IT_ASSETS_HTTP_FIXTURE: "1"
-
