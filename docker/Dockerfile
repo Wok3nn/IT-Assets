@@ -43,6 +43,7 @@ COPY --from=builder /app/prisma/data ./prisma/data
 COPY --from=builder /app/prisma/migrations ./prisma/migrations
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@it-assets/sqlserver-client ./node_modules/@it-assets/sqlserver-client
 RUN mkdir -p /data/db /data/state /data/uploads
 EXPOSE 4050
 CMD ["node", "scripts/docker-start.mjs"]

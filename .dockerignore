@@ -1,5 +1,8 @@
 .git
 .audit-runtime
+.managed-data
+.next-managed-dev
+.next-managed
 .github
 .next
 coverage
@@ -16,6 +19,11 @@ Screenshots
 screenshots
 .env
 .env.local
+.env.*
+**/*.db
+**/*.sqlite
+**/*.key
+**/bootstrap-token
 .codex-chrome-profile
 .codex-dev*
 .codex-next-dev*

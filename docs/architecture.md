@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-09-08
+Last updated: 2026-11-05
 
 ## Structure Overview
 
@@ -192,6 +192,24 @@ These are still incomplete or intentionally staged:
 - auth is implemented through routes, `lib`, and `services`, not a dedicated `modules/auth` boundary
 - permissions are enforced across features, but existing role defaults are permissive and need an explicit policy migration
 - export scope, notification timeouts, calendar consistency, and large feature extractions remain documented in [the review plan](refactor-plan.md)
+
+## Installation control and inventory databases
+
+Managed startup is the default development and new installation workflow. The control
+route is outside the dashboard layout so rendering it never loads asset branding,
+sessions or permissions. A local SQLite store under the supervisor's private directory
+authenticates an installation administrator, encrypts profiles, stores profile-scoped
+SSO configuration and audits management operations. Inventory users, roles, sessions,
+assignments and business audit remain in their selected backend. Control credentials
+grant no asset role. Existing environment-based MariaDB deployments remain supported.
+
+The request-serving process is pinned to an activation revision. The central database
+proxy verifies that revision and constructs the matching generated SQL Server or
+MariaDB client. The supervisor drains/restarts on switch; no runtime client generation
+or in-flight datasource mutation occurs. Managed mode does not run a reminder worker.
+Managed SQL Server uses a separate empty-database migration history. Existing MariaDB
+migration SQL is unchanged. See [the architecture decision and operations guide](database-management.md)
+for catalog checks, isolation, SSMS setup, backups, validation and rollout limits.
 
 ## Integration boundary
 

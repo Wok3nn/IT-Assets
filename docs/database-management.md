@@ -220,3 +220,25 @@ then run `npm run test:managed-db`. This suite writes disposable records and pro
 partial/unrelated schema rejection, CRUD, transactions, assignments, loans, nullable
 uniqueness and isolation. Do not point it at an existing installation. The mixed-provider
 GitHub workflow provisions both service databases from scratch; it has not run locally.
+
+### Results on this Windows host (2026-11-05)
+
+- Both provider schemas validated and both clients generated with Prisma 6.19.2.
+- 12 unit tests passed. ESLint, TypeScript, managed production build, and the legacy
+  production build passed; the managed build completed 23 static pages.
+- Private MariaDB 11.4.9 on loopback port 43327, using a new data directory: verified
+  fresh migrations, schema/permission checks, preservation of an unrelated sentinel,
+  refusal of partial schema, workspace bootstrap, asset CRUD, checkout/check-in, two
+  completed loans, nullable uniqueness, transaction rollback, A/B/A selection and
+  the existing database-backed integrations regression suite. No existing dev database
+  was used. The private MariaDB process was shut down after the checks.
+- Production HTTP smoke passed on 4050: one-time enrollment with no asset database,
+  local login, denied unauthenticated action, redacted profile data, unreachable SQL
+  Server diagnostics, profile removal, compatible inventory selection, process restart,
+  workspace login, stale write rejection and persistent operator session.
+- SQL Server DDL generation and offline filtered-index diff were verified. **No live
+  SQL Server, Docker container, Microsoft Entra or Graph service was used.** The CI
+  mixed-provider job is provided but not represented as a pass. Use the SSMS procedure
+  above before treating SQL Server as production-validated.
+- Observed non-blocking warnings: outdated Browserslist data and a tsx module-register
+  deprecation under the installed Node 26.13.0. Managed Docker and CI specify Node 24.

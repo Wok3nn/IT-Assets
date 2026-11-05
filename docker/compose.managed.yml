@@ -1,0 +1,16 @@
+name: it-assets-managed
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: docker/managed.Dockerfile
+    ports:
+      - "127.0.0.1:4050:4050"
+    environment:
+      IT_ASSETS_MANAGED_URL: ${IT_ASSETS_MANAGED_URL:-http://localhost:4050}
+    volumes:
+      - control:/data/control
+    restart: unless-stopped
+volumes:
+  control:
+

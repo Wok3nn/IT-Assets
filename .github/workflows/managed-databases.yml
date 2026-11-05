@@ -1,0 +1,59 @@
+name: Managed inventory acceptance
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mssql-and-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DB_MODE: local
+      DB_PROVIDER: mariadb
+      DATABASE_URL: mysql://offline:offline@127.0.0.1:1/offline
+      IT_ASSETS_TEST_PASSWORD: DisposableFixture!808
+      IT_ASSETS_TEST_SQL: "1"
+      IT_ASSETS_TEST_MARIA_PORT: 43327
+    services:
+      mariadb:
+        image: mariadb:11.4
+        ports: ["43327:3306"]
+        env:
+          MARIADB_DATABASE: it_assets_managed_a_test
+          MARIADB_USER: it_assets_test
+          MARIADB_PASSWORD: DisposableFixture!808
+          MARIADB_ROOT_PASSWORD: DisposableRoot!808
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        ports: ["1433:1433"]
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: DisposableRoot!808
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'DisposableRoot!808' -Q 'SELECT 1' -b"
+          --health-interval=5s --health-timeout=5s --health-retries=40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 24, cache: npm}
+      - run: npm ci
+      - run: npm run db:generate
+      - name: Create only the blank SQL Server CI database and test login
+        env:
+          CONTAINER: ${{ job.services.sqlserver.id }}
+        run: |
+          cli() { docker exec "$CONTAINER" /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'DisposableRoot!808' -b -Q "$1"; }
+          cli "CREATE DATABASE [it_assets_managed_b_test]"
+          cli "CREATE LOGIN [it_assets_test] WITH PASSWORD = 'DisposableFixture!808'"
+          cli "USE [it_assets_managed_b_test]; CREATE USER [it_assets_test] FOR LOGIN [it_assets_test]; ALTER ROLE db_owner ADD MEMBER [it_assets_test]"
+      - run: npm run test:managed-db
+      - run: npm run build:managed
+      - run: npm run test:managed-http
+        env:
+          IT_ASSETS_HTTP_FIXTURE: "1"
+

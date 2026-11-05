@@ -6,12 +6,37 @@ reminders, audit history, configurable permissions, and optional Microsoft Entra
 The application runs on **port 4050**.
 
 Built with Next.js App Router, React, TypeScript, Tailwind, Zod and Prisma 6.
-**MariaDB 11.4 is the supported production database.** SQLite is a development/test
-compatibility option; external SQL Server remains experimental and paused.
+MariaDB 11.4 remains supported. Managed installations can select MariaDB or Microsoft SQL Server. SQLite is a legacy development/test
+asset-backend option; managed installations use a separate local SQLite control store.
 
-## Local development
+## New installation: no asset database required
 
-Prerequisites: Git, Node.js 20 (the Docker/CI baseline), npm, and an isolated MariaDB
+With Node 24 and npm, clone the repository, run `npm ci`, then `npm run dev`.
+No database URL, running MariaDB service, or edits to an existing `.env` are needed.
+Open [localhost:4050](http://localhost:4050). Read the one-time token locally with
+`Get-Content .managed-data/bootstrap-token` (PowerShell), register the installation
+administrator, then sign in to **Settings → Database Management**.
+
+Save and test a SQL Server or MariaDB profile. Inspect it, explicitly initialize a
+dedicated empty database with a separate workspace administrator, inspect again and
+activate. Sign in to the inventory with that workspace account. Each profile retains
+its own inventory; switching never migrates records. Database Management remains
+available at [its direct URL](http://localhost:4050/settings/database-management)
+when the inventory database is offline.
+
+Use `npm run build:managed` then `npm run start:managed` for a managed production build.
+For a new Docker installation use `docker compose -f docker/compose.managed.yml up -d --build`.
+This compose file runs just the web/control service and persists its control directory.
+Find the bootstrap token with `docker compose -f docker/compose.managed.yml exec web cat /data/control/bootstrap-token`.
+The original MariaDB compose and legacy production startup remain available.
+
+See [Database Management: SSMS setup, permissions, TLS, switching, recovery and tests](docs/database-management.md).
+**Live SQL Server and Docker acceptance are pending**; validate on a disposable instance
+before rollout. The managed reminder worker is not enabled in this release.
+
+## Existing environment-based MariaDB development
+
+Prerequisites: Git, Node.js 24 (managed runtime and CI; the legacy Docker image uses Node 20), npm, and an isolated MariaDB
 11.4 database. Never use a production database for development, migrations or tests.
 
 ```sh
@@ -69,7 +94,7 @@ npm run db:generate
 npm run db:validate
 npm run db:deploy
 npm run db:seed
-npm run dev
+npm run dev:legacy
 ```
 
 Open [localhost:4050](http://localhost:4050) and complete setup to create the initial
@@ -106,7 +131,8 @@ data. Do not run `migrate dev` against production.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Development server on 4050 |
+| `npm run dev` | Managed setup and web server on 4050 (Node 24) |
+| `npm run dev:legacy` | Existing environment-based development server on 4050 |
 | `npm test` | Pure logic, security, setup and rendered integration UI tests |
 | `npm run test:db` | Destructive-fixture suite; requires an explicit disposable database URL |
 | `npm run lint` | ESLint |
@@ -134,7 +160,7 @@ On PowerShell set variables with `$env:DB_PROVIDER='mariadb'`; on Unix use
 client whenever changing providers. Database test success on SQLite does not establish
 MariaDB migration compatibility. See [validation results](docs/refactor-plan.md).
 
-## Docker production deployment
+## Existing MariaDB Docker deployment
 
 Use [docker/docker-compose.example.yml](docker/docker-compose.example.yml), which
 builds the web app and reminder worker alongside MariaDB. The example assumes:
