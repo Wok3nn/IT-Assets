@@ -34,6 +34,7 @@ async function runOnce() {
 }
 
 async function main() {
+  if (process.env.IT_ASSETS_MANAGED === "1") throw new Error("Standalone workers are disabled for managed database selection.");
   const once = process.argv.includes("--once");
   const pollInterval = parsePollInterval();
   let shuttingDown = false;

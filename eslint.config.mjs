@@ -11,7 +11,7 @@ const compat = new FlatCompat({
 });
 
 const config = [
-  { ignores: [".audit-runtime/**"] },
+  { ignores: [".audit-runtime/**", ".managed-data/**", ".next-managed-dev/**", ".next-managed/**"] },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     ignores: [".next/**", "node_modules/**", "data/**", "public/**", "next-env.d.ts", "scripts/seed.js"],

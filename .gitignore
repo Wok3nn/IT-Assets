@@ -26,3 +26,7 @@ AGENTS.md
 # Temporary local browser-inspection profile
 .codex-chrome-profile/
 .audit-runtime/
+.managed-data/
+.next-managed-dev/
+.next-managed/
+next-env.d.ts

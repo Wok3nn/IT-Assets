@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { control, managed } from "@/modules/database-management/control-store";
+import { createProfileClient } from "@/modules/database-management/profile-client";
 
 import { readBootstrapConfigSync } from "@/services/bootstrap-config";
 import { readDatabaseConfig } from "@/services/database-config";
@@ -31,6 +33,20 @@ function resolveEffectiveDatabaseUrl() {
 }
 
 function getPrismaClient() {
+  if (managed()) {
+    const state = control().state();
+    if (!state.active || String(state.revision) !== process.env.IT_ASSETS_REVISION) {
+      throw new Error("No active database for this process revision.");
+    }
+    const cache = global.prismaClientsByUrl ??= new Map<string, PrismaClient>();
+    const key = "managed:" + state.revision;
+    let client = cache.get(key);
+    if (!client) {
+      client = createProfileClient(control().profile(state.active));
+      cache.set(key, client);
+    }
+    return client;
+  }
   const databaseUrl = resolveEffectiveDatabaseUrl();
 
   if (!databaseUrl) {

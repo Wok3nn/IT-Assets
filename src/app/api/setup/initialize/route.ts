@@ -20,6 +20,7 @@ const setupSchema = z
   });
 
 export async function POST(request: Request) {
+  if (process.env.IT_ASSETS_MANAGED === "1") return NextResponse.json({ error: "Use Database Management." }, { status: 403 });
   const bootstrapResponse = await getBootstrapJsonResponse(
     "Database setup is required before workspace initialization can continue.",
     409,
@@ -94,4 +95,3 @@ export async function POST(request: Request) {
     redirectTo: "/login",
   });
 }
-

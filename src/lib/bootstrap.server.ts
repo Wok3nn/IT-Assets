@@ -7,11 +7,13 @@ import { readDatabaseConfig } from "@/services/database-config";
 import { isBootstrapComplete } from "@/services/bootstrap-config";
 import { buildAppUrl } from "@/services/config";
 import { logger } from "@/services/logger";
+import { control, managed, managementPath } from "@/modules/database-management/control-store";
 
 export const BOOTSTRAP_SETUP_PATH = "/setup/db";
 export const APP_SETUP_PATH = "/setup";
 
 export function getBootstrapFailurePath() {
+  if (managed()) return managementPath;
   const databaseConfig = readDatabaseConfig();
 
   if (databaseConfig.isSupportedCombination && databaseConfig.mode === "local") {
@@ -22,6 +24,10 @@ export function getBootstrapFailurePath() {
 }
 
 export async function requireBootstrapPage() {
+  if (managed()) {
+    if (!control().state().active) redirect(managementPath);
+    return;
+  }
   const bootstrapComplete = await isBootstrapComplete();
 
   if (!bootstrapComplete) {

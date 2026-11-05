@@ -93,6 +93,10 @@ export default async function SettingsPage() {
   }
 
   if (canManageSettings(roleKeys)) {
+    if (process.env.IT_ASSETS_MANAGED === "1") settingsCards.push({
+      href: "/settings/database-management", title: "Database Management",
+      description: "Sign in as the local installation administrator to manage database connections.",
+    });
     settingsCards.push({
       href: "/settings/reset",
       title: "Reset",

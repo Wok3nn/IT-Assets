@@ -110,7 +110,10 @@ export default async function AuthenticationSettingsPage({
         initialSaved={initialSaved}
         roles={roles.map((role) => ({ key: role.key, name: role.name }))}
         saveAuthenticationSettingsAction={saveAuthenticationSettingsAction}
-        settings={authenticationSettings}
+        settings={process.env.IT_ASSETS_MANAGED === "1" ? {
+          ...authenticationSettings,
+          entraSecretReference: /^IT_ASSETS_ENTRA_SECRET_[A-Z0-9_]+$/.test(authenticationSettings.entraSecretReference) ? authenticationSettings.entraSecretReference : "",
+        } : authenticationSettings}
       />
     </AppShell>
   );

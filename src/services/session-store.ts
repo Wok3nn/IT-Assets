@@ -5,8 +5,8 @@ import { Prisma } from "@prisma/client";
 import { getSessionTimeoutMinutes } from "@/modules/settings/settings.service";
 import { db } from "@/services/database";
 
-export const SESSION_COOKIE_NAME = "it_asset_tracker_session";
-export const SESSION_EFFECTIVE_ROLES_COOKIE_NAME = "it_asset_tracker_session_roles";
+export const SESSION_COOKIE_NAME = "it_asset_tracker_session" + (process.env.IT_ASSETS_MANAGED === "1" ? "_" + process.env.IT_ASSETS_COOKIE_REALM + "_" + process.env.IT_ASSETS_REVISION : "");
+export const SESSION_EFFECTIVE_ROLES_COOKIE_NAME = "it_asset_tracker_session_roles" + (process.env.IT_ASSETS_MANAGED === "1" ? "_" + process.env.IT_ASSETS_COOKIE_REALM + "_" + process.env.IT_ASSETS_REVISION : "");
 const MINUTE_MS = 60 * 1000;
 
 export type StoredSession = {
@@ -164,4 +164,3 @@ export async function deleteSessionByToken(token: string) {
     },
   });
 }
-

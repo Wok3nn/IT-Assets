@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { db } from "@/services/database";
+import { control, managed } from "@/modules/database-management/control-store";
 
 const AUTHENTICATION_SETTINGS_CATEGORY = "authentication";
 const AUTH_LOCAL_ENABLED_KEY = "authentication.local.enabled";
@@ -121,6 +122,10 @@ function parseGroupMappings(value: string | undefined): AuthenticationGroupRoleM
 }
 
 export async function getAuthenticationSettings() {
+  if (managed()) {
+    const saved=control().authentication();
+    if (saved) return authenticationSettingsSchema.parse(saved);
+  }
   const settings = await db.setting.findMany({
     where: {
       key: {
@@ -174,6 +179,11 @@ export async function updateAuthenticationSettings(input: AuthenticationSettings
     throw new Error("Local sign-in must remain enabled until another working admin recovery path is implemented.");
   }
 
+  if (managed()) {
+    if(parsed.entraEnabled && !parsed.entraSecretReference) throw new Error("Enter the managed Entra secret environment variable name.");
+    control().saveAuthentication(parsed);
+    return parsed;
+  }
   await Promise.all([
     upsertAuthenticationSetting(AUTH_LOCAL_ENABLED_KEY, String(parsed.localAuthEnabled)),
     upsertAuthenticationSetting(AUTH_ENTRA_ENABLED_KEY, String(parsed.entraEnabled)),
@@ -195,6 +205,7 @@ function resolveSecretReference(secretReference: string) {
     return "";
   }
 
+  if (managed()) return /^IT_ASSETS_ENTRA_SECRET_[A-Z0-9_]+$/.test(trimmed) ? process.env[trimmed] ?? "" : "";
   return process.env[trimmed] ?? trimmed;
 }
 

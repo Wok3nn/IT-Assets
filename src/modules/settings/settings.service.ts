@@ -75,8 +75,10 @@ const GENERAL_SETTINGS_KEYS = [
   MAKE_MODEL_MODEL_SOURCE_LEVEL_KEY,
   ...BRANDING_SETTINGS_KEYS,
 ] as const;
-const BRANDING_UPLOAD_DIRECTORY = path.join(process.cwd(), "public", "branding", "uploads");
-const BRANDING_UPLOAD_URL_PREFIX = "/branding/uploads";
+const BRANDING_UPLOAD_DIRECTORY = process.env.IT_ASSETS_MANAGED === "1"
+  ? path.join(process.env.APP_DATA_DIR!, "branding")
+  : path.join(process.cwd(), "public", "branding", "uploads");
+const BRANDING_UPLOAD_URL_PREFIX = process.env.IT_ASSETS_MANAGED === "1" ? "/api/workspace-branding" : "/branding/uploads";
 const MAX_BRANDING_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 const LOGO_MIME_TYPES = new Set(["image/png"]);
 const ICON_MIME_TYPES = new Set(["image/x-icon", "image/vnd.microsoft.icon", "image/png"]);

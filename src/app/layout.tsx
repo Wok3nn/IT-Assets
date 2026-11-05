@@ -66,10 +66,34 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // A tab rendered against an earlier inventory must not submit an old edit to
+  // the newly selected database, even after another tab signs in there.
+  const revision = process.env.IT_ASSETS_MANAGED === "1" ? Number(process.env.IT_ASSETS_REVISION) : null;
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {revision !== null && <script dangerouslySetInnerHTML={{ __html: `
+          (() => {
+            const revision = ${JSON.stringify(String(revision))}, send = window.fetch.bind(window);
+            window.fetch = (input, init = {}) => {
+              const req = input instanceof Request ? input : null;
+              const url = new URL(req ? req.url : input, location.href);
+              if (url.origin === location.origin && !['GET','HEAD','OPTIONS'].includes((init.method || req?.method || 'GET').toUpperCase())) {
+                const headers = new Headers(init.headers || req?.headers); headers.set('x-it-assets-revision',revision);
+                return send(input,{...init,headers});
+              }
+              return send(input,init);
+            };
+            document.addEventListener('submit', event => {
+              const f=event.target;
+              if(f instanceof HTMLFormElement && f.method.toLowerCase()==='post'){
+                const u=new URL(f.action || location.href,location.href);
+                if(u.origin===location.origin){u.searchParams.set('_inventory',revision);f.action=u.href;}
+              }
+            },true);
+          })();
+        ` }} />}
         {children}
       </body>
     </html>

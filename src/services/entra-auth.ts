@@ -2,8 +2,8 @@ import { createHash, randomBytes, randomUUID, verify, type JsonWebKey as NodeJso
 
 import type { EntraAuthenticationConfig } from "@/modules/settings/authentication-settings.service";
 
-export const ENTRA_AUTH_STATE_COOKIE_NAME = "it_asset_tracker_entra_state";
-export const ENTRA_AUTH_NONCE_COOKIE_NAME = "it_asset_tracker_entra_nonce";
+export const ENTRA_AUTH_STATE_COOKIE_NAME = "it_asset_tracker_entra_state" + (process.env.IT_ASSETS_MANAGED === "1" ? "_" + process.env.IT_ASSETS_COOKIE_REALM + "_" + process.env.IT_ASSETS_REVISION : "");
+export const ENTRA_AUTH_NONCE_COOKIE_NAME = "it_asset_tracker_entra_nonce" + (process.env.IT_ASSETS_MANAGED === "1" ? "_" + process.env.IT_ASSETS_COOKIE_REALM + "_" + process.env.IT_ASSETS_REVISION : "");
 
 const ENTRA_SCOPES = ["openid", "profile", "email", "User.Read"];
 const ENTRA_AUTHORITY_BASE_URL = "https://login.microsoftonline.com";

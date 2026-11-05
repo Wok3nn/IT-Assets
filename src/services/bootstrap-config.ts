@@ -1,5 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { z } from "zod";
@@ -89,23 +89,11 @@ export function readBootstrapConfigSync(): BootstrapConfig {
   }
 }
 
-export async function writeBootstrapConfig(input: BootstrapConfig) {
-  await ensureBootstrapStateDir();
-
-  const normalized = bootstrapConfigSchema.parse(input);
-  await writeFile(getBootstrapConfigPath(), `${JSON.stringify(normalized, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  await chmod(getBootstrapConfigPath(), 0o600).catch(() => {});
-  try {
-    chmodSync(getBootstrapConfigPath(), 0o600);
-  } catch {}
-
-  return normalized;
-}
-
 export async function isBootstrapComplete() {
+  if (process.env.IT_ASSETS_MANAGED === "1") {
+    const { control } = await import("@/modules/database-management/control-store");
+    return Boolean(control().state().active);
+  }
   const databaseConfig = readDatabaseConfig();
 
   if (
