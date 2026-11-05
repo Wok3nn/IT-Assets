@@ -1,5 +1,11 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@it-assets/sqlserver-client"
+}
+
+// Keep the legacy explicit single-provider generator available for existing installs.
+generator legacyClient {
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -8,19 +14,19 @@ datasource db {
 }
 
 model SetupState {
-  id            String    @id @default(cuid())
+  id            String    @id @default(cuid()) @db.NVarChar(191)
   isCompleted   Boolean   @default(false)
-  siteName      String?
+  siteName      String? @db.NVarChar(191)
   initializedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
 
 model User {
-  id           String         @id @default(cuid())
-  name         String
-  email        String         @unique
-  passwordHash String
+  id           String         @id @default(cuid()) @db.NVarChar(191)
+  name         String @db.NVarChar(191)
+  email        String         @unique @db.NVarChar(191)
+  passwordHash String @db.NVarChar(191)
   canLogin     Boolean        @default(true)
   isActive     Boolean        @default(true)
   lastLoginAt  DateTime?
@@ -37,10 +43,10 @@ model User {
 }
 
 model GuestProfile {
-  id             String   @id @default(cuid())
-  displayName    String
-  guestType      String   @default("Guest")
-  notes          String?
+  id             String   @id @default(cuid()) @db.NVarChar(191)
+  displayName    String @db.NVarChar(191)
+  guestType      String   @default("Guest") @db.NVarChar(191)
+  notes          String? @db.NVarChar(Max)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -52,31 +58,31 @@ model GuestProfile {
 }
 
 model Session {
-  id         String   @id @default(cuid())
-  token      String   @unique
-  userId     String
+  id         String   @id @default(cuid()) @db.NVarChar(191)
+  token      String   @unique @db.NVarChar(191)
+  userId     String @db.NVarChar(191)
   expiresAt  DateTime
-  ipAddress  String?
-  userAgent  String?
+  ipAddress  String? @db.NVarChar(191)
+  userAgent  String? @db.NVarChar(Max)
   createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model Role {
-  id        String     @id @default(cuid())
-  key       String     @unique
-  name      String
+  id        String     @id @default(cuid()) @db.NVarChar(191)
+  key       String     @unique @db.NVarChar(191)
+  name      String @db.NVarChar(191)
   createdAt DateTime   @default(now())
   userRoles UserRole[]
 }
 
 model Scope {
-  id          String       @id @default(cuid())
-  name        String
-  slug        String       @unique
-  description String?
-  colorHex    String?
-  colorMode   String?
+  id          String       @id @default(cuid()) @db.NVarChar(191)
+  name        String @db.NVarChar(191)
+  slug        String       @unique @db.NVarChar(191)
+  description String? @db.NVarChar(Max)
+  colorHex    String? @db.NVarChar(191)
+  colorMode   String? @db.NVarChar(191)
   isSystem    Boolean      @default(false)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -85,91 +91,91 @@ model Scope {
 }
 
 model UserRole {
-  id     String @id @default(cuid())
-  userId String
-  roleId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid()) @db.NVarChar(191)
+  userId String @db.NVarChar(191)
+  roleId String @db.NVarChar(191)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([userId, roleId])
 }
 
 model UserScope {
-  id      String @id @default(cuid())
-  userId  String
-  scopeId String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scope   Scope  @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid()) @db.NVarChar(191)
+  userId  String @db.NVarChar(191)
+  scopeId String @db.NVarChar(191)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  scope   Scope  @relation(fields: [scopeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([userId, scopeId])
 }
 
 model Category {
-  id                     String         @id @default(cuid())
-  name                   String
-  slug                   String         @unique
-  parentId               String?
-  colorHex               String?
-  colorMode              String?
+  id                     String         @id @default(cuid()) @db.NVarChar(191)
+  name                   String @db.NVarChar(191)
+  slug                   String         @unique @db.NVarChar(191)
+  parentId               String? @db.NVarChar(191)
+  colorHex               String? @db.NVarChar(191)
+  colorMode              String? @db.NVarChar(191)
   sortOrder              Int            @default(0)
-  defaultLabelTemplateId String?
+  defaultLabelTemplateId String? @db.NVarChar(191)
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
-  parent                 Category?      @relation("CategoryTree", fields: [parentId], references: [id])
+  parent                 Category?      @relation("CategoryTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children               Category[]     @relation("CategoryTree")
   assets                 Asset[]
-  defaultLabelTemplate   LabelTemplate? @relation("CategoryDefaultLabelTemplate", fields: [defaultLabelTemplateId], references: [id])
+  defaultLabelTemplate   LabelTemplate? @relation("CategoryDefaultLabelTemplate", fields: [defaultLabelTemplateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model Location {
-  id          String      @id @default(cuid())
-  name        String
-  slug        String      @unique
-  parentId    String?
-  colorHex    String?
-  colorMode   String?
-  code        String?     @unique
-  description String?
+  id          String      @id @default(cuid()) @db.NVarChar(191)
+  name        String @db.NVarChar(191)
+  slug        String      @unique @db.NVarChar(191)
+  parentId    String? @db.NVarChar(191)
+  colorHex    String? @db.NVarChar(191)
+  colorMode   String? @db.NVarChar(191)
+  code        String?     @unique @db.NVarChar(191)
+  description String? @db.NVarChar(Max)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-  parent      Location?   @relation("LocationTree", fields: [parentId], references: [id])
+  parent      Location?   @relation("LocationTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children    Location[]  @relation("LocationTree")
   assets      Asset[]     @relation("AssignedLocationAssets")
 }
 
 model AssetStatus {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  name      String
-  color     String?
+  id        String   @id @default(cuid()) @db.NVarChar(191)
+  key       String   @unique @db.NVarChar(191)
+  name      String @db.NVarChar(191)
+  color     String? @db.NVarChar(191)
   createdAt DateTime @default(now())
   assets    Asset[]
 }
 
 model Asset {
-  id                 String          @id @default(cuid())
-  name               String
-  make               String?
-  model              String?
-  assetTag           String          @unique
-  serialNumber       String?
-  notes              String?
+  id                 String          @id @default(cuid()) @db.NVarChar(191)
+  name               String @db.NVarChar(191)
+  make               String? @db.NVarChar(191)
+  model              String? @db.NVarChar(191)
+  assetTag           String          @unique @db.NVarChar(191)
+  serialNumber       String? @db.NVarChar(191)
+  notes              String? @db.NVarChar(Max)
   purchaseDate       DateTime?
   warrantyExpiry     DateTime?
-  categoryId         String?
-  statusId           String?
-  assignedUserId     String?
-  assignedGuestProfileId String?
-  assignedLocationId String?
-  labelTemplateId    String?
+  categoryId         String? @db.NVarChar(191)
+  statusId           String? @db.NVarChar(191)
+  assignedUserId     String? @db.NVarChar(191)
+  assignedGuestProfileId String? @db.NVarChar(191)
+  assignedLocationId String? @db.NVarChar(191)
+  labelTemplateId    String? @db.NVarChar(191)
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
-  category           Category?       @relation(fields: [categoryId], references: [id])
-  status             AssetStatus?    @relation(fields: [statusId], references: [id])
-  assignedUser       User?           @relation("AssignedUserAssets", fields: [assignedUserId], references: [id])
-  assignedGuestProfile GuestProfile? @relation("AssignedGuestProfileAssets", fields: [assignedGuestProfileId], references: [id])
-  assignedLocation   Location?       @relation("AssignedLocationAssets", fields: [assignedLocationId], references: [id])
-  labelTemplate      LabelTemplate?  @relation(fields: [labelTemplateId], references: [id])
+  category           Category?       @relation(fields: [categoryId], references: [id], onUpdate: NoAction)
+  status             AssetStatus?    @relation(fields: [statusId], references: [id], onUpdate: NoAction)
+  assignedUser       User?           @relation("AssignedUserAssets", fields: [assignedUserId], references: [id], onUpdate: NoAction)
+  assignedGuestProfile GuestProfile? @relation("AssignedGuestProfileAssets", fields: [assignedGuestProfileId], references: [id], onUpdate: NoAction)
+  assignedLocation   Location?       @relation("AssignedLocationAssets", fields: [assignedLocationId], references: [id], onUpdate: NoAction)
+  labelTemplate      LabelTemplate?  @relation(fields: [labelTemplateId], references: [id], onUpdate: NoAction)
   scopes             AssetScope[]
   borrowedItems      BorrowedItem[]   @relation("BorrowedItemAsset")
   activeBorrowedItem BorrowedItem?    @relation("BorrowedItemActiveAsset")
@@ -178,25 +184,25 @@ model Asset {
 }
 
 model BorrowedItem {
-  id               String   @id @default(cuid())
-  assetId          String?
-  activeAssetId    String?  @unique
-  itemName         String?
+  id               String   @id @default(cuid()) @db.NVarChar(191)
+  assetId          String? @db.NVarChar(191)
+  activeAssetId    String?  @unique @db.NVarChar(191)
+  itemName         String? @db.NVarChar(191)
   quantity         Int      @default(1)
-  borrowerUserId   String
+  borrowerUserId   String @db.NVarChar(191)
   borrowedAt       DateTime @default(now())
   dueAt            DateTime
   returnedAt       DateTime?
-  issuedByUserId   String
-  returnedByUserId String?
-  notes            String?
+  issuedByUserId   String @db.NVarChar(191)
+  returnedByUserId String? @db.NVarChar(191)
+  notes            String? @db.NVarChar(Max)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  asset            Asset?   @relation("BorrowedItemAsset", fields: [assetId], references: [id])
-  activeAsset      Asset?   @relation("BorrowedItemActiveAsset", fields: [activeAssetId], references: [id])
-  borrowerUser     User     @relation("BorrowedItemBorrower", fields: [borrowerUserId], references: [id])
-  issuedByUser     User     @relation("BorrowedItemIssuedBy", fields: [issuedByUserId], references: [id])
-  returnedByUser   User?    @relation("BorrowedItemReturnedBy", fields: [returnedByUserId], references: [id])
+  asset            Asset?   @relation("BorrowedItemAsset", fields: [assetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  activeAsset      Asset?   @relation("BorrowedItemActiveAsset", fields: [activeAssetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  borrowerUser     User     @relation("BorrowedItemBorrower", fields: [borrowerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  issuedByUser     User     @relation("BorrowedItemIssuedBy", fields: [issuedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  returnedByUser   User?    @relation("BorrowedItemReturnedBy", fields: [returnedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   notifications    BorrowedItemNotification[]
   reminderDedupeRecords BorrowedItemReminderDedupe[]
 
@@ -208,16 +214,16 @@ model BorrowedItem {
 }
 
 model BorrowedItemNotification {
-  id             String        @id @default(cuid())
-  borrowedItemId String?
-  dedupeKey      String?
-  type           String
-  recipient      String
-  status         String
+  id             String        @id @default(cuid()) @db.NVarChar(191)
+  borrowedItemId String? @db.NVarChar(191)
+  dedupeKey      String? @db.NVarChar(191)
+  type           String @db.NVarChar(191)
+  recipient      String @db.NVarChar(191)
+  status         String @db.NVarChar(191)
   sentAt         DateTime?
-  error          String?
+  error          String? @db.NVarChar(Max)
   createdAt      DateTime      @default(now())
-  borrowedItem   BorrowedItem? @relation(fields: [borrowedItemId], references: [id], onDelete: SetNull)
+  borrowedItem   BorrowedItem? @relation(fields: [borrowedItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([borrowedItemId, type, status])
   @@index([dedupeKey])
@@ -226,40 +232,40 @@ model BorrowedItemNotification {
 }
 
 model BorrowedItemReminderDedupe {
-  dedupeKey      String        @id
-  borrowedItemId String?
-  type           String
+  dedupeKey      String        @id @db.NVarChar(191)
+  borrowedItemId String? @db.NVarChar(191)
+  type           String @db.NVarChar(191)
   scheduledFor   DateTime
-  status         String
-  notificationId String?
+  status         String @db.NVarChar(191)
+  notificationId String? @db.NVarChar(191)
   lastAttemptAt  DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-  borrowedItem   BorrowedItem? @relation(fields: [borrowedItemId], references: [id], onDelete: SetNull)
+  borrowedItem   BorrowedItem? @relation(fields: [borrowedItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([borrowedItemId, type, scheduledFor])
   @@index([type, status, scheduledFor])
 }
 
 model AssetScope {
-  id      String @id @default(cuid())
-  assetId String
-  scopeId String
-  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  scope   Scope  @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid()) @db.NVarChar(191)
+  assetId String @db.NVarChar(191)
+  scopeId String @db.NVarChar(191)
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  scope   Scope  @relation(fields: [scopeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([assetId, scopeId])
 }
 
 model LabelTemplate {
-  id                String                 @id @default(cuid())
-  name              String
-  slug              String                 @unique
-  description       String?
+  id                String                 @id @default(cuid()) @db.NVarChar(191)
+  name              String @db.NVarChar(191)
+  slug              String                 @unique @db.NVarChar(191)
+  description       String? @db.NVarChar(Max)
   width             Float                  @map("widthMm")
   height            Float                  @map("heightMm")
-  unit              String                 @default("millimeters")
-  orientation       String                 @default("portrait")
+  unit              String                 @default("millimeters") @db.NVarChar(191)
+  orientation       String                 @default("portrait") @db.NVarChar(191)
   marginTop         Float                  @default(1) @map("marginTopMm")
   marginRight       Float                  @default(1) @map("marginRightMm")
   marginBottom      Float                  @default(1) @map("marginBottomMm")
@@ -275,65 +281,64 @@ model LabelTemplate {
 }
 
 model LabelTemplateElement {
-  id          String        @id @default(cuid())
-  templateId  String
-  type        String        @default("text")
-  fieldKey    String
-  displayName String?       @map("label")
+  id          String        @id @default(cuid()) @db.NVarChar(191)
+  templateId  String @db.NVarChar(191)
+  type        String        @default("text") @db.NVarChar(191)
+  fieldKey    String @db.NVarChar(191)
+  displayName String?       @map("label") @db.NVarChar(191)
   isVisible   Boolean       @default(true)
   x           Float         @map("posX")
   y           Float         @map("posY")
   width       Float
   height      Float
   fontSize    Int?
-  fontWeight  String        @default("normal")
+  fontWeight  String        @default("normal") @db.NVarChar(191)
   italic      Boolean       @default(false)
-  textAlign   String        @default("left") @map("alignment")
+  textAlign   String        @default("left") @map("alignment") @db.NVarChar(191)
   rotation    Float         @default(0)
   zIndex      Int           @default(0)
-  template    LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template    LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([templateId, zIndex])
   @@map("LabelTemplateField")
 }
 
 model Setting {
-  id        String   @id @default(cuid())
-  category  String
-  key       String   @unique
-  value     String
+  id        String   @id @default(cuid()) @db.NVarChar(191)
+  category  String @db.NVarChar(191)
+  key       String   @unique @db.NVarChar(191)
+  value     String @db.NVarChar(Max)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model BrandingAsset {
-  id        String   @id @default(cuid())
-  kind      String
-  fileName  String
-  filePath  String
-  mimeType  String?
+  id        String   @id @default(cuid()) @db.NVarChar(191)
+  kind      String @db.NVarChar(191)
+  fileName  String @db.NVarChar(191)
+  filePath  String @db.NVarChar(191)
+  mimeType  String? @db.NVarChar(191)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model AuthProviderConfig {
-  id          String   @id @default(cuid())
-  providerKey String   @unique
+  id          String   @id @default(cuid()) @db.NVarChar(191)
+  providerKey String   @unique @db.NVarChar(191)
   isEnabled   Boolean  @default(false)
-  configJson  String
+  configJson  String @db.NVarChar(Max)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  actorUserId String?
-  action      String
-  entityType  String
-  entityId    String?
-  summary     String
-  payloadJson String?
+  id          String   @id @default(cuid()) @db.NVarChar(191)
+  actorUserId String? @db.NVarChar(191)
+  action      String @db.NVarChar(191)
+  entityType  String @db.NVarChar(191)
+  entityId    String? @db.NVarChar(191)
+  summary     String @db.NVarChar(Max)
+  payloadJson String? @db.NVarChar(Max)
   createdAt   DateTime @default(now())
-  actor       User?    @relation(fields: [actorUserId], references: [id])
+  actor       User?    @relation(fields: [actorUserId], references: [id], onUpdate: NoAction)
 }
-
