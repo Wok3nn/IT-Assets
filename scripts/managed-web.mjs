@@ -61,7 +61,7 @@ server = http.createServer((req, res) => {
       ["GET", "HEAD"].includes(req.method) &&
       !url.pathname.startsWith("/api/")
     ) {
-      res.writeHead(303, { Location: storeModule.installationPath });
+      res.writeHead(303, { Location: "/setup" });
       return res.end();
     }
     res.writeHead(409, { "Content-Type": "application/json" });
@@ -74,9 +74,12 @@ server = http.createServer((req, res) => {
   }
   if (
     !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-    ![storeModule.managementPath, storeModule.managementWorkspacePath].includes(
-      url.pathname,
-    ) &&
+    ![
+      storeModule.managementPath,
+      storeModule.managementWorkspacePath,
+      "/setup",
+      "/setup/workspace",
+    ].includes(url.pathname) &&
     req.headers["x-it-assets-revision"] !== process.env.IT_ASSETS_REVISION &&
     url.searchParams.get("_inventory") !== process.env.IT_ASSETS_REVISION
   ) {

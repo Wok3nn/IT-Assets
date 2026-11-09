@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
-import { hkdfSync } from "node:crypto";
+import { hkdfSync, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import storeModule from "../src/modules/database-management/control-store.ts";
@@ -78,6 +78,13 @@ process.on("message", (message) => {
 try {
   while (!stopping) {
     const pinned = store.state();
+    const generation = randomUUID();
+    store.setRuntime({
+      generation,
+      ...pinned,
+      heartbeat: Date.now(),
+      listening: false,
+    });
     const env = {
       ...shared,
       IT_ASSETS_REVISION: String(pinned.revision),
@@ -99,9 +106,24 @@ try {
     let ready = false,
       draining = false;
     child.on("message", (m) => {
-      if (m === "ready") ready = true;
+      if (m === "ready") {
+        ready = true;
+        store.setRuntime({
+          generation,
+          ...pinned,
+          heartbeat: Date.now(),
+          listening: true,
+        });
+      }
     });
     const watch = setInterval(() => {
+      if (ready && !draining)
+        store.setRuntime({
+          generation,
+          ...pinned,
+          heartbeat: Date.now(),
+          listening: true,
+        });
       if (
         !draining &&
         child.connected &&
@@ -112,6 +134,12 @@ try {
       }
     }, 750);
     const [code] = await once(child, "exit");
+    store.setRuntime({
+      generation,
+      ...pinned,
+      heartbeat: Date.now(),
+      listening: false,
+    });
     clearInterval(watch);
     child = undefined;
     if (stopping) break;

@@ -2,7 +2,18 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { AppLogo } from "@/components/branding/app-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
-export function SetupWizardShell({children, steps, title="Bring the platform online in a few guided steps.", description="The setup wizard creates the first local admin and stores the application name used across the interface."}: {children: ReactNode; steps: {title:string;description:string;icon:LucideIcon}[];title?:string;description?:string}) { return (
+export function SetupWizardShell({
+  children,
+  steps,
+  title = "Bring the platform online in a few guided steps.",
+  description = "The setup wizard creates the first local admin and stores the application name used across the interface.",
+}: {
+  children?: ReactNode;
+  steps: { title: string; description: string; icon: LucideIcon }[];
+  title?: string;
+  description?: string;
+}) {
+  return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.08),_transparent_24%),linear-gradient(180deg,#fcfcfd_0%,#f5f7fa_100%)] px-4 py-8 dark:bg-[radial-gradient(circle_at_top,_rgba(246,150,41,0.12),_transparent_28%),linear-gradient(180deg,#2f3437_0%,#2b3033_56%,#262b2d_100%)]">
       <div className="mx-auto max-w-6xl rounded-[40px] border border-white/70 bg-[rgba(255,255,255,0.92)] p-6 shadow-panel backdrop-blur dark:border-[#4a5256] dark:bg-[linear-gradient(180deg,rgba(63,68,72,0.94)_0%,rgba(54,59,63,0.92)_100%)] lg:p-10">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
@@ -31,8 +42,12 @@ export function SetupWizardShell({children, steps, title="Bring the platform onl
                     <Icon className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-medium text-slate-950 dark:text-[#fff4e3]">{title}</h2>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-100">{description}</p>
+                    <h2 className="text-lg font-medium text-slate-950 dark:text-[#fff4e3]">
+                      {title}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-100">
+                      {description}
+                    </p>
                   </div>
                 </div>
               ))}

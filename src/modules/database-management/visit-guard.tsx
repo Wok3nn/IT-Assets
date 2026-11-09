@@ -1,8 +1,11 @@
 "use client";
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 const entry = "/settings/database-management";
 // Defense in depth for bfcache/tab departure. Every action also checks SQLite.
 export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
+  const pathname = usePathname();
+  const login = pathname.startsWith("/setup") ? "/setup" : entry;
   useEffect(() => {
     const leave = () => {
       document.documentElement.style.visibility = "hidden";
@@ -13,13 +16,14 @@ export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
     const validate = async () => {
       try {
         const response = await fetch(entry + "/session", { cache: "no-store" });
-        if (response.status !== 204) window.location.replace(entry);
+        if (response.status === 401) window.location.replace(login);
       } catch {
-        window.location.replace(entry);
+        // A managed activation briefly closes the listener. Do not destroy the
+        // current visit merely because a health request overlaps that restart.
       }
     };
     const show = (event: PageTransitionEvent) => {
-      if (event.persisted) window.location.replace(entry);
+      if (event.persisted) window.location.replace(login);
     };
     const focus = () => {
       void validate();
@@ -35,6 +39,6 @@ export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
       window.removeEventListener("focus", focus);
       window.clearInterval(timer);
     };
-  }, [fingerprint]);
+  }, [fingerprint, login]);
   return null;
 }

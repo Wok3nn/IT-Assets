@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 const dir = mkdtempSync(path.join(tmpdir(), "it-assets-http-")),
   base = "http://localhost:4050",
-  url = base + "/settings/database-management",
+  url = base + "/setup",
   workspace = url + "/workspace";
 const server = spawn(
   process.execPath,
@@ -24,27 +24,42 @@ const server = spawn(
   },
 );
 const exited = once(server, "exit");
-let cookie = "",
-  action;
+let cookie = "";
 async function page(target = cookie ? workspace : url) {
   const r = await fetch(target, { headers: { Cookie: cookie } });
   assert.equal(r.status, 200);
   const html = await r.text();
-  action = html.match(/name="(\$ACTION_ID_[a-z0-9]+)"/i)?.[1];
-  assert.ok(action);
   return html.replaceAll("<!-- -->", "");
 }
 async function post(op, values = {}) {
   const html = await page();
   const f = new FormData();
-  f.set(action, "");
-  f.set("op", op);
-  if (values.id) {
-    const own = (html.match(/<form[\s\S]*?<\/form>/g) || []).find((s) =>
-      s.includes('name="id" value="' + values.id + '"'),
-    );
-    f.set("version", own?.match(/name="version" value="([^"]*)"/)?.[1] ?? "");
+  const forms = html.match(/<form[\s\S]*?<\/form>/g) || [];
+  const own =
+    forms.find(
+      (s) =>
+        s.includes('name="op" value="' + op + '"') &&
+        (!values.id || s.includes('name="id" value="' + values.id + '"')),
+    ) ||
+    forms.find(
+      (s) => values.id && s.includes('name="id" value="' + values.id + '"'),
+    ) ||
+    forms[0];
+  assert.ok(own);
+  const decode = (s) =>
+    s
+      .replaceAll("&quot;", '"')
+      .replaceAll("&amp;", "&")
+      .replaceAll("&#x27;", "'")
+      .replaceAll("&lt;", "<")
+      .replaceAll("&gt;", ">");
+  for (const input of own.match(/<input[^>]*>/g) || []) {
+    const name = input.match(/name="([^"]*)"/)?.[1],
+      value = input.match(/value="([^"]*)"/)?.[1] ?? "";
+    if (name) f.set(decode(name), decode(value));
   }
+  f.set("op", op);
+  f.set("context", "setup");
   for (const [k, v] of Object.entries(values)) f.set(k, v);
   const r = await fetch(cookie ? workspace : url, {
     method: "POST",
@@ -52,7 +67,10 @@ async function post(op, values = {}) {
     body: f,
     redirect: "manual",
   });
-  assert.equal(r.status, 303);
+  assert.ok(
+    [200, 303].includes(r.status),
+    `Unexpected action response ${r.status}`,
+  );
   const c = r.headers
     .getSetCookie()
     .find((s) => s.startsWith("it_assets_management_visit="));
@@ -65,7 +83,14 @@ async function post(op, values = {}) {
       assert.match(c, /Path=\//);
     }
   }
-  return new URL(r.headers.get("location"), base).searchParams.get("message");
+  if (r.status === 303)
+    return new URL(r.headers.get("location"), base).searchParams.get("message");
+  const body = (await r.text()).replaceAll("<!-- -->", "");
+  const alerts = [
+    ...body.matchAll(/<p[^>]*role="alert"[^>]*>([\s\S]*?)<\/p>/g),
+  ].map((m) => m[1]);
+  assert.ok(alerts.length, "Expected a safe form error");
+  return alerts.join(" ");
 }
 try {
   await Promise.race([
@@ -91,14 +116,22 @@ try {
       (await fetch(base, { redirect: "manual" })).headers.get("location"),
       base,
     ).pathname,
-    "/installation",
+    "/setup",
   );
   const overview = await (await fetch(base + "/installation")).text();
-  assert.match(overview, /Welcome to IT Assets/);
-  assert.match(overview, /No asset database connected/);
-  assert.match(overview, /Installation navigation/);
+  assert.match(overview, /First-run setup/);
+  assert.match(overview, /Welcome &amp; Organization/);
+  assert.match(overview, /without an external database/);
   assert.ok(!overview.includes('href="/assets/new"'));
-  assert.equal((await fetch(base + "/api/settings/import/assets", { method: "POST", headers: { "x-it-assets-revision": "0" } })).status, 409);
+  assert.equal(
+    (
+      await fetch(base + "/api/settings/import/assets", {
+        method: "POST",
+        headers: { "x-it-assets-revision": "0" },
+      })
+    ).status,
+    409,
+  );
   assert.equal(
     new URL(
       (await fetch(base + "/assets/new", { redirect: "manual" })).headers.get(
@@ -106,9 +139,9 @@ try {
       ),
       base,
     ).pathname,
-    "/installation",
+    "/setup",
   );
-  assert.ok((await page()).includes("Register the installation administrator"));
+  assert.ok((await page()).includes("Register administrator"));
   const creds = {
     email: "operator@example.invalid",
     password: "Disposable operator test password.",
@@ -117,6 +150,9 @@ try {
     await post("enroll", {
       bootstrap: readFileSync(path.join(dir, "bootstrap-token"), "utf8").trim(),
       ...creds,
+      confirmPassword: creds.password,
+      siteName: "Fixture Organization",
+      appTitle: "Fixture Assets",
     }),
     /registered/,
   );
@@ -139,7 +175,7 @@ try {
   cookie = "";
   assert.match(await post("login", creds), /Signed in/);
   const leaving = cookie;
-  const outside = await fetch(base + "/installation", {
+  const outside = await fetch(base + "/setup", {
     headers: {
       Cookie: cookie + "; inventory_session=preserve-me",
       Accept: "text/html",
@@ -151,7 +187,11 @@ try {
       .every((c) => !c.startsWith("inventory_session=")),
   );
   assert.equal(
-    (await fetch(url + "/session", { headers: { Cookie: leaving } })).status,
+    (
+      await fetch(base + "/settings/database-management/session", {
+        headers: { Cookie: leaving },
+      })
+    ).status,
     401,
   );
   cookie = "";
@@ -172,8 +212,9 @@ try {
   const getId = (h) => h.match(/name="id" value="([a-f0-9-]{36})"/i)?.[1];
   const offlineId = getId(html);
   assert.ok(offlineId);
-  const msg = await post("test", { id: offlineId, revision: "0" });
-  assert.ok(!msg.includes("verified"));
+  const msg = await post("validate", { id: offlineId, revision: "0" });
+  assert.ok(!msg.includes("Connected —"));
+  assert.doesNotMatch(msg, /connection changed/i);
   assert.match(
     await post("remove", { id: offlineId, revision: "0" }),
     /removed/,
@@ -186,7 +227,7 @@ try {
       database:
         "it_assets_managed_" +
         (process.env.IT_ASSETS_TEST_RUN || "") +
-        "a_test",
+        (process.env.IT_ASSETS_HTTP_INITIALIZE === "1" ? "c_test" : "a_test"),
       username: "it_assets_test",
       password: process.env.IT_ASSETS_TEST_PASSWORD,
       provider: "mariadb",
@@ -199,10 +240,22 @@ try {
     assert.ok(!html.includes(profile.password));
     const id = getId(html);
     assert.ok(id);
-    assert.match(await post("test", { id, revision: "0" }), /verified/);
+    assert.match(await post("validate", { id, revision: "0" }), /Connected/);
+    if (process.env.IT_ASSETS_HTTP_INITIALIZE === "1") {
+      const values = {
+        id,
+        revision: "0",
+        confirm: profile.database,
+        workspaceEmail: "workspace@example.invalid",
+        workspacePassword: "Disposable workspace password",
+        workspaceConfirmPassword: "Disposable workspace password",
+      };
+      assert.match(await post("initialize", values), /Schema and workspace/);
+      assert.match(await post("initialize", values), /empty database/);
+    }
     assert.match(
       await post("inspect", { id, revision: "0" }),
-      /^Schema: compatible$/,
+      /Connected — compatible/,
     );
     assert.match(
       await post("activate", { id, revision: "0", confirm: "wrong" }),
@@ -231,6 +284,24 @@ try {
       } catch {}
     }
     assert.equal(login?.status, 200);
+    const inventoryCookie = login.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const readiness = await fetch(base + "/setup/status", {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(readiness.status, 200);
+    assert.equal((await readiness.json()).ready, true);
+    assert.equal(
+      (
+        await fetch(base + "/dashboard", {
+          headers: { Cookie: inventoryCookie },
+          redirect: "manual",
+        })
+      ).status,
+      200,
+    );
     assert.equal(
       (
         await fetch(base + "/api/auth/login", {
@@ -245,7 +316,13 @@ try {
   assert.match(await post("logout"), /Signed out/);
   assert.match(await post("save", {}), /Sign in/);
   assert.match(
-    await post("enroll", { bootstrap: "consumed", ...creds }),
+    await post("enroll", {
+      bootstrap: "consumed",
+      ...creds,
+      confirmPassword: creds.password,
+      siteName: "Fixture Organization",
+      appTitle: "Fixture Assets",
+    }),
     /closed/,
   );
   console.log(

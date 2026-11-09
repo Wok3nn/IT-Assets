@@ -11,6 +11,13 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "../../services/password";
+import {
+  organizationSchema,
+  type Organization,
+  type Inspection,
+  type RuntimeState,
+  type ReadyState,
+} from "./setup-state";
 
 export const managementPath = "/settings/database-management";
 export const managementWorkspacePath = managementPath + "/workspace";
@@ -99,6 +106,20 @@ export class ControlStore {
       CREATE TABLE IF NOT EXISTS throttle(id INTEGER PRIMARY KEY CHECK(id=1), attempts INTEGER, untilMs INTEGER);
       CREATE TABLE IF NOT EXISTS auth_config(profile TEXT PRIMARY KEY, config TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS operation(id INTEGER PRIMARY KEY CHECK(id=1), nonce TEXT NOT NULL);`);
+    try {
+      this.db.exec(`BEGIN IMMEDIATE;
+        CREATE TABLE IF NOT EXISTS setup_record(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+        INSERT OR IGNORE INTO setup_record VALUES('format','1');`);
+      if (this.readSetup<number>("format") !== 1)
+        throw new ControlError(
+          "Unsupported local setup format. Use the matching application version.",
+        );
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      this.db.close();
+      throw error;
+    }
     const keyFile = path.join(directory, "control.key");
     // Never silently replace a lost key when encrypted profiles already exist.
     const saved = this.db.prepare("SELECT 1 FROM profile LIMIT 1").get();
@@ -115,6 +136,89 @@ export class ControlStore {
   }
   close() {
     this.db.close();
+  }
+  private readSetup<T>(key: string): T | null {
+    const row = this.db
+      .prepare("SELECT value FROM setup_record WHERE key=?")
+      .get(key);
+    return row ? (JSON.parse(String(row.value)) as T) : null;
+  }
+  private writeSetup(key: string, value: unknown) {
+    this.db
+      .prepare("INSERT OR REPLACE INTO setup_record VALUES(?,?)")
+      .run(key, JSON.stringify(value));
+  }
+  organization() {
+    return this.readSetup<Organization & { version: string }>("organization");
+  }
+  saveOrganization(input: Organization, version: string) {
+    const valid = organizationSchema.parse(input);
+    this.tx(() => {
+      if ((this.organization()?.version ?? "") !== version)
+        throw new ControlError(
+          "Installation settings changed. Reload before saving.",
+        );
+      this.writeSetup("organization", { ...valid, version: randomUUID() });
+      this.audit("installation settings saved");
+    });
+  }
+  inspection(id: string) {
+    return this.readSetup<Inspection>("inspection:" + id);
+  }
+  recordInspection(id: string, value: Inspection) {
+    if (this.profiles().find((p) => p.id === id)?.version !== value.version)
+      throw new ControlError("Connection changed. Inspect again.");
+    this.writeSetup("inspection:" + id, value);
+    this.writeSetup("candidate", id);
+    if (value.status !== "compatible") this.clearReadiness();
+  }
+  candidate() {
+    return this.readSetup<string>("candidate");
+  }
+  resumeStep() {
+    if (!this.organization()) return "1";
+    if (this.state().active) return "5";
+    const id = this.candidate(),
+      evidence = id ? this.inspection(id) : null;
+    return evidence?.status === "compatible"
+      ? "5"
+      : evidence && evidence.status !== "failed"
+        ? "4"
+        : "3";
+  }
+  runtime() {
+    return this.readSetup<RuntimeState>("runtime");
+  }
+  setRuntime(value: RuntimeState) {
+    this.writeSetup("runtime", value);
+  }
+  readiness() {
+    return this.readSetup<ReadyState>("readiness");
+  }
+  clearReadiness() {
+    this.db.prepare("DELETE FROM setup_record WHERE key='readiness'").run();
+  }
+  markReady(value: ReadyState) {
+    const state = this.state(),
+      runtime = this.runtime();
+    if (
+      state.active !== value.profile ||
+      state.revision !== value.revision ||
+      runtime?.generation !== value.generation
+    )
+      throw new ControlError("Activation changed. Wait for the new process.");
+    const evidence = this.inspection(value.profile);
+    if (
+      this.profiles().find((p) => p.id === value.profile)?.version !==
+        value.version ||
+      evidence?.version !== value.version ||
+      evidence.fingerprint !== value.fingerprint ||
+      evidence.status !== "compatible"
+    )
+      throw new ControlError("Fresh compatible schema evidence is required.");
+    this.writeSetup("readiness", value);
+    if (this.organization() && this.registered())
+      this.writeSetup("completedAt", new Date().toISOString());
   }
   // Offline recovery only: caller must own the supervisor's exclusive SQLite lock.
   recover(operation: "unlock" | "password", password?: string) {
@@ -161,8 +265,14 @@ export class ControlStore {
   registered() {
     return Boolean(this.db.prepare("SELECT id FROM admin LIMIT 1").get());
   }
-  enroll(token: string, email: string, password: string) {
+  enroll(
+    token: string,
+    email: string,
+    password: string,
+    organization?: Organization,
+  ) {
     if (this.registered()) throw new ControlError("Registration is closed.");
+    this.limitAttempts();
     if (!same(token, readFileSync(this.enrollment, "utf8").trim()))
       throw new ControlError("Invalid bootstrap token.");
     const validEmail = z
@@ -173,15 +283,20 @@ export class ControlStore {
       .parse(email)
       .toLowerCase();
     z.string().min(14).max(128).parse(password);
+    const settings = organization
+      ? organizationSchema.parse(organization)
+      : null;
     this.tx(() => {
       this.db
         .prepare("INSERT INTO admin VALUES(1,?,?)")
         .run(validEmail, hashPassword(password));
+      if (settings)
+        this.writeSetup("organization", { ...settings, version: randomUUID() });
       this.audit("administrator enrolled");
     });
     unlinkSync(this.enrollment);
   }
-  login(email: string, password: string) {
+  private limitAttempts() {
     const now = Date.now();
     const allowed = this.tx(() => {
       const window = this.db
@@ -207,6 +322,10 @@ export class ControlStore {
     });
     if (!allowed)
       throw new ControlError("Too many attempts. Wait five minutes.");
+  }
+  login(email: string, password: string) {
+    const now = Date.now();
+    this.limitAttempts();
     const admin = this.db
       .prepare("SELECT email,passwordHash FROM admin WHERE id=1")
       .get() as Admin | undefined;
@@ -298,6 +417,11 @@ export class ControlStore {
             .join("."),
         );
       this.audit(existing ? "profile updated" : "profile created", id);
+      this.db
+        .prepare("DELETE FROM setup_record WHERE key=?")
+        .run("inspection:" + id);
+      this.writeSetup("candidate", id);
+      this.clearReadiness();
     });
     return id;
   }
@@ -310,6 +434,9 @@ export class ControlStore {
       this.inactive(id);
       this.db.prepare("DELETE FROM profile WHERE id=?").run(id);
       this.db.prepare("DELETE FROM auth_config WHERE profile=?").run(id);
+      this.db
+        .prepare("DELETE FROM setup_record WHERE key=?")
+        .run("inspection:" + id);
       this.audit("profile removed", id);
     });
   }
@@ -353,6 +480,7 @@ export class ControlStore {
       )
         throw new ControlError("Selection changed; reload first.");
       this.audit(id ? "profile activated" : "asset database disconnected", id);
+      this.clearReadiness();
     });
   }
   async exclusive<T>(fn: () => Promise<T>) {

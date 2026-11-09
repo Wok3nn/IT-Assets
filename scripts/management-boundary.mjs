@@ -1,5 +1,11 @@
 // Runs before Next handles any managed request. Only control sessions are revoked.
 export function requiresInventory(pathname, managementPath) {
+  if (
+    ["/setup", "/setup/workspace", "/setup/status", "/setup/db"].includes(
+      pathname,
+    )
+  )
+    return false;
   if (pathname === managementPath || pathname.startsWith(managementPath + "/"))
     return false;
   if (pathname.startsWith("/api/")) return true;
@@ -40,6 +46,7 @@ export function managementBoundary(req, res, url, store, config) {
       .find((s) => s.startsWith(controlCookie + "="))
       ?.slice(controlCookie.length + 1) || "";
   const inside =
+    ["/setup", "/setup/workspace", "/setup/status"].includes(url.pathname) ||
     url.pathname === managementPath ||
     url.pathname.startsWith(managementPath + "/");
   if (inside || req.headers.accept?.includes("text/html") || req.headers.rsc) {
@@ -91,7 +98,8 @@ export function managementBoundary(req, res, url, store, config) {
       req.headers.accept?.includes("text/html") ||
       req.headers.rsc);
   if (
-    (url.pathname === managementPath && req.method === "GET") ||
+    ([managementPath, "/setup"].includes(url.pathname) &&
+      req.method === "GET") ||
     (navigation &&
       !inside &&
       !url.pathname.startsWith("/_next/") &&
@@ -100,11 +108,13 @@ export function managementBoundary(req, res, url, store, config) {
     revoke();
   // Back/replayed requests are authorized against the store, never just the cookie.
   if (
-    url.pathname === managementWorkspacePath &&
+    [managementWorkspacePath, "/setup/workspace"].includes(url.pathname) &&
     req.method === "GET" &&
     !store.authorized(token)
   ) {
-    res.writeHead(303, { Location: managementPath });
+    res.writeHead(303, {
+      Location: url.pathname.startsWith("/setup") ? "/setup" : managementPath,
+    });
     res.end();
     return true;
   }

@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { ControlError, type Profile } from "./control-store";
 import { connectionUrl, createProfileClient } from "./profile-client";
 import { logDatabaseFailure, type DatabaseStage } from "./diagnostics";
+import type { Organization } from "./setup-state";
 const run = promisify(execFile);
 const history = (p: Profile) =>
   path.join(
@@ -234,6 +235,7 @@ export async function initializeProfile(
   p: Profile,
   email: string,
   passwordHash: string,
+  organization?: Organization,
 ) {
   const db = createProfileClient(p);
   let stage: DatabaseStage = "inspect";
@@ -299,9 +301,17 @@ export async function initializeProfile(
         data: {
           isCompleted: true,
           initializedAt: new Date(),
-          siteName: p.name,
+          siteName: organization?.siteName ?? p.name,
         },
       });
+      if (organization)
+        await tx.setting.create({
+          data: {
+            category: "general",
+            key: "app.title",
+            value: organization.appTitle,
+          },
+        });
     });
   } catch (error) {
     logDatabaseFailure(error, stage, p);

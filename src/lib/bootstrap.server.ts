@@ -11,7 +11,6 @@ import {
   control,
   managed,
   managementPath,
-  installationPath,
 } from "@/modules/database-management/control-store";
 
 export const BOOTSTRAP_SETUP_PATH = "/setup/db";
@@ -33,7 +32,7 @@ export function getBootstrapFailurePath() {
 
 export async function requireBootstrapPage() {
   if (managed()) {
-    if (!control().state().active) redirect(installationPath);
+    if (!control().state().active) redirect("/setup");
     return;
   }
   const bootstrapComplete = await isBootstrapComplete();
