@@ -13,7 +13,11 @@ import { z } from "zod";
 import { hashPassword, verifyPassword } from "../../services/password";
 
 export const managementPath = "/settings/database-management";
-export const controlCookie = "it_assets_control";
+export const managementWorkspacePath = managementPath + "/workspace";
+export const installationPath = "/installation";
+// New name avoids ambiguity with old path-scoped cookies during upgrade.
+export const controlCookie = "it_assets_management_visit";
+export const visitFingerprint = (token: string) => hash(token).toString("hex");
 export const managed = () => process.env.IT_ASSETS_MANAGED === "1";
 const hash = (s: string) => createHash("sha256").update(s).digest();
 const same = (a: string, b: string) => timingSafeEqual(hash(a), hash(b));

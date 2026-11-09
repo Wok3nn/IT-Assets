@@ -7,6 +7,8 @@ import {
   controlCookie,
   ControlError,
   managementPath,
+  managementWorkspacePath,
+  installationPath,
   profileSchema,
 } from "./control-store";
 import {
@@ -26,27 +28,40 @@ export async function databaseAction(form: FormData) {
     jar = await cookies();
   const token = jar.get(controlCookie)?.value ?? "";
   let message = "Operation completed.";
+  let destination = managementWorkspacePath;
   try {
     if (op === "enroll") {
       store.enroll(v("bootstrap"), v("email"), v("password"));
       message = "Administrator registered. Sign in to continue.";
+      destination = managementPath;
     } else if (op === "login") {
+      store.logout(token);
       const session = store.login(v("email"), v("password"));
       jar.set(controlCookie, session, {
         httpOnly: true,
         secure: origin.startsWith("https:"),
         sameSite: "strict",
-        path: managementPath,
+        path: "/",
         maxAge: 3600,
       });
       message = "Signed in.";
     } else {
-      if (!store.authorized(token))
+      if (!store.authorized(token)) {
+        destination = managementPath;
         throw new ControlError("Sign in as the installation administrator.");
-      if (op === "logout") {
+      }
+      if (op === "logout" || op === "exit") {
         store.logout(token);
-        jar.set(controlCookie, "", { path: managementPath, maxAge: 0 });
+        jar.set(controlCookie, "", { path: "/", maxAge: 0 });
         message = "Signed out.";
+        destination =
+          op === "logout"
+            ? managementPath
+            : store.state().active && v("destination") === "settings"
+              ? "/settings"
+              : store.state().active && v("destination") === "inventory"
+                ? "/"
+                : installationPath;
       } else
         await store.exclusive(async () => {
           const current = store.state();
@@ -151,6 +166,7 @@ export async function databaseAction(form: FormData) {
         });
     }
   } catch (e) {
+    if (!store.authorized(token)) destination = managementPath;
     if (e instanceof ControlError) message = e.message;
     else if (e instanceof z.ZodError)
       message =
@@ -189,5 +205,5 @@ export async function databaseAction(form: FormData) {
           : null,
       );
   }
-  redirect(managementPath + "?message=" + encodeURIComponent(message));
+  redirect(destination + "?message=" + encodeURIComponent(message));
 }

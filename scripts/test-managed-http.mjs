@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 const dir = mkdtempSync(path.join(tmpdir(), "it-assets-http-")),
   base = "http://localhost:4050",
-  url = base + "/settings/database-management";
+  url = base + "/settings/database-management",
+  workspace = url + "/workspace";
 const server = spawn(
   process.execPath,
   ["--import", "tsx", "scripts/managed-start.mjs"],
@@ -25,8 +26,8 @@ const server = spawn(
 const exited = once(server, "exit");
 let cookie = "",
   action;
-async function page() {
-  const r = await fetch(url, { headers: { Cookie: cookie } });
+async function page(target = cookie ? workspace : url) {
+  const r = await fetch(target, { headers: { Cookie: cookie } });
   assert.equal(r.status, 200);
   const html = await r.text();
   action = html.match(/name="(\$ACTION_ID_[a-z0-9]+)"/i)?.[1];
@@ -45,7 +46,7 @@ async function post(op, values = {}) {
     f.set("version", own?.match(/name="version" value="([^"]*)"/)?.[1] ?? "");
   }
   for (const [k, v] of Object.entries(values)) f.set(k, v);
-  const r = await fetch(url, {
+  const r = await fetch(cookie ? workspace : url, {
     method: "POST",
     headers: { Origin: base, Cookie: cookie },
     body: f,
@@ -54,8 +55,16 @@ async function post(op, values = {}) {
   assert.equal(r.status, 303);
   const c = r.headers
     .getSetCookie()
-    .find((s) => s.startsWith("it_assets_control="));
-  if (c) cookie = c.split(";")[0];
+    .find((s) => s.startsWith("it_assets_management_visit="));
+  if (c) {
+    cookie = c.split(";")[0];
+    if (c.includes("Max-Age=0")) cookie = "";
+    else {
+      assert.match(c, /HttpOnly/i);
+      assert.match(c, /SameSite=strict/i);
+      assert.match(c, /Path=\//);
+    }
+  }
   return new URL(r.headers.get("location"), base).searchParams.get("message");
 }
 try {
@@ -82,7 +91,22 @@ try {
       (await fetch(base, { redirect: "manual" })).headers.get("location"),
       base,
     ).pathname,
-    "/settings/database-management",
+    "/installation",
+  );
+  const overview = await (await fetch(base + "/installation")).text();
+  assert.match(overview, /Welcome to IT Assets/);
+  assert.match(overview, /No asset database connected/);
+  assert.match(overview, /Installation navigation/);
+  assert.ok(!overview.includes('href="/assets/new"'));
+  assert.equal((await fetch(base + "/api/settings/import/assets", { method: "POST", headers: { "x-it-assets-revision": "0" } })).status, 409);
+  assert.equal(
+    new URL(
+      (await fetch(base + "/assets/new", { redirect: "manual" })).headers.get(
+        "location",
+      ),
+      base,
+    ).pathname,
+    "/installation",
   );
   assert.ok((await page()).includes("Register the installation administrator"));
   const creds = {
@@ -97,6 +121,40 @@ try {
     /registered/,
   );
   assert.match(await post("save", {}), /Sign in/);
+  assert.match(await post("login", creds), /Signed in/);
+  assert.match(await page(), /Back to IT Assets/);
+  const firstSession = cookie;
+  const entry = await fetch(url, {
+    headers: { Cookie: cookie },
+    redirect: "manual",
+  });
+  assert.equal(entry.status, 200);
+  assert.match(await entry.text(), /Local administrator sign-in/);
+  const replay = await fetch(workspace, {
+    headers: { Cookie: firstSession },
+    redirect: "manual",
+  });
+  assert.equal(replay.status, 303);
+  assert.match(replay.headers.get("cache-control"), /no-store/);
+  cookie = "";
+  assert.match(await post("login", creds), /Signed in/);
+  const leaving = cookie;
+  const outside = await fetch(base + "/installation", {
+    headers: {
+      Cookie: cookie + "; inventory_session=preserve-me",
+      Accept: "text/html",
+    },
+  });
+  assert.ok(
+    outside.headers
+      .getSetCookie()
+      .every((c) => !c.startsWith("inventory_session=")),
+  );
+  assert.equal(
+    (await fetch(url + "/session", { headers: { Cookie: leaving } })).status,
+    401,
+  );
+  cookie = "";
   assert.match(await post("login", creds), /Signed in/);
   const offline = {
     name: "Offline SQL fixture",
@@ -185,8 +243,13 @@ try {
     assert.ok((await page()).includes("HTTP inventory · Active"));
   }
   assert.match(await post("logout"), /Signed out/);
+  assert.match(await post("save", {}), /Sign in/);
+  assert.match(
+    await post("enroll", { bootstrap: "consumed", ...creds }),
+    /closed/,
+  );
   console.log(
-    "PASS: offline enrollment, management session, credential redaction, unreachable-SQL recovery" +
+    "PASS: offline setup shell, enrollment, fresh entry, server-side exit, cookie isolation, unauthorized requests, credential redaction, unreachable-SQL recovery" +
       (process.env.IT_ASSETS_HTTP_FIXTURE === "1"
         ? ", activation, restart, inventory sign-in and stale-write rejection"
         : ""),

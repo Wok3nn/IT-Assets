@@ -56,12 +56,17 @@ function Form({
 }
 export function ControlLogin({ registered }: { registered: boolean }) {
   return (
-    <PanelCard>
+    <PanelCard className="max-w-2xl">
       <h2 className="mb-4 text-xl font-semibold">
         {registered
           ? "Local administrator sign-in"
           : "Register the installation administrator"}
       </h2>
+      <p className="mb-4 text-sm">
+        {registered
+          ? "Use your installation account, not your workspace credentials. A new visit requires a fresh sign-in."
+          : "Read bootstrap-token in the private control directory shown by the launcher. Keep this token private; enrollment consumes it permanently."}
+      </p>
       <Form op={registered ? "login" : "enroll"}>
         {!registered && (
           <Field
@@ -158,16 +163,15 @@ export function DatabasePanel({
             {profiles.find((p) => p.id === active)?.name ?? "None selected"}
           </strong>
         </p>
-        {active && (
-          <a className="underline" href="/login">
-            Open inventory sign-in
-          </a>
-        )}
-        <Form op="logout">
-          <Button type="submit" variant="ghost">
-            Sign out of database management
-          </Button>
-        </Form>
+        <p className="mt-2 text-sm">
+          Save a connection → Test connectivity → Inspect schema → Activate.
+          Initialize only an explicitly empty database. Existing compatible
+          databases do not need initialization.
+        </p>
+        <p className="mt-2 text-sm">
+          Your installation account does not grant inventory access. Use Back to
+          IT Assets to leave management and open the workspace.
+        </p>
       </PanelCard>
       <PanelCard>
         <h2 className="mb-3 text-xl font-semibold">Add a connection</h2>
@@ -182,10 +186,10 @@ export function DatabasePanel({
             {p.name}
             {p.id === active ? " · Active" : ""}
           </h2>
-          <p>
+          <p className="break-words">
             {p.provider} · {p.host}:{p.port} / {p.database}
           </p>
-          <div className="my-4 flex gap-2">
+          <div className="my-4 flex flex-wrap gap-2">
             {["test", "inspect"].map((op) => (
               <Form
                 key={op}

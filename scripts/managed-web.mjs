@@ -1,5 +1,13 @@
 import http from "node:http";
 import next from "next";
+import storeModule from "../src/modules/database-management/control-store.ts";
+import {
+  managementBoundary,
+  requiresInventory,
+} from "./management-boundary.mjs";
+const controlStore = new storeModule.ControlStore(
+  process.env.IT_ASSETS_CONTROL_DIR,
+);
 const dev = process.env.IT_ASSETS_MANAGED_DEV === "1";
 const hostname = process.env.IT_ASSETS_BIND || "127.0.0.1",
   port = 4050;
@@ -36,8 +44,39 @@ server = http.createServer((req, res) => {
     return res.end("Invalid request URL.");
   }
   if (
+    managementBoundary(req, res, url, controlStore, {
+      ...storeModule,
+      origin: new URL(process.env.APP_URL).origin,
+    })
+  )
+    return;
+  // Next layouts and pages may execute concurrently. Stop offline inventory
+  // requests before either starts, rather than relying only on a layout redirect.
+  if (
+    requiresInventory(url.pathname, storeModule.managementPath) &&
+    !controlStore.state().active
+  ) {
+    res.setHeader("Cache-Control", "private, no-store");
+    if (
+      ["GET", "HEAD"].includes(req.method) &&
+      !url.pathname.startsWith("/api/")
+    ) {
+      res.writeHead(303, { Location: storeModule.installationPath });
+      return res.end();
+    }
+    res.writeHead(409, { "Content-Type": "application/json" });
+    return res.end(
+      JSON.stringify({
+        error:
+          "Connect and activate an asset database in Database Management before using inventory features.",
+      }),
+    );
+  }
+  if (
     !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-    url.pathname !== "/settings/database-management" &&
+    ![storeModule.managementPath, storeModule.managementWorkspacePath].includes(
+      url.pathname,
+    ) &&
     req.headers["x-it-assets-revision"] !== process.env.IT_ASSETS_REVISION &&
     url.searchParams.get("_inventory") !== process.env.IT_ASSETS_REVISION
   ) {

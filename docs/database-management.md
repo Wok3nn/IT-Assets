@@ -1,5 +1,10 @@
 # Database management: architecture decision and rollout (2026-11-05)
 
+For the current first-run shell, fresh management authentication, isolated installation
+tests and restoration instructions, see [managed setup UX](managed-setup-ux.md).
+Management entry now always prompts for sign-in; authenticated work uses its workspace
+subroute. The original deployment/SQL preparation details below still apply.
+
 Base: 378cc8d. The existing process constructs Prisma lazily; starting a listener is
 not equivalent to being able to sign in. Home, setup, local login, session refresh,
 branding, Entra config, role grants, and the dashboard shell query the selected asset

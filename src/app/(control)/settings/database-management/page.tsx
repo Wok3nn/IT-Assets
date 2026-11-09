@@ -1,15 +1,9 @@
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { PageHero } from "@/components/layout/page-hero";
-import {
-  control,
-  controlCookie,
-  managed,
-} from "@/modules/database-management/control-store";
-import {
-  ControlLogin,
-  DatabasePanel,
-} from "@/modules/database-management/panel";
+import { InstallationShell } from "@/components/layout/installation-shell";
+import { control, managed } from "@/modules/database-management/control-store";
+import { ControlLogin } from "@/modules/database-management/panel";
+import { ManagementNavigation } from "@/modules/database-management/navigation";
 export const dynamic = "force-dynamic";
 export default async function DatabaseManagement({
   searchParams,
@@ -18,28 +12,25 @@ export default async function DatabaseManagement({
 }) {
   if (!managed()) notFound();
   const store = control(),
-    authorized = store.authorized(
-      (await cookies()).get(controlCookie)?.value ?? "",
-    );
+    active = Boolean(store.state().active);
   const { message } = await searchParams;
   return (
-    <main className="mx-auto max-w-4xl space-y-5 p-6">
+    <InstallationShell
+      context="Installation administrator sign-in"
+      navigation={<ManagementNavigation active={active} />}
+    >
       <PageHero>
-        <h1 className="text-3xl font-semibold">Database Management</h1>
+        <h1 className="text-3xl font-semibold">
+          {store.registered() ? "Database Management" : "Welcome to IT Assets"}
+        </h1>
         <p className="mt-2">
-          Manage this installation independently of its asset database.
+          {store.registered()
+            ? "Sign in for this management visit. Your workspace session stays separate."
+            : "First, secure your installation with a local administrator. No external database is required."}
         </p>
       </PageHero>
       {message && <p role="status">{message}</p>}
-      {authorized ? (
-        <DatabasePanel
-          {...store.state()}
-          profiles={store.profiles()}
-          activity={store.activity()}
-        />
-      ) : (
-        <ControlLogin registered={store.registered()} />
-      )}
-    </main>
+      <ControlLogin registered={store.registered()} />
+    </InstallationShell>
   );
 }

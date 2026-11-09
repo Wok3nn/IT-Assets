@@ -87,11 +87,15 @@ try {
         pinned.active || "unconfigured",
       ),
     };
-    child = spawn(process.execPath, ["scripts/managed-web.mjs"], {
-      env,
-      stdio: ["inherit", "inherit", "inherit", "ipc"],
-      windowsHide: true,
-    });
+    child = spawn(
+      process.execPath,
+      ["--import", "tsx", "scripts/managed-web.mjs"],
+      {
+        env,
+        stdio: ["inherit", "inherit", "inherit", "ipc"],
+        windowsHide: true,
+      },
+    );
     let ready = false,
       draining = false;
     child.on("message", (m) => {

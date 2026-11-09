@@ -11,7 +11,7 @@ type SettingsNavCardProps = {
 
 export function SettingsNavCard({ href, title, description, badge = "Open" }: SettingsNavCardProps) {
   return (
-    <Link className={navCardClass} href={href}>
+    <Link className={navCardClass} href={href} prefetch={href === "/settings/database-management" ? false : undefined}>
       <div className="flex h-full flex-col justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">Navigation</p>

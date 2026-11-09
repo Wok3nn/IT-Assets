@@ -211,6 +211,15 @@ Managed SQL Server uses a separate empty-database migration history. Existing Ma
 migration SQL is unchanged. See [the architecture decision and operations guide](database-management.md)
 for catalog checks, isolation, SSMS setup, backups, validation and rollout limits.
 
+Managed setup uses a database-independent `InstallationShell` and `/installation`
+overview. Management entry always requires fresh local authentication; its authenticated
+workspace is a separate route. The managed HTTP boundary revokes control visits on
+entry/exit, prevents caching, and blocks unconfigured inventory requests before Next's
+concurrent layout/page rendering. Server actions still enforce authorization and origin
+checks. Workspace sessions and database activation logic remain separate. See
+[managed setup UX and testing](managed-setup-ux.md) for lifecycle details and safe
+fresh-control-store testing; never reset an existing inventory for a setup test.
+
 ## Integration boundary
 
 `src/app/api/integrations/v1/assigned-assets/route.ts` delegates to the integrations
