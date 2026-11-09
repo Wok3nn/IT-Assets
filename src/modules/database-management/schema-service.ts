@@ -7,6 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { ControlError, type Profile } from "./control-store";
 import { connectionUrl, createProfileClient } from "./profile-client";
+import { logDatabaseFailure, type DatabaseStage } from "./diagnostics";
 const run = promisify(execFile);
 const history = (p: Profile) =>
   path.join(
@@ -15,25 +16,34 @@ const history = (p: Profile) =>
     p.provider,
   );
 async function cli(p: Profile, args: string[]) {
-  return run(
-    process.execPath,
-    [
-      "node_modules/prisma/build/index.js",
-      ...args,
-      "--config",
-      "prisma.managed.config.ts",
-    ],
-    {
-      timeout: 120000,
-      windowsHide: true,
-      maxBuffer: 4 * 1024 * 1024,
-      env: {
-        ...process.env,
-        DB_PROVIDER: p.provider,
-        DATABASE_URL: connectionUrl(p),
+  try {
+    return await run(
+      process.execPath,
+      [
+        "node_modules/prisma/build/index.js",
+        ...args,
+        "--config",
+        "prisma.managed.config.ts",
+      ],
+      {
+        timeout: 120000,
+        windowsHide: true,
+        maxBuffer: 4 * 1024 * 1024,
+        env: {
+          ...process.env,
+          DB_PROVIDER: p.provider,
+          DATABASE_URL: connectionUrl(p),
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    logDatabaseFailure(
+      error,
+      args[1] === "deploy" ? "migrate-deploy" : "migrate-diff",
+      p,
+    );
+    throw error;
+  }
 }
 export type Classification =
   | "empty"
@@ -202,6 +212,9 @@ export async function checkProfile(p: Profile) {
   const db = createProfileClient(p);
   try {
     return await inspect(db, p);
+  } catch (error) {
+    logDatabaseFailure(error, "inspect", p);
+    throw error;
   } finally {
     await db.$disconnect();
   }
@@ -210,6 +223,9 @@ export async function testConnection(p: Profile) {
   const db = createProfileClient(p);
   try {
     await db.$queryRaw`SELECT 1 AS healthy`;
+  } catch (error) {
+    logDatabaseFailure(error, "connect", p);
+    throw error;
   } finally {
     await db.$disconnect();
   }
@@ -220,11 +236,13 @@ export async function initializeProfile(
   passwordHash: string,
 ) {
   const db = createProfileClient(p);
+  let stage: DatabaseStage = "inspect";
   try {
     if ((await inspect(db, p)) !== "empty")
       throw new ControlError(
         "Initialization requires an empty database. Nothing was applied.",
       );
+    stage = "permissions";
     if (p.provider === "mariadb") {
       // SELECT alone may hide routines/events. Require full database ownership during initialization.
       const grants =
@@ -250,7 +268,9 @@ export async function initializeProfile(
           "Initialization requires db_owner on this empty SQL Server database. Use a separate runtime login afterward.",
         );
     }
+    stage = "migrate-deploy";
     await cli(p, ["migrate", "deploy"]);
+    stage = "bootstrap";
     await db.$transaction(async (tx) => {
       const roles = [
         ["SUPER_ADMIN", "Super Admin"],
@@ -283,6 +303,9 @@ export async function initializeProfile(
         },
       });
     });
+  } catch (error) {
+    logDatabaseFailure(error, stage, p);
+    throw error;
   } finally {
     await db.$disconnect();
   }
