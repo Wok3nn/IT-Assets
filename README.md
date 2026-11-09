@@ -15,11 +15,14 @@ With Node 24 and npm, clone the repository, run `npm ci`, then `npm run dev`.
 No database URL, running MariaDB service, or edits to an existing `.env` are needed.
 Open [localhost:4050](http://localhost:4050). Read the one-time token locally with
 `Get-Content .managed-data/bootstrap-token` (PowerShell), register the installation
-administrator, then sign in to **Settings → Database Management**.
+administrator in the original styled `/setup` wizard, then sign in to continue.
+Organization and initial application name are stored locally without an asset database.
 
-Save and test a SQL Server or MariaDB profile. Inspect it, explicitly initialize a
-dedicated empty database with a separate workspace administrator, inspect again and
-activate. Sign in to the inventory with that workspace account. Each profile retains
+Save a SQL Server or MariaDB profile and choose **Test Connection & Inspect Schema**.
+Explicitly initialize a dedicated empty database with a separate workspace administrator,
+or reuse an existing compatible inventory without initialization. Activate, wait for
+the verified completion checklist, then choose **Go to IT Assets** and sign in with
+workspace credentials. Each profile retains
 its own inventory; switching never migrates records. Database Management remains
 available at [its direct URL](http://localhost:4050/settings/database-management)
 when the inventory database is offline.
@@ -31,6 +34,7 @@ Find the bootstrap token with `docker compose -f docker/compose.managed.yml exec
 The original MariaDB compose and legacy production startup remain available.
 
 See [Database Management: SSMS setup, permissions, TLS, switching, recovery and tests](docs/database-management.md).
+See [Unified setup: isolated fresh-install test and safe restoration](docs/unified-first-run-setup.md).
 **Live SQL Server and Docker acceptance are pending**; validate on a disposable instance
 before rollout. The managed reminder worker is not enabled in this release.
 

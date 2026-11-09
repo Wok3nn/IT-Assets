@@ -1,6 +1,32 @@
 # Architecture
 
-Last updated: 2026-11-05
+Last updated: 2026-11-09
+
+## Unified managed installation
+
+`/setup` serves enrollment/sign-in independently of inventory. `/setup/workspace`
+orchestrates authenticated wizard steps; `/setup/status` checks readiness under the
+control operation lock. `/installation` and managed `/setup/db` are aliases.
+The original legacy wizard retains its API and uses the extracted
+`components/layout/setup-wizard-shell.tsx` presentation.
+
+`modules/database-management` owns local organization, progress, forms, connection
+inspection and completion. `setup_record` is an additive, transactional, versioned
+SQLite upgrade. Organization/enrollment commit atomically; existing identities,
+encrypted profiles and selections remain intact. No asset migrations are introduced.
+Local organization settings are copied only during explicit empty-database bootstrap.
+
+`AppShellClient` owns shared inventory/control sidebar styling and responsive behavior.
+`AppShellRoot` remains the inventory data adapter; `ControlShell` supplies local values
+and control navigation without querying asset tables. No separate installation sidebar.
+Connection components are shared between the wizard and Settings management.
+
+The supervisor records a unique child generation, pinned selection/revision and live
+heartbeat. Readiness requires that exact process, compatible schema/workspace and a
+live connection probe. Profile/schema changes invalidate evidence; connectivity is
+probed on each status request and schema inspection repeats at least every minute.
+Historical inspections are labeled as such. Neither a saved selection nor a started
+process alone means ready. See [implementation and validation](unified-first-run-setup.md).
 
 ## Structure Overview
 

@@ -1,5 +1,10 @@
 # Managed setup and management visits
 
+Historical implementation review. The separate installation shell described below
+has been retired by [unified first-run setup](unified-first-run-setup.md). `/setup`
+now owns first-run entry and the existing application sidebar presentation is shared
+with Database Management. The authentication and offline-boundary safeguards remain.
+
 ## Review before implementation
 
 The verified starting point is commit 65f5177. The owner reports successful SQL

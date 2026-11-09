@@ -2,6 +2,13 @@
 
 Date: 2026-11-09. Reviewed baseline: 334e15a, `feature/managed-setup-ux`.
 Status: proposed implementation plan; no application behavior changed in this phase.
+
+Phase 2 implementation is now on `feature/unified-first-run-setup`. See
+[delivery, validation and safe testing](unified-first-run-setup.md). This document
+retains the approved design baseline. Implementation keeps the setup domain in the
+existing database-management module instead of creating a parallel module; it reuses
+`AppShellClient` directly rather than extracting another sidebar. Organization and
+enrollment are atomic, with draft organization values kept in the form until enrollment.
 The owner's successful SQL Server acceptance is preserved. No development database,
 saved credentials, control database or running server was accessed for this review.
 

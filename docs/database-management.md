@@ -1,9 +1,11 @@
 # Database management: architecture decision and rollout (2026-11-05)
 
-For the current first-run shell, fresh management authentication, isolated installation
-tests and restoration instructions, see [managed setup UX](managed-setup-ux.md).
+For the current unified wizard, fresh management authentication, isolated installation
+tests and restoration instructions, see [unified first-run setup](unified-first-run-setup.md).
 Management entry now always prompts for sign-in; authenticated work uses its workspace
-subroute. The original deployment/SQL preparation details below still apply.
+subroute. `/setup` is the canonical offline entry; `/installation` and managed `/setup/db`
+redirect there. Test and schema inspection are now one primary action. The original
+deployment/SQL preparation details below still apply.
 
 Base: 378cc8d. The existing process constructs Prisma lazily; starting a listener is
 not equivalent to being able to sign in. Home, setup, local login, session refresh,
