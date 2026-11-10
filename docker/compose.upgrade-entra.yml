@@ -1,0 +1,14 @@
+# Optional overlay when legacy Entra has a configured secret.
+# Use together with compose.upgrade.yml. No secret value belongs in this file.
+services:
+  it-assets:
+    environment:
+      IT_ASSETS_ENTRA_SECRET_UPGRADE_FILE: /run/secrets/entra_upgrade
+    secrets: [entra_upgrade]
+  adoption:
+    environment:
+      IT_ASSETS_ENTRA_SECRET_UPGRADE_FILE: /run/secrets/entra_upgrade
+    secrets: [entra_upgrade]
+secrets:
+  entra_upgrade:
+    file: ${IT_ASSETS_ENTRA_SECRET_FILE:?Set the unchanged legacy Entra secret file}

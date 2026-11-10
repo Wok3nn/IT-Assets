@@ -8,6 +8,9 @@ The application runs on **port 4050**.
 Current version: **0.6.0 — pending production acceptance**. See the
 [release and connection guide](docs/release-0.6.0.md) for UI changes, MariaDB account
 setup, environment preconfiguration findings and validation limits.
+Existing Docker/MariaDB installations must follow the [upgrade and rollback guide](docs/docker-upgrade.md).
+Phase 5 adds explicit offline adoption and preservation checks; production remains
+blocked pending Docker rehearsal, restore/rollback and deployment acceptance.
 
 Built with Next.js App Router, React, TypeScript, Tailwind, Zod and Prisma 6.
 MariaDB 11.4 remains supported. Managed installations can select MariaDB or Microsoft SQL Server. SQLite is a legacy development/test

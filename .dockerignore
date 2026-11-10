@@ -1,6 +1,11 @@
 .git
 .audit-runtime
 .managed-data
+.managed-data-backup*
+secrets
+backups
+**/secrets/**
+**/backups/**
 .next-managed-dev
 .next-managed
 .github

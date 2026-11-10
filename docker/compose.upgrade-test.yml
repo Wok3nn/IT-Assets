@@ -1,0 +1,30 @@
+# Isolated representative fixture only. No external network or production volume.
+name: it-assets-upgrade-rehearsal
+services:
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: it_assets_managed_up5a_test
+      MARIADB_USER: it_assets_test
+      MARIADB_PASSWORD: isolated-upgrade-test-password
+      MARIADB_ROOT_PASSWORD: isolated-upgrade-test-root
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  test:
+    build:
+      context: ..
+      dockerfile: docker/managed.Dockerfile
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      IT_ASSETS_UPGRADE_TEST_DOCKER: "1"
+      IT_ASSETS_TEST_PASSWORD: isolated-upgrade-test-password
+    volumes:
+      - ../tests:/app/tests:ro
+    command: ["node", "--conditions=react-server", "--import", "tsx", "--test", "tests/managed-db/adoption.test.ts"]

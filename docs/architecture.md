@@ -34,6 +34,15 @@ the authenticated status endpoint. Management success matches the verified profi
 and revision, so another activation cannot satisfy an older request. Token help
 formats the configured path without reading its secret. See [0.6.0 release notes](release-0.6.0.md).
 
+Phase 5 adds an explicitly invoked offline MariaDB adoption command under the existing
+supervisor ownership lock. Compatibility, original settings-key decryption, Entra
+reference conversion and branding files are checked before an inactive profile and
+adoption marker commit atomically. No inventory rows/migrations are written. Activation
+still uses the existing administrator action; startup checks the verified deployment
+secrets. Legacy branding URLs translate on read so rollback retains original values.
+The adopted profile cannot be retargeted to another database. See the
+[Docker upgrade runbook and production blockers](docker-upgrade.md).
+
 The supervisor records a unique child generation, pinned selection/revision and live
 heartbeat. Readiness requires that exact process, compatible schema/workspace and a
 live connection probe. Profile/schema changes invalidate evidence; connectivity is

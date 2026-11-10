@@ -1,0 +1,64 @@
+# Candidate upgrade deployment; production acceptance is blocked until rehearsal.
+# The existing MariaDB service/storage stay in their original Compose project.
+name: it-assets-upgrade
+x-runtime: &runtime
+  image: ${IT_ASSETS_MANAGED_IMAGE:?Set the tested immutable managed image tag or digest}
+  environment: &environment
+    IT_ASSETS_CONTROL_DIR: /data/control
+    IT_ASSETS_BIND: 0.0.0.0
+    IT_ASSETS_MANAGED_URL: ${APP_URL:?Set the unchanged public application URL}
+    APP_SETTINGS_ENCRYPTION_KEY_FILE: /run/secrets/settings_key
+    APP_TIME_ZONE: ${APP_TIME_ZONE:-}
+  volumes:
+    - control:/data/control
+  networks:
+    - inventory
+  secrets:
+    - settings_key
+services:
+  it-assets:
+    <<: *runtime
+    ports:
+      - "${IT_ASSETS_BIND_ADDRESS:-127.0.0.1}:${IT_ASSETS_HOST_PORT:-4050}:4050"
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    healthcheck:
+      # Control-plane liveness only. Workspace readiness is verified after activation.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4050/setup',{signal:AbortSignal.timeout(5000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+  adoption:
+    <<: *runtime
+    profiles: [maintenance]
+    command: ["node", "--import", "tsx", "scripts/adopt-legacy.mjs", "check"]
+    environment:
+      <<: *environment
+      IT_ASSETS_ADOPT_DATABASE_URL_FILE: /run/secrets/legacy_database_url
+      IT_ASSETS_LEGACY_BRANDING_DIR: /legacy-branding
+    volumes:
+      - control:/data/control
+      - type: bind
+        source: ${IT_ASSETS_LEGACY_BRANDING_DIR:?Set the extracted branding/uploads backup directory}
+        target: /legacy-branding
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets:
+      - settings_key
+      - legacy_database_url
+volumes:
+  control:
+    external: true
+    name: ${IT_ASSETS_CONTROL_VOLUME:?Set a dedicated pre-created control volume}
+networks:
+  inventory:
+    external: true
+    name: ${IT_ASSETS_EXISTING_NETWORK:?Set the actual network of the existing MariaDB service}
+secrets:
+  settings_key:
+    file: ${IT_ASSETS_SETTINGS_KEY_FILE:?Set the original encryption key secret file}
+  legacy_database_url:
+    file: ${IT_ASSETS_LEGACY_DATABASE_URL_FILE:?Set the explicitly exported legacy DATABASE_URL secret file}
