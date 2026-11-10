@@ -99,7 +99,8 @@ until a profile is selected, so an existing MariaDB `.env` cannot select that da
    stop and select another empty database; do not reset it through the application.
 5. Initialize explicitly with test workspace credentials and the exact database name.
    Wait for compatible inspection. Do not resubmit after a lost response: inspect first.
-6. Review & Complete → Activate this inventory → type its exact name → Activate database.
+6. Workspace Preparation → Activate Database → type its exact name → Activate database.
+   Then choose Next to Review & Complete.
    Wait for the automatic restart and current readiness checks. If asked, sign back into
    setup; configuration and progress are durable.
 7. Verify congratulations, then Go to IT Assets and sign in with workspace credentials.
@@ -139,6 +140,10 @@ restart web` (single line). No VM/OS/Docker-daemon restart is needed. An adminis
 who installed a custom Windows service should use that service's own restart procedure.
 
 ## Validation executed
+
+The table below records Phase 2. See [Phase 3 UX refinement](setup-ux-refinement.md)
+for the current wizard, Settings sidebar behavior, subsequent validation and safe
+existing-compatible-database owner testing instructions.
 
 Windows host, Node 26.13.0, Prisma/client 6.19.2:
 

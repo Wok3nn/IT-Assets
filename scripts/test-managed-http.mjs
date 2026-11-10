@@ -24,15 +24,17 @@ const server = spawn(
   },
 );
 const exited = once(server, "exit");
-let cookie = "";
+let cookie = "", inventoryCookie = "";
+const cookies = () => [cookie, inventoryCookie].filter(Boolean).join("; ");
 async function page(target = cookie ? workspace : url) {
-  const r = await fetch(target, { headers: { Cookie: cookie } });
+  const r = await fetch(target, { headers: { Cookie: cookies() } });
   assert.equal(r.status, 200);
   const html = await r.text();
   return html.replaceAll("<!-- -->", "");
 }
-async function post(op, values = {}) {
-  const html = await page();
+async function post(op, values = {}, context = "setup") {
+  const actionUrl = context === "management" ? base + "/settings/database-management" + (cookie ? "/workspace" : "") : cookie ? workspace : url;
+  const html = await page(actionUrl);
   const f = new FormData();
   const forms = html.match(/<form[\s\S]*?<\/form>/g) || [];
   const own =
@@ -59,11 +61,11 @@ async function post(op, values = {}) {
     if (name) f.set(decode(name), decode(value));
   }
   f.set("op", op);
-  f.set("context", "setup");
+  f.set("context", context);
   for (const [k, v] of Object.entries(values)) f.set(k, v);
-  const r = await fetch(cookie ? workspace : url, {
+  const r = await fetch(actionUrl, {
     method: "POST",
-    headers: { Origin: base, Cookie: cookie },
+    headers: { Origin: base, Cookie: cookies() },
     body: f,
     redirect: "manual",
   });
@@ -158,7 +160,18 @@ try {
   );
   assert.match(await post("save", {}), /Sign in/);
   assert.match(await post("login", creds), /Signed in/);
-  assert.match(await page(), /Back to IT Assets/);
+  assert.match(await page(), /Sign out of setup/);
+  const adminStep = await page(workspace + "?step=2");
+  assert.match(adminStep, /Installation administrator created/);
+  assert.match(adminStep, /operator@example.invalid/);
+  assert.doesNotMatch(adminStep, /Register administrator/);
+  const managementEntry = await page(base + "/settings/database-management");
+  assert.doesNotMatch(managementEntry, /First-run setup<\/p>|href="\/settings"/);
+  assert.match(managementEntry, /Installation administrator sign-in/);
+  cookie = "";
+  assert.match(await post("login", creds), /Signed in/);
+  assert.doesNotMatch(await page(), /Continue to workspace preparation/);
+  assert.equal(new URL((await fetch(workspace + "?step=5", { headers: { Cookie: cookie }, redirect: "manual" })).headers.get("location"), base).searchParams.get("step"), "3");
   const firstSession = cookie;
   const entry = await fetch(url, {
     headers: { Cookie: cookie },
@@ -208,6 +221,7 @@ try {
   };
   assert.match(await post("save", offline), /saved/);
   let html = await page();
+  assert.doesNotMatch(html, /<details[^>]*open=""[^>]*>\s*<summary[^>]*>Add a connection/);
   assert.ok(!html.includes(offline.password));
   const getId = (h) => h.match(/name="id" value="([a-f0-9-]{36})"/i)?.[1];
   const offlineId = getId(html);
@@ -284,7 +298,7 @@ try {
       } catch {}
     }
     assert.equal(login?.status, 200);
-    const inventoryCookie = login.headers
+    inventoryCookie = login.headers
       .getSetCookie()
       .map((c) => c.split(";")[0])
       .join("; ");
@@ -311,7 +325,27 @@ try {
       ).status,
       409,
     );
-    assert.ok((await page()).includes("HTTP inventory · Active"));
+    assert.ok((await page(workspace + "?step=4")).includes("HTTP inventory · Active"));
+    const review = await page(workspace + "?step=5");
+    assert.match(review, /Setup checklist/);
+    assert.doesNotMatch(review, /Add a connection|name="op" value="inspect"/);
+    assert.match(await post("exit", { destination: "inventory" }), /Signed out|visit ended/i);
+    const managementUrl = base + "/settings/database-management";
+    const before = await page(managementUrl);
+    for (const href of ["/dashboard", "/assets", "/settings"]) assert.ok(before.includes(`href="${href}"`));
+    assert.match(before, /Installation administrator sign-in/);
+    assert.match(await post("login", creds, "management"), /Signed in/);
+    const protectedPage = await page(managementUrl + "/workspace");
+    assert.match(protectedPage, /Back to Settings/);
+    assert.ok(protectedPage.includes('href="/assets"'));
+    assert.doesNotMatch(protectedPage, /Setup checklist|Review &amp; Complete/);
+    const visit = cookie;
+    const settings = await fetch(base + "/settings", { headers: { Cookie: cookies(), Accept: "text/html" } });
+    assert.equal(settings.status, 200);
+    assert.equal((await fetch(managementUrl + "/session", { headers: { Cookie: visit } })).status, 401);
+    assert.equal((await fetch(base + "/dashboard", { headers: { Cookie: inventoryCookie }, redirect: "manual" })).status, 200);
+    cookie = "";
+    assert.match(await post("login", creds), /Signed in/);
   }
   assert.match(await post("logout"), /Signed out/);
   assert.match(await post("save", {}), /Sign in/);
@@ -331,6 +365,7 @@ try {
         ? ", activation, restart, inventory sign-in and stale-write rejection"
         : ""),
   );
+  console.log("Isolated test control directory: " + dir);
 } finally {
   if (server.connected) server.send("stop");
   await exited;

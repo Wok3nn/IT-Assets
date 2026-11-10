@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-11-09
+Last updated: 2026-11-10
 
 ## Unified managed installation
 
@@ -20,6 +20,13 @@ Local organization settings are copied only during explicit empty-database boots
 `AppShellRoot` remains the inventory data adapter; `ControlShell` supplies local values
 and control navigation without querying asset tables. No separate installation sidebar.
 Connection components are shared between the wizard and Settings management.
+
+`ManagementShell` chooses the existing `AppShellRoot` for an authenticated workspace
+session before and after separate installation sign-in, falling back to `ControlShell`
+when inventory is unavailable. Management routes stay outside the dashboard layout.
+Wizard cards own step navigation; server orchestration gates preparation/verification.
+Step 4 shows only the selected candidate, and Step 5 performs bounded backend readiness
+checks. See [Phase 3 UX and validation](setup-ux-refinement.md).
 
 The supervisor records a unique child generation, pinned selection/revision and live
 heartbeat. Readiness requires that exact process, compatible schema/workspace and a
@@ -222,8 +229,9 @@ These are still incomplete or intentionally staged:
 ## Installation control and inventory databases
 
 Managed startup is the default development and new installation workflow. The control
-route is outside the dashboard layout so rendering it never loads asset branding,
-sessions or permissions. A local SQLite store under the supervisor's private directory
+route is outside the dashboard layout so recovery can render without asset branding,
+sessions or permissions. When a workspace session is available, Settings management
+explicitly reuses its normal shell adapter. A local SQLite store under the supervisor's private directory
 authenticates an installation administrator, encrypts profiles, stores profile-scoped
 SSO configuration and audits management operations. Inventory users, roles, sessions,
 assignments and business audit remain in their selected backend. Control credentials
@@ -237,8 +245,8 @@ Managed SQL Server uses a separate empty-database migration history. Existing Ma
 migration SQL is unchanged. See [the architecture decision and operations guide](database-management.md)
 for catalog checks, isolation, SSMS setup, backups, validation and rollout limits.
 
-Managed setup uses a database-independent `InstallationShell` and `/installation`
-overview. Management entry always requires fresh local authentication; its authenticated
+Managed setup uses the database-independent `SetupWizardShell`; `/installation` aliases
+the canonical `/setup` entry. Management entry always requires fresh local authentication; its authenticated
 workspace is a separate route. The managed HTTP boundary revokes control visits on
 entry/exit, prevents caching, and blocks unconfigured inventory requests before Next's
 concurrent layout/page rendering. Server actions still enforce authorization and origin
