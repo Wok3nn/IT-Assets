@@ -9,6 +9,7 @@ import { ControlError, type Profile } from "./control-store";
 import { connectionUrl, createProfileClient } from "./profile-client";
 import { logDatabaseFailure, type DatabaseStage } from "./diagnostics";
 import type { Organization } from "./setup-state";
+import { coversMariaDatabase } from "./mariadb-grants";
 const run = promisify(execFile);
 const history = (p: Profile) =>
   path.join(
@@ -74,7 +75,7 @@ async function catalog(db: PrismaClient, p: Profile) {
     if (!m) return false;
     // Metadata-filtered catalogs are not proof of emptiness. Require database-wide access.
     return (
-      [p.database + ".*", "*.*"].includes(m[2].replaceAll("`", "")) &&
+      coversMariaDatabase(m[2], p.database) &&
       /(^|, )(ALL PRIVILEGES|SELECT)(,|$)/.test(m[1])
     );
   });
@@ -253,7 +254,7 @@ export async function initializeProfile(
         !grants.flatMap(Object.values).some((g) => {
           const m = /^GRANT ALL PRIVILEGES ON (.+?) TO /i.exec(g);
           return (
-            m && [p.database + ".*", "*.*"].includes(m[1].replaceAll("`", ""))
+            m && coversMariaDatabase(m[1], p.database)
           );
         })
       )

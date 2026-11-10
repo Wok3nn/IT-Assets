@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { managedBrandingUrl } from "@/modules/database-management/branding-compatibility";
 
 import {
   DEFAULT_MAKE_MODEL_AUTO_ENABLED,
@@ -203,6 +204,12 @@ export async function getGeneralSettings() {
     },
   });
   const settingsByKey = new Map(settings.map((setting) => [setting.key, setting.value]));
+  if (process.env.IT_ASSETS_MANAGED === "1") {
+    for (const key of BRANDING_SETTINGS_KEYS) {
+      const value = settingsByKey.get(key);
+      if (value) settingsByKey.set(key, managedBrandingUrl(value));
+    }
+  }
 
   const parsed = Number.parseInt(settingsByKey.get(STARTING_ASSET_TAG_KEY) ?? "", 10);
   const parsedSessionTimeoutMinutes = Number.parseInt(settingsByKey.get(SESSION_TIMEOUT_MINUTES_KEY) ?? "", 10);

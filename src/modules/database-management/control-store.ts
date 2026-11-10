@@ -73,6 +73,7 @@ export type PublicProfile = Omit<Profile, "password" | "username"> & {
 };
 type State = { revision: number; active: string | null };
 type Admin = { email: string; passwordHash: string };
+type LegacyAdoption = { id: string; fingerprint: string; settingsKeyHash: string | null; entraSecretHash: string | null };
 
 function privateFile(file: string, length: number) {
   try {
@@ -388,8 +389,24 @@ export class ControlStore {
     });
   }
   save(input: Profile, existing?: string) {
+    return this.saveProfile(input, existing);
+  }
+  legacyAdoption() { return this.readSetup<LegacyAdoption>("legacyAdoption"); }
+  assertLegacyRuntime(id: string | null, settingsKey: string, entraSecret: string) {
+    const adopted = this.legacyAdoption();
+    if (!adopted || adopted.id !== id) return;
+    const row = this.db.prepare("SELECT config FROM auth_config WHERE profile=?").get(id);
+    const usesAdoptedSecret = row && JSON.parse(String(row.config)).entraSecretReference === "IT_ASSETS_ENTRA_SECRET_UPGRADE";
+    if ((adopted.settingsKeyHash && hash(settingsKey).toString("hex") !== adopted.settingsKeyHash) ||
+      (usesAdoptedSecret && adopted.entraSecretHash && hash(entraSecret).toString("hex") !== adopted.entraSecretHash))
+      throw new ControlError("The adopted workspace requires its verified deployment secrets. Restore the original settings key and Entra secret before activation/startup.");
+  }
+  adoptLegacy(input: Profile, record: LegacyAdoption, authentication: { entraSecretReference: string }) {
+    return this.saveProfile(input, undefined, { record, authentication });
+  }
+  private saveProfile(input: Profile, existing?: string, adoption?: { record: LegacyAdoption; authentication: { entraSecretReference: string } }) {
     const { username, password, ...meta } = profileSchema.parse(input);
-    const id = existing || randomUUID();
+    const id = adoption?.record.id || existing || randomUUID();
     const metadata = JSON.stringify({ ...meta, version: randomUUID() }),
       iv = randomBytes(12),
       cipher = createCipheriv("aes-256-gcm", this.key, iv);
@@ -399,6 +416,8 @@ export class ControlStore {
       cipher.final(),
     ]);
     this.tx(() => {
+      if (adoption && (this.legacyAdoption() || this.profiles().some(p => p.id === id || (p.provider === meta.provider && p.host === meta.host && p.port === meta.port && p.database === meta.database))))
+        throw new ControlError("Legacy adoption already exists or conflicts with a saved profile.");
       this.inactive(id);
       if (existing) {
         const before = this.profile(id);
@@ -407,8 +426,11 @@ export class ControlStore {
           before.port !== meta.port ||
           before.database !== meta.database ||
           before.provider !== meta.provider
-        )
+        ) {
+          if (this.legacyAdoption()?.id === id)
+            throw new ControlError("Create a separate connection for a different target. The adopted profile retains its original workspace files and configuration.");
           this.db.prepare("DELETE FROM auth_config WHERE profile=?").run(id);
+        }
       }
       this.db
         .prepare("INSERT OR REPLACE INTO profile VALUES(?,?,?)")
@@ -425,6 +447,11 @@ export class ControlStore {
         .run("inspection:" + id);
       this.writeSetup("candidate", id);
       this.clearReadiness();
+      if (adoption) {
+        this.writeSetup("legacyAdoption", adoption.record);
+        this.db.prepare("INSERT INTO auth_config VALUES(?,?)").run(id, JSON.stringify(adoption.authentication));
+        this.audit("legacy connection adopted; activation pending", id);
+      }
     });
     return id;
   }

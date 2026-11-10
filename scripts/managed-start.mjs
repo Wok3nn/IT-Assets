@@ -5,6 +5,9 @@ import { hkdfSync, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import storeModule from "../src/modules/database-management/control-store.ts";
+import { loadDeploymentSecrets } from "./deployment-secrets.mjs";
+
+loadDeploymentSecrets();
 
 // Do not load .env or .env.local. Legacy URLs/bootstrap files are never candidates.
 const directory = path.resolve(
@@ -43,7 +46,8 @@ const shared = {
   DB_PROVIDER: "mariadb",
   DATABASE_URL: "mysql://disabled:disabled@127.0.0.1:1/disabled",
   APP_SETTINGS_ENCRYPTION_KEY:
-    process.env.IT_ASSETS_MANAGED_SETTINGS_KEY || derive("settings"),
+    process.env.IT_ASSETS_MANAGED_SETTINGS_KEY ||
+    (process.env.APP_SETTINGS_ENCRYPTION_KEY_FILE ? process.env.APP_SETTINGS_ENCRYPTION_KEY : undefined) || derive("settings"),
   SESSION_SECRET: derive("session"),
   IT_ASSETS_COOKIE_REALM: derive("cookie realm").slice(0, 12),
   SESSION_COOKIE_SECURE: "auto",
@@ -78,6 +82,7 @@ process.on("message", (message) => {
 try {
   while (!stopping) {
     const pinned = store.state();
+    store.assertLegacyRuntime(pinned.active, shared.APP_SETTINGS_ENCRYPTION_KEY, shared.IT_ASSETS_ENTRA_SECRET_UPGRADE || "");
     const generation = randomUUID();
     store.setRuntime({
       generation,

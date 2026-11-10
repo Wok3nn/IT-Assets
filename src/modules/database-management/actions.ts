@@ -154,6 +154,7 @@ async function execute(
               "Enter the exact target database name to confirm.",
             );
           if (op === "activate") {
+            store.assertLegacyRuntime(id, process.env.APP_SETTINGS_ENCRYPTION_KEY ?? "", process.env.IT_ASSETS_ENTRA_SECRET_UPGRADE ?? "");
             if (id === current.active)
               throw new ControlError("This profile is already active.");
             if ((await inspectConnection(store, id)) !== "compatible")

@@ -68,7 +68,7 @@ const authenticationGroupRoleMappingSchema = z.object({
   groupName: z.string().trim().max(160),
 });
 
-const authenticationSettingsSchema = z.object({
+export const authenticationSettingsSchema = z.object({
   localAuthEnabled: z.boolean(),
   entraEnabled: z.boolean(),
   entraSsoEnabled: z.boolean(),
