@@ -12,6 +12,20 @@ import {
   runtimeMatches,
 } from "../src/modules/database-management/setup-state";
 import { schemaFingerprint } from "../src/modules/database-management/setup-service";
+import { wizardProgress } from "../src/modules/database-management/wizard-progress";
+test("wizard gates preparation and verification on compatible selected evidence", () => {
+  const evidence = { version: "v", fingerprint: "f", status: "empty" as const, checkedAt: 1, workspace: null };
+  assert.equal(wizardProgress(false, true, null, false).maximum, 1);
+  assert.equal(wizardProgress(true, true, null, false).maximum, 3);
+  assert.equal(wizardProgress(true, true, evidence, false).maximum, 4);
+  assert.equal(wizardProgress(true, true, { ...evidence, status: "partial" }, false).maximum, 3);
+  assert.equal(wizardProgress(true, true, { ...evidence, status: "compatible", workspace: "existing" }, false).maximum, 4);
+  assert.equal(wizardProgress(true, true, { ...evidence, status: "compatible", workspace: "existing" }, true).maximum, 5);
+  const compatible = { ...evidence, status: "compatible" as const, workspace: "existing" as const };
+  assert.deepEqual(wizardProgress(true, true, compatible, true).completed, [1, 2, 3, 4]);
+  assert.deepEqual(wizardProgress(true, true, compatible, true, true).completed, [1, 2, 3, 4, 5]);
+  assert.ok(!wizardProgress(true, true, evidence, true, true).completed.includes(5));
+});
 
 test("organization enrollment is atomic, permanent, versioned and independent of inventory", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "it-assets-unified-"));

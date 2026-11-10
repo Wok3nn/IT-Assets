@@ -20,13 +20,13 @@ export async function databaseAction(form: FormData) {
 export async function submitDatabaseAction(
   _previous: { error: string },
   form: FormData,
-): Promise<{ error: string }> {
+): Promise<{ error: string; fields?: Record<string, string> }> {
   return execute(form, true);
 }
 async function execute(
   form: FormData,
   returnErrors = false,
-): Promise<{ error: string }> {
+): Promise<{ error: string; fields?: Record<string, string> }> {
   const origin = (await headers()).get("origin");
   if (origin !== new URL(process.env.APP_URL || "http://localhost:4050").origin)
     throw new Error("Invalid request origin.");
@@ -145,7 +145,7 @@ async function execute(
             store.audit("connection and schema inspected", id);
             message =
               "Connected — " + status + " database. No records changed.";
-            step = "4";
+            step = wizard && v("step") === "4" ? "4" : "3";
             return;
           }
           if (v("confirm") !== p.database)
@@ -162,7 +162,7 @@ async function execute(
             if (!store.authorized(token))
               throw new ControlError("Session expired. Sign in again.");
             store.activate(id, current.revision);
-            step = "5";
+            step = "4";
             message =
               "Selection saved. Reopen the inventory after the server restarts.";
             return;
@@ -242,7 +242,12 @@ async function execute(
           ? op
           : null,
       );
-    if (returnErrors) return { error: message };
+    if (returnErrors) return {
+      error: message,
+      fields: e instanceof z.ZodError
+        ? Object.fromEntries(e.issues.map(issue => [String(issue.path[0]), issue.message]))
+        : undefined,
+    };
   }
   redirect(
     destination +

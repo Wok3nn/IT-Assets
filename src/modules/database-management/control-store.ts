@@ -35,7 +35,7 @@ export const profileSchema = z.object({
   host: z
     .string()
     .trim()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/),
+    .regex(/^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/, "Use a hostname or IPv4 address without spaces."),
   port: z.coerce.number().int().min(1).max(65535),
   database: z
     .string()
@@ -181,7 +181,7 @@ export class ControlStore {
     const id = this.candidate(),
       evidence = id ? this.inspection(id) : null;
     return evidence?.status === "compatible"
-      ? "5"
+      ? "4"
       : evidence && evidence.status !== "failed"
         ? "4"
         : "3";
@@ -264,6 +264,9 @@ export class ControlStore {
   }
   registered() {
     return Boolean(this.db.prepare("SELECT id FROM admin LIMIT 1").get());
+  }
+  administratorEmail() {
+    return this.db.prepare("SELECT email FROM admin WHERE id=1").get()?.email as string | undefined;
   }
   enroll(
     token: string,

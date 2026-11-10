@@ -15,3 +15,14 @@ test("unified wizard reuses original frame, branding and five guided steps", () 
     assert.ok(html.includes(step.title.replaceAll("&", "&amp;")));
   assert.doesNotMatch(html, /href="\/assets/);
 });
+
+test("wizard cards are the single accessible step navigation", () => {
+  const html = renderToStaticMarkup(createElement(SetupWizardShell, {
+    steps: wizardSteps, currentStep: 3, completedSteps: [1, 2],
+  }));
+  assert.equal((html.match(/aria-current="step"/g) ?? []).length, 1);
+  assert.equal((html.match(/aria-label="Completed"/g) ?? []).length, 2);
+  for (let step = 1; step <= 5; step++) {
+    assert.equal((html.match(new RegExp(`href="/setup/workspace\\?step=${step}"`, "g")) ?? []).length, 1);
+  }
+});

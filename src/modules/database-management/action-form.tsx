@@ -1,7 +1,12 @@
 "use client";
-import { useActionState, useEffect, useRef } from "react";
+import { createContext, useContext, useActionState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { submitDatabaseAction } from "./actions";
+const Errors = createContext<Record<string, string>>({});
+export function FieldError({ name }: { name: string }) {
+  const error = useContext(Errors)[name];
+  return error ? <span role="alert" className="block text-sm text-rose-700 dark:text-rose-300">{error}</span> : null;
+}
 export function Form({
   op,
   id,
@@ -72,7 +77,7 @@ export function Form({
       <input type="hidden" name="id" value={id ?? ""} />
       <input type="hidden" name="version" value={version ?? ""} />
       <fieldset disabled={pending} className="min-w-0 space-y-3">
-        {children}
+        <Errors.Provider value={state.fields ?? {}}>{children}</Errors.Provider>
       </fieldset>
       {pending && <p role="status">Working… Please wait.</p>}
       {state.error && (

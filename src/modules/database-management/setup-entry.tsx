@@ -14,14 +14,25 @@ export function SetupEntry({
   message?: string;
 }) {
   const [step, setStep] = useState(1),
+    [navigationMessage, setNavigationMessage] = useState(""),
     [siteName, setSiteName] = useState(""),
     [appTitle, setAppTitle] = useState("IT Assets");
   return (
     <SetupWizardShell
       steps={wizardSteps}
+      currentStep={registered ? 2 : step}
+      onStep={(next) => {
+        if (registered) {
+          setNavigationMessage("Sign in to review your saved setup steps.");
+          return;
+        }
+        if (next === 1) setStep(1);
+        else if (siteName.trim().length >= 2 && appTitle.trim().length >= 2) setStep(2);
+      }}
       description="One guided installation. Your local administrator and configuration work before an asset database is connected."
     >
       {message && <p role="status">{message}</p>}
+      {navigationMessage && <p role="status">{navigationMessage}</p>}
       <h2 className="text-2xl font-semibold">
         {registered
           ? "Local administrator sign-in"
@@ -64,15 +75,6 @@ export function SetupEntry({
                 These settings are saved locally with administrator enrollment
                 in the next step. No asset database is required.
               </p>
-              <Button
-                type="button"
-                disabled={
-                  siteName.trim().length < 2 || appTitle.trim().length < 2
-                }
-                onClick={() => setStep(2)}
-              >
-                Continue to administrator
-              </Button>
             </div>
             <p hidden={step !== 2} className="text-sm">
               Read the private bootstrap-token file in the control directory
@@ -132,21 +134,16 @@ export function SetupEntry({
             </label>
           )}
           <div className="flex flex-wrap gap-3">
-            {!registered && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setStep(1)}
-              >
-                Back
-              </Button>
-            )}
             <Button type="submit">
               {registered ? "Sign in" : "Register administrator"}
             </Button>
           </div>
         </div>
       </Form>
+      {!registered && <nav aria-label="Wizard navigation" className="mt-6 flex justify-between gap-3 border-t border-[#d8c6b2] pt-5 dark:border-[#596166]">
+        {step === 2 ? <Button type="button" variant="secondary" onClick={() => setStep(1)}>Back</Button> : <span />}
+        <Button type="button" disabled={step === 2 || siteName.trim().length < 2 || appTitle.trim().length < 2} onClick={() => setStep(2)}>Next</Button>
+      </nav>}
     </SetupWizardShell>
   );
 }

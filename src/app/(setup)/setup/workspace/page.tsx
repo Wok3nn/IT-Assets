@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { SetupWizardShell } from "@/components/layout/setup-wizard-shell";
 import {
   control,
@@ -11,10 +10,14 @@ import {
 import { wizardSteps } from "@/modules/database-management/setup-steps";
 import { OrganizationForm } from "@/modules/database-management/organization-form";
 import { DatabasePanel } from "@/modules/database-management/panel";
-import { ControlExit } from "@/modules/database-management/control-shell";
 import { ManagementVisitGuard } from "@/modules/database-management/visit-guard";
 import { ReadinessPanel } from "@/modules/database-management/readiness-panel";
 import { schemaFingerprint } from "@/modules/database-management/setup-service";
+import { wizardProgress } from "@/modules/database-management/wizard-progress";
+import { isReady } from "@/modules/database-management/setup-state";
+import { WizardFooter } from "@/modules/database-management/wizard-footer";
+import { Form } from "@/modules/database-management/action-form";
+import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 export default async function SetupWorkspace({
   searchParams,
@@ -22,151 +25,83 @@ export default async function SetupWorkspace({
   searchParams: Promise<{ step?: string; message?: string }>;
 }) {
   if (!managed()) notFound();
-  const store = control(),
-    token = (await cookies()).get(controlCookie)?.value ?? "";
+  const store = control();
+  const token = (await cookies()).get(controlCookie)?.value ?? "";
   if (!store.authorized(token)) redirect("/setup");
   const { step: requested, message } = await searchParams;
-  const organization = store.organization(),
-    profiles = store.profiles(),
-    selection = store.state();
-  const step = ["1", "2", "3", "4", "5"].includes(requested ?? "")
-    ? requested!
-    : store.resumeStep();
+  const organization = store.organization();
+  const profiles = store.profiles();
+  const selection = store.state();
   const inspections = Object.fromEntries(
     profiles.map((p) => {
       const evidence = store.inspection(p.id);
       return [
         p.id,
-        evidence?.fingerprint === schemaFingerprint(p.provider)
+        evidence?.version === p.version && evidence.fingerprint === schemaFingerprint(p.provider)
           ? evidence
           : null,
       ];
     }),
   );
-  const selected = profiles.find((p) => p.id === selection.active);
-  const candidate = profiles.find(
-    (p) => p.id === (selection.active ?? store.candidate()),
+  const candidate = profiles.find((p) => p.id === store.candidate())
+    ?? profiles.find((p) => p.id === selection.active);
+  const evidence = candidate ? inspections[candidate.id] : null;
+  const ready = Boolean(candidate && isReady(
+    store.readiness(), store.runtime(), selection,
+    candidate.version, schemaFingerprint(candidate.provider),
+  ));
+  const progress = wizardProgress(
+    Boolean(organization), store.registered(), evidence,
+    Boolean(candidate && candidate.id === selection.active), ready,
   );
+  const step = Number(requested && /^[1-5]$/.test(requested) ? requested : store.resumeStep());
+  if (step > progress.maximum) redirect("/setup/workspace?step=" + progress.maximum);
   return (
     <SetupWizardShell
       steps={wizardSteps}
-      title={
-        organization ? `${organization.siteName} · First-run setup` : undefined
+      currentStep={step}
+      completedSteps={progress.completed}
+      title={organization ? organization.siteName + " · First-run setup" : undefined}
+      description="Set up your organization, connect a database, and open your workspace."
+      footer={
+        <div className="ml-auto">
+          <Form op="logout"><Button variant="ghost" type="submit">Sign out of setup</Button></Form>
+        </div>
       }
-      description="Complete your installation securely. Workspace accounts remain separate from this installation account."
     >
       <ManagementVisitGuard fingerprint={visitFingerprint(token)} />
-      <nav aria-label="Setup steps" className="mb-5 flex flex-wrap gap-3">
-        {wizardSteps.map((s, i) => (
-          <Link
-            key={s.title}
-            href={`/setup/workspace?step=${i + 1}`}
-            prefetch={false}
-            aria-current={step === String(i + 1) ? "step" : undefined}
-            className={
-              step === String(i + 1) ? "font-bold underline" : "underline"
-            }
-          >
-            {s.title}
-          </Link>
-        ))}
-      </nav>
-      {message && (
-        <p role="status" className="mb-4">
-          {message}
-        </p>
-      )}
-      <div className="space-y-5">
-        {step === "1" && <OrganizationForm organization={organization} />}
-        {step === "2" && (
-          <section>
-            <h2 className="text-xl font-semibold">
-              ✓ Installation administrator registered
-            </h2>
-            <p>
-              Enrollment is permanently closed. Your account manages connections
-              and local settings, not workspace permissions.
-            </p>
-            <Link
-              href="/setup/workspace?step=3"
-              prefetch={false}
-              className="underline"
-            >
-              Continue to database connection
-            </Link>
+      {message && <p role="status" className="mb-4 text-sm">{message}</p>}
+      <div className="min-w-0 space-y-5">
+        {step === 1 && <OrganizationForm organization={organization} />}
+        {step === 2 && (
+          <section className="space-y-3">
+            <h2 className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">✓ Installation administrator created.</h2>
+            <p className="break-words">{store.administratorEmail()}</p>
+            <p className="text-sm">This account manages your installation. Workspace accounts remain separate.</p>
           </section>
         )}
-        {["3", "4"].includes(step) && (
-          <DatabasePanel
-            {...selection}
-            profiles={profiles}
-            inspections={inspections}
-            activity={[]}
-            stage={step === "3" ? "connections" : "prepare"}
-          />
-        )}
-        {step === "5" && (
+        {(step === 3 || step === 4) && (
           <>
-            <ul className="space-y-2" aria-label="Setup checklist">
-              {[
-                [Boolean(organization), "Organization configured"],
-                [store.registered(), "Installation administrator registered"],
-                [Boolean(candidate), "Database connection saved"],
-                [
-                  Boolean(selected),
-                  "Database selected — live activation verified below",
-                ],
-              ].map(([done, label]) => (
-                <li
-                  key={String(label)}
-                  className={
-                    done
-                      ? "text-emerald-700 dark:text-emerald-300"
-                      : "text-slate-500"
-                  }
-                >
-                  {done ? "✓" : "○"} {label}
-                </li>
-              ))}
-            </ul>
+            <h2 className="text-2xl font-semibold">{step === 3 ? "Database Connection" : "Workspace Preparation"}</h2>
             <DatabasePanel
               {...selection}
-              profiles={profiles}
+              selected={candidate?.id}
+              profiles={step === 4 ? candidate ? [candidate] : [] : profiles}
               inspections={inspections}
               activity={[]}
-              stage="activate"
-            />
-            <ReadinessPanel
-              active={Boolean(selected)}
-              organization={organization?.siteName ?? ""}
-              profile={
-                selected
-                  ? `${selected.name} · ${selected.provider} · ${selected.database}`
-                  : ""
-              }
+              stage={step === 3 ? "connections" : "prepare"}
             />
           </>
         )}
-        {step === "3" && (
-          <Link
-            href="/setup/workspace?step=4"
-            prefetch={false}
-            className="block underline"
-          >
-            Continue to workspace preparation
-          </Link>
+        {step === 5 && (
+          <ReadinessPanel
+            active={Boolean(selection.active)}
+            organization={organization?.siteName ?? ""}
+            profile={candidate ? candidate.name + " · " + candidate.database : ""}
+          />
         )}
-        {step === "4" && (
-          <Link
-            href="/setup/workspace?step=5"
-            prefetch={false}
-            className="block underline"
-          >
-            Review & activate database
-          </Link>
-        )}
-        <ControlExit active={Boolean(selection.active)} />
       </div>
+      <WizardFooter step={step} maximum={progress.maximum} />
     </SetupWizardShell>
   );
 }

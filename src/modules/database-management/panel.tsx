@@ -1,4 +1,4 @@
-import { Form } from "./action-form";
+import { FieldError, Form } from "./action-form";
 import type { Inspection } from "./setup-state";
 import { PanelCard } from "@/components/layout/panel-card";
 import { TextField } from "@/components/forms/text-field";
@@ -20,7 +20,7 @@ export function Field({
   required?: boolean;
 }) {
   return (
-    <label className="block space-y-1 text-sm">
+    <label className="block min-w-0 space-y-1 text-sm">
       {label}
       <TextField
         type={type}
@@ -29,14 +29,15 @@ export function Field({
         required={required}
         autoComplete={type === "password" ? "off" : undefined}
       />
+      <FieldError name={name} />
     </label>
   );
 }
 function ProfileFields({ p }: { p?: PublicProfile }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    <div className="grid min-w-0 gap-4 sm:grid-cols-2">
       <Field name="name" label="Connection name" value={p?.name} />
-      <label>
+      <label className="min-w-0 space-y-1 text-sm sm:col-span-2">
         Provider
         <SelectField name="provider" defaultValue={p?.provider ?? "sqlserver"}>
           <option value="sqlserver">
@@ -44,6 +45,7 @@ function ProfileFields({ p }: { p?: PublicProfile }) {
           </option>
           <option value="mariadb">MariaDB</option>
         </SelectField>
+        <FieldError name="provider" />
       </label>
       <Field
         name="host"
@@ -92,33 +94,26 @@ export function DatabasePanel({
   activity,
   inspections = {},
   stage = "all",
+  selected,
 }: {
   profiles: PublicProfile[];
   inspections?: Record<string, Inspection | null>;
   stage?: "all" | "connections" | "prepare" | "activate";
+  selected?: string;
   active: string | null;
   revision: number;
   activity: { at: string; action: string; target: string | null }[];
 }) {
   return (
     <>
-      <PanelCard>
+      {stage !== "prepare" && <PanelCard>
         <p>
-          Active inventory:{" "}
+          Active Database:{" "}
           <strong>
-            {profiles.find((p) => p.id === active)?.name ?? "None selected"}
+            {profiles.find((p) => p.id === active)?.name ?? "Not selected"}
           </strong>
         </p>
-        <p className="mt-2 text-sm">
-          Save a connection → Test Connection & Inspect Schema → Activate.
-          Initialize only an explicitly empty database. Existing compatible
-          databases do not need initialization.
-        </p>
-        <p className="mt-2 text-sm">
-          Your installation account does not grant inventory access. Use Back to
-          IT Assets to leave management and open the workspace.
-        </p>
-      </PanelCard>
+      </PanelCard>}
       {["all", "connections"].includes(stage) && (
         <PanelCard>
           <details key={profiles.length} open={profiles.length === 0}>
@@ -145,6 +140,7 @@ export function DatabasePanel({
             <p className="break-words">
               {p.provider} · {p.host}:{p.port} / {p.database}
             </p>
+            {stage === "connections" && selected === p.id && <p className="mt-2 text-sm font-medium">Selected for workspace preparation</p>}
             <p role="status" className="mt-2 font-medium">
               {status && "Last inspection: "}
               {status === "compatible"
@@ -152,19 +148,22 @@ export function DatabasePanel({
                 : status === "empty"
                   ? "Connected — Empty Database"
                   : status === "failed"
-                    ? "Connection Failed — test again for diagnostics"
+                    ? "Disconnected — test again for diagnostics"
                     : status
-                      ? "Connected — Incompatible or Partial Database"
+                      ? "Connected — " + (status === "partial" ? "Partial" : "Incompatible") + " Database"
                       : "Not verified — test connection and inspect schema"}
             </p>
+            {stage === "prepare" && status === "compatible" && <p className={p.id === active ? "mt-3 text-sm text-emerald-700 dark:text-emerald-300" : "mt-3 text-sm"}>{p.id === active ? "✓ Database activated." : "Compatible IT Assets workspace detected. Its accounts and records will be preserved. Initialization is unnecessary."}</p>}
+            {stage === "prepare" && status !== "compatible" && status !== "empty" && <p role="alert" className="mt-3 text-sm">Return to Database Connection and inspect or select a compatible database. No destructive repair is available.</p>}
             <div className="my-4 flex flex-wrap gap-2">
-              {["validate", "inspect"].map((op) => (
+              {(stage === "prepare" ? ["inspect"] : ["validate", "inspect"]).map((op) => (
                 <Form
                   key={op}
                   op={op}
                   id={p.id}
                   version={p.version}
                   revision={revision}
+                  step={stage === "prepare" ? "4" : "3"}
                 >
                   <Button type="submit" variant="secondary">
                     {op === "validate"
@@ -176,7 +175,7 @@ export function DatabasePanel({
             </div>
             {p.id !== active && (
               <div className="space-y-4">
-                <details>
+                {stage !== "prepare" && <details>
                   <summary>Edit connection</summary>
                   <Form
                     op="save"
@@ -187,7 +186,7 @@ export function DatabasePanel({
                     <ProfileFields p={p} />
                     <Button type="submit">Save changes</Button>
                   </Form>
-                </details>
+                </details>}
                 {["all", "prepare"].includes(stage) && status === "empty" && (
                   <details>
                     <summary>Initialize an empty database</summary>
@@ -196,6 +195,7 @@ export function DatabasePanel({
                       id={p.id}
                       version={p.version}
                       revision={revision}
+                      step="4"
                     >
                       <p>
                         Creates inventory tables and a separate workspace
@@ -224,15 +224,16 @@ export function DatabasePanel({
                     </Form>
                   </details>
                 )}
-                {["all", "activate"].includes(stage) &&
+                {["all", "prepare", "activate"].includes(stage) &&
                   status === "compatible" && (
                     <details>
-                      <summary>Activate this inventory</summary>
+                      <summary>Activate Database</summary>
                       <Form
                         op="activate"
                         id={p.id}
                         version={p.version}
                         revision={revision}
+                        step="4"
                       >
                         <p>
                           Current asset sessions end. No records will be copied
@@ -246,7 +247,7 @@ export function DatabasePanel({
                       </Form>
                     </details>
                   )}
-                <Form
+                {stage !== "prepare" && <Form
                   op="remove"
                   id={p.id}
                   version={p.version}
@@ -255,7 +256,7 @@ export function DatabasePanel({
                   <Button type="submit" variant="ghost">
                     Remove saved profile
                   </Button>
-                </Form>
+                </Form>}
               </div>
             )}
           </PanelCard>
