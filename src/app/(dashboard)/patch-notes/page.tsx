@@ -4,30 +4,29 @@ import { PageHero } from "@/components/layout/page-hero";
 import { AppShell } from "@/components/navigation/app-shell";
 import { getCurrentUser } from "@/lib/session.server";
 import { readSetupState } from "@/services/setup-state";
+import { APP_VERSION, RELEASE_STATUS } from "@/lib/app-metadata";
 
 export const dynamic = "force-dynamic";
 
-const latestPatchNotesVersion = "0.5.4";
-
-const latestSections = [
+const latestSections: { title: string; items: (string | { label: string; children: string[] })[] }[] = [
   {
-    title: "Borrowed Items",
+    title: "Installation and databases",
     items: [
-      "Borrow and return assets or other items",
-      "Email notifications when items are borrowed or returned",
-      "Automatic due-date and overdue reminders",
-      "Borrowing history and notification tracking",
+      "Microsoft SQL Server support alongside MariaDB database management.",
+      "Unified first-run setup starts without an external database and uses a separate installation administrator.",
+      "Database connection testing and schema verification distinguish empty, compatible and incompatible inventories.",
+      "Safe activation and switching require exact database-name confirmation, compatibility checks and post-restart readiness verification.",
     ],
   },
   {
-    title: "Settings",
+    title: "Interface improvements",
     items: [
       {
-        label: "Exchange Email settings added",
+        label: "Clearer setup and database management",
         children: [
-          "Integrated with Microsoft Entra",
-          "Configure reminder intervals",
-          "Configure borrower and admin notifications",
+          "Enrollment-token instructions, aligned connection fields and MariaDB credential guidance.",
+          "Compact workspace preparation, accessible help and activation confirmation dialogs.",
+          "Original workspace sidebar retained during separate management authentication.",
         ],
       },
     ],
@@ -35,6 +34,9 @@ const latestSections = [
 ];
 
 const previousUpdates = [
+  "Version v0.5.4",
+  "Borrowed Items: borrow/return workflows, notifications, due-date and overdue reminders, and history tracking.",
+  "Exchange Email settings: Microsoft Entra integration, reminder intervals and borrower/admin notifications.",
   "Version v0.5.3",
   "Fixes:",
   "Automatic make and model assignment added as a global Settings option",
@@ -76,7 +78,8 @@ export default async function PatchNotesPage() {
         <PageHero>
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Patch notes</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">Latest update</h1>
-          <p className="mt-4 text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]">Version: {latestPatchNotesVersion}</p>
+          <p className="mt-4 text-sm font-semibold text-[#b56613] dark:text-[#ffd7ab]">Version: {APP_VERSION}</p>
+          <p className="mt-2 text-sm">{RELEASE_STATUS}. Production migration, live SQL Server acceptance and Docker compatibility have not been validated for this release.</p>
           <div className="mt-5 space-y-5 text-sm text-slate-700 dark:text-slate-200">
             {latestSections.map((section) => (
               <section key={section.title}>

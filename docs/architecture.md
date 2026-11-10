@@ -28,6 +28,12 @@ Wizard cards own step navigation; server orchestration gates preparation/verific
 Step 4 shows only the selected candidate, and Step 5 performs bounded backend readiness
 checks. See [Phase 3 UX and validation](setup-ux-refinement.md).
 
+Phase 4 keeps activation in the same server action and supervisor. A feature-local
+native dialog supplies confirmation; the shared bounded readiness hook consumes
+the authenticated status endpoint. Management success matches the verified profile
+and revision, so another activation cannot satisfy an older request. Token help
+formats the configured path without reading its secret. See [0.6.0 release notes](release-0.6.0.md).
+
 The supervisor records a unique child generation, pinned selection/revision and live
 heartbeat. Readiness requires that exact process, compatible schema/workspace and a
 live connection probe. Profile/schema changes invalidate evidence; connectivity is
