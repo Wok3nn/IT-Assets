@@ -30,3 +30,37 @@ AGENTS.md
 .next-managed-dev/
 .next-managed/
 next-env.d.ts
+
+# ==========================================
+# IT Assets - Managed Configuration Backups
+# ==========================================
+
+# Previous first-run setup configurations
+/.managed-data-*/
+
+# ==========================================
+# Additional Environment / Secret Files
+# ==========================================
+
+.env.*
+!.env.example
+!.env.*.example
+
+# ==========================================
+# Database Backups
+# ==========================================
+
+/backups/
+/db-backups/
+*.sql.gz
+*.bak
+*.dump
+
+# SQLite transaction files in local data
+/data/db/*.db-wal
+/data/db/*.db-shm
+# Legacy SQLite development database
+/prisma/providers/data/db/*.db
+/prisma/providers/data/db/*.db-journal
+/prisma/providers/data/db/*.db-wal
+/prisma/providers/data/db/*.db-shm
