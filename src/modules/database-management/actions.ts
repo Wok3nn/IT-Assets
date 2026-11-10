@@ -41,6 +41,7 @@ async function execute(
   const entry = wizard ? setupPath : managementPath;
   let destination = wizard ? setupWorkspacePath : managementWorkspacePath;
   let step = v("step") || "3";
+  let activationRevision: number | undefined;
   try {
     if (op === "enroll") {
       if (v("password") !== v("confirmPassword"))
@@ -162,9 +163,10 @@ async function execute(
             if (!store.authorized(token))
               throw new ControlError("Session expired. Sign in again.");
             store.activate(id, current.revision);
+            activationRevision = current.revision + 1;
             step = "4";
             message =
-              "Selection saved. Reopen the inventory after the server restarts.";
+              "Selection saved. Waiting for application restart and readiness verification.";
             return;
           }
           if (op === "initialize") {
@@ -255,6 +257,9 @@ async function execute(
       encodeURIComponent(message) +
       (wizard && destination === setupWorkspacePath
         ? "&step=" + encodeURIComponent(step)
+        : "") +
+      (!wizard && activationRevision !== undefined
+        ? "&activationProfile=" + encodeURIComponent(id) + "&activationRevision=" + activationRevision
         : ""),
   );
 }

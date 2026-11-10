@@ -66,6 +66,7 @@ export function Form({
         saved.current = values;
       }}
     >
+      <div hidden>
       <input type="hidden" name="op" value={op} />
       <input
         type="hidden"
@@ -76,11 +77,12 @@ export function Form({
       <input type="hidden" name="revision" value={revision ?? 0} />
       <input type="hidden" name="id" value={id ?? ""} />
       <input type="hidden" name="version" value={version ?? ""} />
-      <fieldset disabled={pending} className="min-w-0 space-y-3">
+      </div>
+      <fieldset disabled={pending} className="flex min-w-0 flex-col gap-3 [&>button]:self-start">
         <Errors.Provider value={state.fields ?? {}}>{children}</Errors.Provider>
       </fieldset>
       {pending && <p role="status">Working… Please wait.</p>}
-      {state.error && (
+      {state.error && !pending && (
         <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">
           {state.error}
         </p>

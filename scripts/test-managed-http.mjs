@@ -124,6 +124,8 @@ try {
   assert.match(overview, /First-run setup/);
   assert.match(overview, /Welcome &amp; Organization/);
   assert.match(overview, /without an external database/);
+  assert.match(overview, /Get-Content -LiteralPath/);
+  assert.ok(!overview.includes(readFileSync(path.join(dir, "bootstrap-token"), "utf8").trim()));
   assert.ok(!overview.includes('href="/assets/new"'));
   assert.equal(
     (
@@ -306,7 +308,10 @@ try {
       headers: { Cookie: cookie },
     });
     assert.equal(readiness.status, 200);
-    assert.equal((await readiness.json()).ready, true);
+    const readyState = await readiness.json();
+    assert.equal(readyState.ready, true);
+    assert.equal(readyState.profile, id);
+    assert.equal(readyState.revision, 1);
     assert.equal(
       (
         await fetch(base + "/dashboard", {
@@ -325,7 +330,7 @@ try {
       ).status,
       409,
     );
-    assert.ok((await page(workspace + "?step=4")).includes("HTTP inventory · Active"));
+    assert.ok((await page(workspace + "?step=4")).includes("Active selection"));
     const review = await page(workspace + "?step=5");
     assert.match(review, /Setup checklist/);
     assert.doesNotMatch(review, /Add a connection|name="op" value="inspect"/);
@@ -339,11 +344,36 @@ try {
     assert.match(protectedPage, /Back to Settings/);
     assert.ok(protectedPage.includes('href="/assets"'));
     assert.doesNotMatch(protectedPage, /Setup checklist|Review &amp; Complete/);
+    assert.match(await post("save", { ...profile, name: "Second inventory", database: "it_assets_managed_" + (process.env.IT_ASSETS_TEST_RUN || "") + "b_test", revision: "1" }, "management"), /saved/);
+    const secondHtml = await page(managementUrl + "/workspace");
+    const secondId = getId(secondHtml.slice(secondHtml.indexOf("Second inventory")));
+    assert.ok(secondId && secondId !== id);
+    assert.match(await post("inspect", { id: secondId, revision: "1" }, "management"), /compatible/);
+    const confirmHtml = await page(managementUrl + "/workspace");
+    assert.match(confirmHtml, /<dialog/);
+    assert.match(confirmHtml, /Confirm activation/);
+    assert.match(await post("activate", { id: secondId, revision: "1", confirm: "wrong" }, "management"), /confirm/);
+    assert.equal((await (await fetch(base + "/setup/status", { headers: { Cookie: cookies() } })).json()).profile, id);
     const visit = cookie;
     const settings = await fetch(base + "/settings", { headers: { Cookie: cookies(), Accept: "text/html" } });
     assert.equal(settings.status, 200);
     assert.equal((await fetch(managementUrl + "/session", { headers: { Cookie: visit } })).status, 401);
     assert.equal((await fetch(base + "/dashboard", { headers: { Cookie: inventoryCookie }, redirect: "manual" })).status, 200);
+    cookie = "";
+    assert.match(await post("login", creds, "management"), /Signed in/);
+    const secondDatabase = "it_assets_managed_" + (process.env.IT_ASSETS_TEST_RUN || "") + "b_test";
+    assert.match(await post("activate", { id: secondId, revision: "1", confirm: secondDatabase }, "management"), /Selection saved/);
+    let switched;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      try {
+        switched = await (await fetch(base + "/setup/status", { headers: { Cookie: cookie } })).json();
+        if (switched.verified && switched.profile === secondId && switched.revision === 2) break;
+      } catch {}
+    }
+    assert.equal(switched?.verified, true);
+    assert.equal(switched?.profile, secondId);
+    assert.equal(switched?.revision, 2);
     cookie = "";
     assert.match(await post("login", creds), /Signed in/);
   }

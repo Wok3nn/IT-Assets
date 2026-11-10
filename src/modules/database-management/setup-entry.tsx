@@ -5,13 +5,17 @@ import { SetupWizardShell } from "@/components/layout/setup-wizard-shell";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/forms/text-field";
 import { Form } from "./action-form";
+import { EnrollmentHelp } from "./enrollment-help";
+import type { enrollmentGuidance } from "./enrollment-guidance";
 
 export function SetupEntry({
   registered,
   message,
+  guidance,
 }: {
   registered: boolean;
   message?: string;
+  guidance?: ReturnType<typeof enrollmentGuidance>;
 }) {
   const [step, setStep] = useState(1),
     [navigationMessage, setNavigationMessage] = useState(""),
@@ -76,17 +80,11 @@ export function SetupEntry({
                 in the next step. No asset database is required.
               </p>
             </div>
-            <p hidden={step !== 2} className="text-sm">
-              Read the private bootstrap-token file in the control directory
-              printed by the launcher. Paste it only here. Enrollment consumes
-              it permanently.
-            </p>
           </>
         )}
         <div hidden={!registered && step !== 2} className="space-y-4">
           <p className="text-sm">
-            This account manages the installation and database connections. It
-            does not grant access to workspace assets.
+            This account manages IT Assets installation and database connections.
           </p>
           {!registered && (
             <label className="block">
@@ -99,6 +97,7 @@ export function SetupEntry({
               />
             </label>
           )}
+          {!registered && guidance && <EnrollmentHelp guidance={guidance} />}
           <label className="block">
             Administrator email
             <TextField

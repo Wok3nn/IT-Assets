@@ -29,6 +29,16 @@ export type ReadyState = {
   fingerprint: string;
   checkedAt: number;
 };
+export type ReadinessResult = {
+  ready: boolean;
+  verified?: boolean;
+  message: string;
+  profile?: string | null;
+  revision?: number;
+};
+export function activationVerified(result: ReadinessResult, profile: string, revision: number) {
+  return result.verified === true && result.profile === profile && result.revision === revision;
+}
 export function runtimeMatches(
   runtime: RuntimeState | null,
   selection: { active: string | null; revision: number },

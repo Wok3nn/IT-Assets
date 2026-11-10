@@ -18,6 +18,7 @@ import { isReady } from "@/modules/database-management/setup-state";
 import { WizardFooter } from "@/modules/database-management/wizard-footer";
 import { Form } from "@/modules/database-management/action-form";
 import { Button } from "@/components/ui/button";
+import { PreparationHeading } from "@/modules/database-management/preparation-heading";
 export const dynamic = "force-dynamic";
 export default async function SetupWorkspace({
   searchParams,
@@ -77,12 +78,12 @@ export default async function SetupWorkspace({
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">✓ Installation administrator created.</h2>
             <p className="break-words">{store.administratorEmail()}</p>
-            <p className="text-sm">This account manages your installation. Workspace accounts remain separate.</p>
+            <p className="text-sm">This account manages IT Assets installation and database connections.</p>
           </section>
         )}
         {(step === 3 || step === 4) && (
           <>
-            <h2 className="text-2xl font-semibold">{step === 3 ? "Database Connection" : "Workspace Preparation"}</h2>
+            {step === 3 ? <h2 className="text-2xl font-semibold">Database Connection</h2> : <PreparationHeading />}
             <DatabasePanel
               {...selection}
               selected={candidate?.id}

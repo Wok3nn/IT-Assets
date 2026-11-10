@@ -15,11 +15,12 @@ import {
 import { DatabasePanel } from "@/modules/database-management/panel";
 
 import { ManagementVisitGuard } from "@/modules/database-management/visit-guard";
+import { ActivationStatus } from "@/modules/database-management/activation-status";
 export const dynamic = "force-dynamic";
 export default async function ManagementWorkspace({
   searchParams,
 }: {
-  searchParams: Promise<{ message?: string }>;
+  searchParams: Promise<{ message?: string; activationProfile?: string; activationRevision?: string }>;
 }) {
   if (!managed()) notFound();
   const store = control(),
@@ -27,7 +28,11 @@ export default async function ManagementWorkspace({
   if (!store.authorized(token)) redirect(managementPath);
   const state = store.state(),
     profiles = store.profiles();
-  const { message } = await searchParams;
+  const { message, activationProfile, activationRevision } = await searchParams;
+  const revision = Number(activationRevision);
+  const activation = activationProfile && Number.isSafeInteger(revision) && revision > 0
+    ? { profile: activationProfile, revision }
+    : null;
   return (
     <ManagementShell><div className="space-y-5">
       <ManagementVisitGuard fingerprint={visitFingerprint(token)} />
@@ -36,16 +41,17 @@ export default async function ManagementWorkspace({
           Installation administrator
         </p>
         <h1 className="mt-2 text-3xl font-semibold">Database Management</h1>
-        <div className="mt-3 flex flex-wrap gap-3">
-          {state.active && <Form op="exit"><input type="hidden" name="destination" value="settings" /><Button type="submit" variant="secondary">Back to Settings</Button></Form>}
-          <Form op="logout"><Button type="submit" variant="ghost">Sign out of Database Management</Button></Form>
+        <div className="mt-4 flex flex-wrap items-start gap-3">
+          {state.active && <Form op="exit"><input type="hidden" name="destination" value="settings" /><Button className="min-h-10" type="submit" variant="secondary">Back to Settings</Button></Form>}
+          <Form op="logout"><Button className="min-h-10" type="submit" variant="secondary">Sign out of Database Management</Button></Form>
         </div>
         <p className="mt-2">
           Configure connections independently of your inventory. Leaving this
           area ends your management visit.
         </p>
       </PageHero>
-      {message && <p role="status">{message}</p>}
+      {message && !activation && <p role="status">{message}</p>}
+      {activation && <ActivationStatus {...activation} />}
       <DatabasePanel
         {...state}
         profiles={profiles}

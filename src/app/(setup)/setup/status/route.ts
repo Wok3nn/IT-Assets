@@ -13,7 +13,11 @@ export async function GET() {
   if (!store.authorized((await cookies()).get(controlCookie)?.value ?? ""))
     return new NextResponse(null, { status: 401 });
   try {
-    const result = await store.exclusive(() => verifyReadiness(store));
+    const result = await store.exclusive(async () => {
+      const readiness = await verifyReadiness(store);
+      const selection = store.state();
+      return { ...readiness, profile: selection.active, revision: selection.revision };
+    });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },
     });
