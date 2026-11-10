@@ -13,6 +13,16 @@ export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
         entry + "/leave?visit=" + encodeURIComponent(fingerprint),
       );
     };
+    const navigate = (event: MouseEvent) => {
+      const anchor = (event.target as Element)?.closest("a");
+      if (!anchor || event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0 || anchor.target === "_blank") return;
+      const target = new URL(anchor.href, location.href);
+      if (target.origin === location.origin && (target.pathname.startsWith(entry + "/") || target.pathname === "/setup/workspace")) return;
+      // A document navigation reaches the authoritative revocation boundary even
+      // when Next already has a destination cached from the workspace session.
+      if (target.origin === location.origin) { event.preventDefault(); window.location.assign(target.href); }
+    };
+    document.addEventListener("click", navigate, true);
     const validate = async () => {
       try {
         const response = await fetch(entry + "/session", { cache: "no-store" });
@@ -34,6 +44,7 @@ export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
     const timer = window.setInterval(focus, 30000);
     void validate();
     return () => {
+      document.removeEventListener("click", navigate, true);
       window.removeEventListener("pagehide", leave);
       window.removeEventListener("pageshow", show);
       window.removeEventListener("focus", focus);

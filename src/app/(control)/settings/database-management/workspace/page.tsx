@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { PageHero } from "@/components/layout/page-hero";
-import { ControlShell } from "@/modules/database-management/control-shell";
+import { ManagementShell } from "@/modules/database-management/management-shell";
+import { Form } from "@/modules/database-management/action-form";
+import { Button } from "@/components/ui/button";
 import { schemaFingerprint } from "@/modules/database-management/setup-service";
-import { ReadinessPanel } from "@/modules/database-management/readiness-panel";
 import {
   control,
   controlCookie,
@@ -26,19 +27,19 @@ export default async function ManagementWorkspace({
   if (!store.authorized(token)) redirect(managementPath);
   const state = store.state(),
     profiles = store.profiles();
-  const selected = profiles.find((p) => p.id === state.active);
   const { message } = await searchParams;
   return (
-    <ControlShell
-      title={store.organization()?.appTitle ?? "IT Assets"}
-      active={Boolean(state.active)}
-    >
+    <ManagementShell><div className="space-y-5">
       <ManagementVisitGuard fingerprint={visitFingerprint(token)} />
       <PageHero>
         <p className="text-sm font-semibold uppercase tracking-wider">
           Installation administrator
         </p>
         <h1 className="mt-2 text-3xl font-semibold">Database Management</h1>
+        <div className="mt-3 flex flex-wrap gap-3">
+          {state.active && <Form op="exit"><input type="hidden" name="destination" value="settings" /><Button type="submit" variant="secondary">Back to Settings</Button></Form>}
+          <Form op="logout"><Button type="submit" variant="ghost">Sign out of Database Management</Button></Form>
+        </div>
         <p className="mt-2">
           Configure connections independently of your inventory. Leaving this
           area ends your management visit.
@@ -61,15 +62,6 @@ export default async function ManagementWorkspace({
           }),
         )}
       />
-      <ReadinessPanel
-        active={Boolean(selected)}
-        organization={store.organization()?.siteName ?? ""}
-        profile={
-          selected
-            ? `${selected.name} · ${selected.provider} · ${selected.database}`
-            : ""
-        }
-      />
-    </ControlShell>
+    </div></ManagementShell>
   );
 }

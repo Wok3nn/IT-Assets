@@ -298,7 +298,9 @@ export function AppShellClient({
                 isCollapsed ? "px-3 py-4" : "px-4 py-5",
               )}
             >
-              {isCollapsed ? (
+              {mode === "control" ? (
+                <div className="space-y-3">{!isCollapsed && controlActions}<ThemeToggle collapsed={isCollapsed} /></div>
+              ) : isCollapsed ? (
                 <div className="flex flex-col items-center gap-2">
                   <form action="/api/auth/logout" method="post">
                     <button

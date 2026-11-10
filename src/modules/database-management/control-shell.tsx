@@ -32,7 +32,7 @@ export function ControlExit({ active }: { active: boolean }) {
       <Form op="exit">
         <input type="hidden" name="destination" value="inventory" />
         <Button variant="secondary" type="submit">
-          Back to IT Assets
+          {active ? "Back to IT Assets" : "First-run setup"}
         </Button>
       </Form>
       {active && (
