@@ -1,5 +1,6 @@
 import http from "node:http";
 import next from "next";
+import { listenerOrigin } from "./listener-origin.mjs";
 import storeModule from "../src/modules/database-management/control-store.ts";
 import {
   managementBoundary,
@@ -96,6 +97,9 @@ server.on("upgrade", (req, socket, head) => {
   return app.getUpgradeHandler()(req, socket, head);
 });
 server.listen(port, hostname, () => {
+  // Next 15 uses this for action redirect RSC fetches. Public APP_URL stays intact
+  // for CSRF, cookies and external authentication callbacks.
+  process.env.__NEXT_PRIVATE_ORIGIN = listenerOrigin(server.address());
   console.log("IT Assets ready at " + process.env.APP_URL);
   process.send?.("ready");
 });

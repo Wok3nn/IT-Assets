@@ -4,6 +4,10 @@ Last updated: 2026-11-10
 
 ## Unified managed installation
 
+The managed listener supplies Next's private self-fetch origin from its bound socket.
+Public APP_URL remains separate for CSRF, cookies and callbacks. See
+[redirect routing behind Docker/proxies](managed-redirect-origin.md).
+
 `/setup` serves enrollment/sign-in independently of inventory. `/setup/workspace`
 orchestrates authenticated wizard steps; `/setup/status` checks readiness under the
 control operation lock. `/installation` and managed `/setup/db` are aliases.
