@@ -13,6 +13,7 @@ import {
   visitFingerprint,
 } from "@/modules/database-management/control-store";
 import { DatabasePanel } from "@/modules/database-management/panel";
+import { InstallationPresentationPanel } from "@/modules/database-management/installation-presentation-panel";
 
 import { ManagementVisitGuard } from "@/modules/database-management/visit-guard";
 import { ActivationStatus } from "@/modules/database-management/activation-status";
@@ -52,6 +53,7 @@ export default async function ManagementWorkspace({
       </PageHero>
       {message && !activation && <p role="status">{message}</p>}
       {activation && <ActivationStatus {...activation} />}
+      <InstallationPresentationPanel />
       <DatabasePanel
         {...state}
         profiles={profiles}

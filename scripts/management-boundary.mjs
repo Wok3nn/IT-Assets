@@ -1,5 +1,6 @@
 // Runs before Next handles any managed request. Only control sessions are revoked.
 export function requiresInventory(pathname, managementPath) {
+  if (pathname.startsWith("/api/installation-branding/") || pathname.startsWith("/api/branding/")) return false;
   if (
     ["/setup", "/setup/workspace", "/setup/status", "/setup/db"].includes(
       pathname,

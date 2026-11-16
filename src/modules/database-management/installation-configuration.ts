@@ -11,10 +11,10 @@ export const installationSettingKeys = [
 
 export const installationConfigurationSchema = z.object({
   format: z.literal(1),
-  source: z.object({
+  source: z.union([z.object({
     provider: z.literal("mariadb"), host: z.string().min(1),
     port: z.number().int().min(1).max(65535), database: z.string().min(1),
-  }).strict(),
+  }).strict(), z.object({ provider: z.literal("installation") }).strict()]),
   settings: z.record(z.enum(installationSettingKeys), z.string().max(16384)),
   // Deployment timezone is captured only when explicitly supplied, never inferred.
   timeZone: z.string().max(120).nullable(),

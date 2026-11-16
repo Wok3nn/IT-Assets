@@ -66,6 +66,32 @@ try {
   console.log("Login response: " + login.status); assert.equal(login.status, 303);
   assert.match(login.headers.get("content-type"), /text\/x-component/);
   assert.match(await login.text(), /Database Connection/);
+  const enabled = await post("presentation-enable", { confirmation: "ENABLE", version: "new", context: "management" });
+  assert.equal(enabled.status, 303);
+  assert.match(enabled.headers.get("x-action-redirect"), /presentation%20enabled/); await enabled.text();
+  const observer = new storeModule.ControlStore(directory);
+  try {
+    const version = observer.presentation().version;
+    const imageBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aKVcAAAAASUVORK5CYII=", "base64");
+    const saved = await post("presentation-save", { version, appTitle: "Persistent offline fixture", sessionTimeoutMinutes: "30", context: "management", "branding.logo.light": new File([imageBytes], "logo.png", { type: "image/png" }) });
+    assert.equal(saved.status, 303);
+    assert.match(saved.headers.get("x-action-redirect"), /settings%20saved/); await saved.text();
+    assert.equal(observer.presentation().appTitle, "Persistent offline fixture");
+    const branding = await fetch("http://127.0.0.2:4050" + observer.presentation().branding.lightLogoUrl);
+    assert.equal(branding.status, 200);
+    assert.deepEqual(Buffer.from(await branding.arrayBuffer()), imageBytes);
+    const alias = await fetch("http://127.0.0.2:4050/api/branding/logo/light", { redirect: "manual" });
+    assert.equal(alias.status, 307);
+    assert.equal(new URL(alias.headers.get("location")).pathname, observer.presentation().branding.lightLogoUrl);
+    const offline = await fetch("http://127.0.0.2:4050/settings/database-management/workspace", { headers: { Cookie: cookie } });
+    assert.equal(offline.status, 200);
+    const html = await offline.text();
+    assert.match(html, /Persistent offline fixture/);
+    assert.match(html, /Save installation settings/);
+    const stale = await post("presentation-save", { version, appTitle: "Lost update", sessionTimeoutMinutes: "20" });
+    await stale.text();
+    assert.equal(observer.presentation().appTitle, "Persistent offline fixture");
+  } finally { observer.close(); }
   for (let i = 0; i < 2; i++) {
     const response = await post("save", { name: "Offline " + i, provider: "sqlserver", host: "127.0.0.1", port: "1", database: "redirect_fixture", username: "fixture", password: "fixture", revision: "0" }, "http://localhost:4052", i === 1);
     assert.equal(response.status, 303);
@@ -82,6 +108,8 @@ try {
   assert.equal(logout.status, 303); await logout.text();
   const session = await fetch("http://127.0.0.2:4050/settings/database-management/session", { headers: { Host: "localhost:4052", Cookie: cookie } });
   assert.equal(session.status, 401);
+  const rejected = await post("presentation-save", { appTitle: "Unauthorized", sessionTimeoutMinutes: "20" });
+  assert.match(rejected.headers.get("x-action-redirect"), /Session%20expired/); await rejected.text();
   assert.doesNotMatch(logs, /failed to get redirect response|ECONNREFUSED.*4052/);
-  console.log("PASS: external Host/Origin 4052, internal listener 4050, streamed action redirects, repeated authorized saves, foreign-origin rejection and logout; isolated control store only.");
+  console.log("PASS: mapped-port redirects, presentation cutover/save/upload, offline management and public branding, stale-write rejection, repeated profile saves, foreign-origin rejection and logout; isolated control store only.");
 } finally { if (server.connected) server.send("stop"); await exited; }

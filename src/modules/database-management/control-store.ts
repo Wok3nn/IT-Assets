@@ -12,6 +12,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "../../services/password";
 import { canonicalInstallationConfiguration, installationConfigurationSchema, type InstallationConfiguration } from "./installation-configuration";
+import { presentationSchema, presentationValues } from "./installation-presentation";
 import {
   organizationSchema,
   type Organization,
@@ -143,7 +144,7 @@ export class ControlStore {
   close() {
     this.db.close();
   }
-  // Internal/offline API only. This staged record is not yet a runtime settings source.
+  // Internal server API. Never serialize this secret-bearing record to clients.
   installationConfiguration(): InstallationConfiguration | null {
     const row = this.db.prepare("SELECT envelope FROM installation_config WHERE id=1").get();
     if (!row) return null;
@@ -164,6 +165,8 @@ export class ControlStore {
     return this.tx(() => {
       const previous = this.installationConfiguration();
       if (previous) {
+        const runtime = this.readSetup<{ importedHash: string }>("presentationRuntime");
+        if (runtime?.importedHash === hash(serialized).toString("hex")) return "unchanged" as const;
         if (canonicalInstallationConfiguration(previous) !== serialized)
           throw new ControlError("Installation configuration already exists and differs. Explicit conflict resolution is required; nothing was overwritten.");
         return "unchanged" as const;
@@ -179,6 +182,74 @@ export class ControlStore {
       );
       this.audit("installation configuration staged; runtime unchanged");
       return "imported" as const;
+    });
+  }
+  presentationRuntime() {
+    return this.readSetup<{ version: string; importedHash: string }>("presentationRuntime");
+  }
+  presentation() {
+    return this.tx(() => {
+      const runtime = this.presentationRuntime();
+      if (!runtime) return null;
+      const configuration = this.installationConfiguration();
+      if (!configuration) throw new ControlError("Installation configuration is incomplete. Restore the control backup.");
+      return { ...presentationValues(configuration), version: runtime.version };
+    });
+  }
+  private writeInstallationConfiguration(configuration: InstallationConfiguration) {
+    let serialized: string;
+    try { serialized = canonicalInstallationConfiguration(configuration); }
+    catch { throw new ControlError("Invalid installation configuration. Nothing was saved."); }
+    const iv = randomBytes(12), cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    cipher.setAAD(Buffer.from("installation-config:1"));
+    const data = Buffer.concat([cipher.update(serialized, "utf8"), cipher.final()]);
+    this.db.prepare("INSERT OR REPLACE INTO installation_config VALUES(1,?)").run([iv, cipher.getAuthTag(), data].map(value => value.toString("base64url")).join("."));
+  }
+  presentationCandidateVersion() {
+    const candidate = this.installationConfiguration();
+    return candidate ? hash(canonicalInstallationConfiguration(candidate)).toString("hex") : "new";
+  }
+  enablePresentation(token: string, expected: string) {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      if (this.presentationRuntime()) throw new ControlError("Installation presentation is already active.");
+      if (this.presentationCandidateVersion() !== expected) throw new ControlError("Configuration changed. Reload before confirming.");
+      let candidate = this.installationConfiguration();
+      if (!candidate) {
+        if (this.profiles().length || this.legacyAdoption()) throw new ControlError("Stage the existing installation configuration offline before enabling shared settings.");
+        candidate = { format: 1, source: { provider: "installation" }, settings: { "app.title": this.organization()?.appTitle || "IT-Asset-Tracker", "session.timeoutMinutes": "15" }, branding: [], timeZone: null, settingsKeyHash: null };
+      }
+      let values;
+      try { values = presentationValues(candidate); }
+      catch { throw new ControlError("Imported presentation settings are invalid. Resolve the source configuration first."); }
+      const organization = this.organization();
+      if (organization && organization.appTitle !== values.appTitle) throw new ControlError("Organization title conflicts with the staged configuration. Resolve it before enabling.");
+      this.writeInstallationConfiguration(candidate);
+      this.writeSetup("presentationRuntime", { version: randomUUID(), importedHash: hash(canonicalInstallationConfiguration(candidate)).toString("hex") });
+      this.audit("installation presentation enabled");
+    });
+  }
+  savePresentation(token: string, expected: string, input: { appTitle: string; sessionTimeoutMinutes: number },
+    uploads: { key: "branding.logo.light" | "branding.logo.dark" | "branding.icon.light" | "branding.icon.dark"; name: string; base64: string }[] = []) {
+    const values = presentationSchema.parse(input);
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      const runtime = this.presentationRuntime();
+      if (!runtime || runtime.version !== expected) throw new ControlError("Installation settings changed. Reload before saving.");
+      const candidate = this.installationConfiguration()!;
+      candidate.settings["app.title"] = values.appTitle;
+      candidate.settings["session.timeoutMinutes"] = String(values.sessionTimeoutMinutes);
+      for (const upload of uploads) {
+        if (!["branding.logo.light", "branding.logo.dark", "branding.icon.light", "branding.icon.dark"].includes(upload.key)) throw new ControlError("Invalid branding field.");
+        candidate.settings[upload.key] = "/branding/uploads/" + upload.name;
+        candidate.branding.push({ name: upload.name, base64: upload.base64 });
+      }
+      candidate.branding = candidate.branding.filter(file => Object.entries(candidate.settings).some(([key, value]) => key.startsWith("branding.") && value === "/branding/uploads/" + file.name));
+      this.writeInstallationConfiguration(candidate);
+      const organization = this.organization();
+      if (organization) this.writeSetup("organization", { ...organization, appTitle: values.appTitle, version: randomUUID() });
+      this.writeSetup("presentationRuntime", { ...runtime, version: randomUUID() });
+      this.audit("installation presentation updated");
     });
   }
   private readSetup<T>(key: string): T | null {
@@ -203,6 +274,13 @@ export class ControlStore {
           "Installation settings changed. Reload before saving.",
         );
       this.writeSetup("organization", { ...valid, version: randomUUID() });
+      const runtime = this.presentationRuntime();
+      if (runtime) {
+        const configuration = this.installationConfiguration()!;
+        configuration.settings["app.title"] = valid.appTitle;
+        this.writeInstallationConfiguration(configuration);
+        this.writeSetup("presentationRuntime", { ...runtime, version: randomUUID() });
+      }
       this.audit("installation settings saved");
     });
   }

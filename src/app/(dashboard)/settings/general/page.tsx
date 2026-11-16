@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { control, managed } from "@/modules/database-management/control-store";
 
 import { AppShell } from "@/components/navigation/app-shell";
 import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
@@ -111,7 +113,9 @@ export default async function GeneralSettingsPage({
 
   return (
     <AppShell>
+      {managed() && control().presentationRuntime() && <p className="mb-4">Application title and session timeout apply installation-wide. <Link className="underline" href="/settings/database-management">Sign in as Installation Administrator to change them.</Link> Asset settings remain workspace-specific.</p>}
       <GeneralSettingsPanels
+        installationManaged={Boolean(managed() && control().presentationRuntime())}
         assetStatuses={assetStatuses as AssetStatus[]}
         generalSettings={generalSettings}
         initialSaved={initialSaved}

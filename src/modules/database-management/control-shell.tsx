@@ -1,6 +1,7 @@
 import { AppShellClient } from "@/components/navigation/app-shell.client";
 import { Button } from "@/components/ui/button";
 import { Form } from "./action-form";
+import { control, managed } from "./control-store";
 export function ControlShell({
   children,
   title,
@@ -10,11 +11,12 @@ export function ControlShell({
   title: string;
   active: boolean;
 }) {
+  const presentation = managed() ? control().presentation() : null;
   return (
     <AppShellClient
       mode="control"
-      appTitle={title}
-      branding={{
+      appTitle={presentation?.appTitle ?? title}
+      branding={presentation?.branding ?? {
         lightLogoUrl: "/branding/asset-tracker-logo-light-transparent.png",
         darkLogoUrl: "/branding/asset-tracker-logo-dark-transparent.png",
       }}

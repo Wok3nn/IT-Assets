@@ -1,6 +1,9 @@
 # Phase 5C — ownership audit and staging foundation
 
 Status: **partial implementation; acceptance goal not yet met** (2026-11-16).
+Phase 5C.2 now supports explicit runtime enablement for title, session timeout and
+branding; see [the current runtime increment](installation-presentation-runtime.md).
+The staging implementation/history below describes the original `abe8f3d` increment.
 Baseline: `3c39271`. This increment introduces an encrypted, atomic legacy
 configuration snapshot in the persistent control store. It deliberately does not
 make that snapshot the application's runtime settings source. Switching to SQL

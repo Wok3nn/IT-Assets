@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getBootstrapRedirectResponse } from "@/lib/bootstrap.server";
 import { getBrandingSettings } from "@/modules/settings/settings.service";
 import { appConfig } from "@/services/config";
+import { control, managed } from "@/modules/database-management/control-store";
 
 type BrandingAssetRouteParams = {
   params: Promise<{
@@ -12,7 +13,9 @@ type BrandingAssetRouteParams = {
 };
 
 export async function GET(request: NextRequest, { params }: BrandingAssetRouteParams) {
-  const bootstrapResponse = await getBootstrapRedirectResponse();
+  const installation = managed() && control().presentationRuntime();
+  if (managed() && !installation && !control().state().active) return new Response(null, { status: 404 });
+  const bootstrapResponse = installation ? null : await getBootstrapRedirectResponse();
 
   if (bootstrapResponse) {
     return bootstrapResponse;

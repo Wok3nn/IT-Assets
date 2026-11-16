@@ -14,6 +14,7 @@ import { initializeProfile } from "./schema-service";
 import { hashPassword } from "../../services/password";
 import { setupPath, setupWorkspacePath } from "./setup-state";
 import { inspectConnection } from "./setup-service";
+import { presentationUploads } from "./presentation-upload";
 export async function databaseAction(form: FormData) {
   return execute(form);
 }
@@ -71,7 +72,14 @@ async function execute(
         destination = entry;
         throw new ControlError("Sign in as the installation administrator.");
       }
-      if (op === "logout" || op === "exit") {
+      if (op === "presentation-enable") {
+        if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide presentation settings.");
+        store.enablePresentation(token, v("version"));
+        message = "Installation-wide presentation enabled.";
+      } else if (op === "presentation-save") {
+        store.savePresentation(token, v("version"), { appTitle: v("appTitle"), sessionTimeoutMinutes: Number(v("sessionTimeoutMinutes")) }, await presentationUploads(form));
+        message = "Installation-wide settings saved.";
+      } else if (op === "logout" || op === "exit") {
         store.logout(token);
         jar.set(controlCookie, "", { path: "/", maxAge: 0 });
         message = "Signed out.";

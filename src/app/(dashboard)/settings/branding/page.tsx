@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { control, managed } from "@/modules/database-management/control-store";
 
 import { AppShell } from "@/components/navigation/app-shell";
 import { getCurrentUserSettingsPermissionContext } from "@/lib/permissions.server";
@@ -91,11 +93,14 @@ export default async function BrandingSettingsPage({
 
   return (
     <AppShell>
+      {managed() && control().presentationRuntime() && <p className="mb-4">Branding applies installation-wide. <Link className="underline" href="/settings/database-management">Sign in as Installation Administrator to edit branding.</Link></p>}
+      <fieldset disabled={Boolean(managed() && control().presentationRuntime())}>
       <BrandingSettingsPanel
         branding={branding}
         initialSaved={initialSaved}
         saveBrandingSettingsAction={saveBrandingSettingsAction}
       />
+      </fieldset>
     </AppShell>
   );
 }

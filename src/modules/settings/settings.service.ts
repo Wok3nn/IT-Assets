@@ -5,6 +5,9 @@ import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { managedBrandingUrl } from "@/modules/database-management/branding-compatibility";
+import { control, managed } from "@/modules/database-management/control-store";
+import { presentationKeys, DEFAULT_BRANDING } from "@/modules/database-management/installation-presentation";
+export { DEFAULT_BRANDING } from "@/modules/database-management/installation-presentation";
 
 import {
   DEFAULT_MAKE_MODEL_AUTO_ENABLED,
@@ -54,12 +57,6 @@ const BRANDING_DARK_ICON_KEY = "branding.icon.dark";
 const DEFAULT_STARTING_ASSET_TAG_NUMBER = 5000;
 export const DEFAULT_APP_TITLE = "IT-Asset-Tracker";
 export const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
-export const DEFAULT_BRANDING = {
-  lightLogoUrl: "/branding/asset-tracker-logo-light-transparent.png",
-  darkLogoUrl: "/branding/asset-tracker-logo-dark-transparent.png",
-  lightIconUrl: "/branding/asset-tracker-logo-light-transparent.ico",
-  darkIconUrl: "/branding/asset-tracker-logo-dark-transparent.ico",
-} as const;
 
 const BRANDING_SETTINGS_KEYS = [
   BRANDING_LIGHT_LOGO_KEY,
@@ -192,10 +189,11 @@ export async function upsertAssetStatus(input: { statusId?: string; name: string
 }
 
 export async function getGeneralSettings() {
+  const installation = managed() ? control().presentation() : null;
   const settings = await db.setting.findMany({
     where: {
       key: {
-        in: [...GENERAL_SETTINGS_KEYS],
+        in: GENERAL_SETTINGS_KEYS.filter(key => !installation || !(presentationKeys as readonly string[]).includes(key)),
       },
     },
     select: {
@@ -236,6 +234,7 @@ export async function getGeneralSettings() {
       darkIconUrl: settingsByKey.get(BRANDING_DARK_ICON_KEY) || DEFAULT_BRANDING.darkIconUrl,
       defaults: DEFAULT_BRANDING,
     },
+    ...(installation ? { appTitle: installation.appTitle, sessionTimeoutMinutes: installation.sessionTimeoutMinutes, branding: installation.branding } : {}),
   };
 }
 
@@ -265,10 +264,12 @@ export async function updateGeneralSettings(input: {
   makeModelModelSourceLevel: string;
 }) {
   const parsed = generalSettingsSchema.parse(input);
-
-  await upsertSetting(APP_TITLE_KEY, parsed.appTitle || DEFAULT_APP_TITLE);
+  const installation = managed() ? control().presentation() : null;
+  if (installation && (installation.appTitle !== parsed.appTitle || installation.sessionTimeoutMinutes !== parsed.sessionTimeoutMinutes))
+    throw new Error("Installation-wide settings require installation administrator sign-in in Database Management. Reload to see current values.");
+  if (!installation) await upsertSetting(APP_TITLE_KEY, parsed.appTitle || DEFAULT_APP_TITLE);
   await upsertSetting(STARTING_ASSET_TAG_KEY, String(parsed.startingAssetTagNumber));
-  await upsertSetting(SESSION_TIMEOUT_MINUTES_KEY, String(parsed.sessionTimeoutMinutes));
+  if (!installation) await upsertSetting(SESSION_TIMEOUT_MINUTES_KEY, String(parsed.sessionTimeoutMinutes));
   await upsertSetting(MAKE_MODEL_AUTO_ENABLED_KEY, String(parsed.makeModelAutoEnabled));
   await upsertSetting(MAKE_MODEL_MAKE_SOURCE_LEVEL_KEY, parsed.makeModelMakeSourceLevel);
   await upsertSetting(MAKE_MODEL_MODEL_SOURCE_LEVEL_KEY, parsed.makeModelModelSourceLevel);
@@ -277,6 +278,8 @@ export async function updateGeneralSettings(input: {
 }
 
 export async function getSessionTimeoutMinutes() {
+  const installation = managed() ? control().presentation() : null;
+  if (installation) return installation.sessionTimeoutMinutes;
   const setting = await db.setting.findUnique({
     where: {
       key: SESSION_TIMEOUT_MINUTES_KEY,
@@ -298,6 +301,7 @@ export async function updateBrandingSettings(input: {
   brandingLightIconUrl?: string;
   brandingDarkIconUrl?: string;
 }) {
+  if (managed() && control().presentationRuntime()) throw new Error("Manage installation-wide branding as an installation administrator in Database Management.");
   const parsed = brandingSettingsSchema.parse(input);
 
   await upsertSetting(BRANDING_LIGHT_LOGO_KEY, parsed.brandingLightLogoUrl || DEFAULT_BRANDING.lightLogoUrl);
@@ -321,6 +325,7 @@ function getBrandingFileExtension(file: File, allowedMimeTypes: Set<string>) {
 }
 
 export async function saveBrandingUpload(file: File, kind: "logo" | "icon") {
+  if (managed() && control().presentationRuntime()) throw new Error("Manage installation-wide branding as an installation administrator in Database Management.");
   if (file.size <= 0) {
     return null;
   }
@@ -339,12 +344,16 @@ export async function saveBrandingUpload(file: File, kind: "logo" | "icon") {
 }
 
 export async function getBrandingSettings() {
+  const installation = managed() ? control().presentation() : null;
+  if (installation) return installation.branding;
   const generalSettings = await getGeneralSettings();
 
   return generalSettings.branding;
 }
 
 export async function getAppShellBrandingSettings() {
+  const installation = managed() ? control().presentation() : null;
+  if (installation) return { appTitle: installation.appTitle, branding: installation.branding };
   const generalSettings = await getGeneralSettings();
 
   return {

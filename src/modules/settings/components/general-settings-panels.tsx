@@ -141,11 +141,13 @@ export function GeneralSettingsPanels({
   assetStatuses,
   initialSaved,
   saveGeneralSettingsAction,
+  installationManaged = false,
 }: {
   generalSettings: GeneralSettingsData;
   assetStatuses: AssetStatus[];
   initialSaved: boolean;
   saveGeneralSettingsAction: (formData: FormData) => void | Promise<void>;
+  installationManaged?: boolean;
 }) {
   const initialAppTitle = generalSettings.appTitle;
   const initialSessionTimeoutMinutes = String(generalSettings.sessionTimeoutMinutes);
@@ -322,6 +324,7 @@ export function GeneralSettingsPanels({
               <TextField
                 maxLength={80}
                 name="appTitle"
+                readOnly={installationManaged}
                 onChange={(event) => {
                   clearSavedState();
                   setAppTitle(event.target.value);
@@ -351,6 +354,7 @@ export function GeneralSettingsPanels({
                 max={60}
                 min={5}
                 name="sessionTimeoutMinutes"
+                readOnly={installationManaged}
                 onChange={(event) => {
                   clearSavedState();
                   setSessionTimeoutMinutes(event.target.value);

@@ -2,7 +2,10 @@
 
 Phase 5C adds an explicit `stage-configuration EXACT_DATABASE_NAME` operation to the
 offline adoption command. It stores an encrypted, allowlisted snapshot only; it does
-**not** yet preserve runtime settings when switching databases. See the
+**not by itself** preserve runtime settings when switching databases. A separate,
+authenticated [presentation runtime transition](installation-presentation-runtime.md)
+now enables shared title, session timeout and branding. Entra/mail/timezone runtime
+integration remains incomplete. See the
 [ownership audit, rollback contract and remaining acceptance work](installation-configuration.md).
 
 This is a candidate upgrade procedure for 0.6.0, not production approval. The audit

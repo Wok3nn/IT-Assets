@@ -38,7 +38,7 @@ export function Form({
           if (input.type === "password") input.value = "";
           else if (
             saved.current[input.name] !== undefined &&
-            input.type !== "hidden"
+            !["hidden", "file"].includes(input.type)
           )
             if (input instanceof HTMLInputElement && input.type === "checkbox")
               input.checked = saved.current[input.name] === "true";
@@ -57,7 +57,7 @@ export function Form({
           if (
             (input instanceof HTMLInputElement ||
               input instanceof HTMLSelectElement) &&
-            !["password", "hidden"].includes(input.type)
+            !["password", "hidden", "file"].includes(input.type)
           )
             values[input.name] =
               input instanceof HTMLInputElement && input.type === "checkbox"
