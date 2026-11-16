@@ -42,6 +42,8 @@ async function execute(
   let destination = wizard ? setupWorkspacePath : managementWorkspacePath;
   let step = v("step") || "3";
   let activationRevision: number | undefined;
+  if (!["enroll", "login"].includes(op) && !store.authorized(token))
+    redirect(entry + "?message=Session%20expired.%20Sign%20in%20to%20resume." + (wizard ? "&returnStep=" + (/^[1-5]$/.test(step) ? step : "3") : ""));
   try {
     if (op === "enroll") {
       if (v("password") !== v("confirmPassword"))
@@ -63,7 +65,7 @@ async function execute(
         maxAge: 3600,
       });
       message = "Signed in.";
-      step = store.resumeStep();
+      step = wizard && /^[1-5]$/.test(v("returnStep")) ? v("returnStep") : store.resumeStep();
     } else {
       if (!store.authorized(token)) {
         destination = entry;

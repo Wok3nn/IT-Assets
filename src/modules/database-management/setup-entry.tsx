@@ -12,9 +12,11 @@ export function SetupEntry({
   registered,
   message,
   guidance,
+  returnStep,
 }: {
   registered: boolean;
   message?: string;
+  returnStep?: string;
   guidance?: ReturnType<typeof enrollmentGuidance>;
 }) {
   const [step, setStep] = useState(1),
@@ -45,6 +47,7 @@ export function SetupEntry({
             : "Installation Administrator"}
       </h2>
       <Form op={registered ? "login" : "enroll"}>
+        {registered && /^[1-5]$/.test(returnStep ?? "") && <input type="hidden" name="returnStep" value={returnStep} />}
         {!registered && (
           <>
             <div hidden={step !== 1} className="space-y-4">

@@ -113,7 +113,7 @@ export function managementBoundary(req, res, url, store, config) {
     !store.authorized(token)
   ) {
     res.writeHead(303, {
-      Location: url.pathname.startsWith("/setup") ? "/setup" : managementPath,
+      Location: url.pathname.startsWith("/setup") ? "/setup?message=Session%20expired.%20Sign%20in%20to%20resume.&returnStep=" + (/^[1-5]$/.test(url.searchParams.get("step") || "") ? url.searchParams.get("step") : "3") : managementPath,
     });
     res.end();
     return true;

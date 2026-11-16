@@ -20,7 +20,10 @@ export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
     const validate = async () => {
       try {
         const response = await fetch(entry + "/session", { cache: "no-store" });
-        if (response.status === 401) window.location.replace(login);
+        if (response.status === 401) {
+          const step = new URLSearchParams(location.search).get("step") || "3";
+          window.location.replace(login + (login === "/setup" ? "?message=Session%20expired.%20Sign%20in%20to%20resume.&returnStep=" + (/^[1-5]$/.test(step) ? step : "3") : ""));
+        }
       } catch {
         // A managed activation briefly closes the listener. Do not destroy the
         // current visit merely because a health request overlaps that restart.
