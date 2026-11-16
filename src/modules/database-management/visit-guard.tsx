@@ -7,12 +7,6 @@ export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
   const pathname = usePathname();
   const login = pathname.startsWith("/setup") ? "/setup" : entry;
   useEffect(() => {
-    const leave = () => {
-      document.documentElement.style.visibility = "hidden";
-      navigator.sendBeacon(
-        entry + "/leave?visit=" + encodeURIComponent(fingerprint),
-      );
-    };
     const navigate = (event: MouseEvent) => {
       const anchor = (event.target as Element)?.closest("a");
       if (!anchor || event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0 || anchor.target === "_blank") return;
@@ -33,19 +27,17 @@ export function ManagementVisitGuard({ fingerprint }: { fingerprint: string }) {
       }
     };
     const show = (event: PageTransitionEvent) => {
-      if (event.persisted) window.location.replace(login);
+      if (event.persisted) void validate();
     };
     const focus = () => {
       void validate();
     };
-    window.addEventListener("pagehide", leave);
     window.addEventListener("pageshow", show);
     window.addEventListener("focus", focus);
     const timer = window.setInterval(focus, 30000);
     void validate();
     return () => {
       document.removeEventListener("click", navigate, true);
-      window.removeEventListener("pagehide", leave);
       window.removeEventListener("pageshow", show);
       window.removeEventListener("focus", focus);
       window.clearInterval(timer);
