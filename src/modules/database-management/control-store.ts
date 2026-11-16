@@ -11,6 +11,7 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "../../services/password";
+import { canonicalInstallationConfiguration, installationConfigurationSchema, type InstallationConfiguration } from "./installation-configuration";
 import {
   organizationSchema,
   type Organization,
@@ -106,6 +107,7 @@ export class ControlStore {
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, action TEXT NOT NULL, target TEXT);
       CREATE TABLE IF NOT EXISTS throttle(id INTEGER PRIMARY KEY CHECK(id=1), attempts INTEGER, untilMs INTEGER);
       CREATE TABLE IF NOT EXISTS auth_config(profile TEXT PRIMARY KEY, config TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS installation_config(id INTEGER PRIMARY KEY CHECK(id=1), envelope TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS operation(id INTEGER PRIMARY KEY CHECK(id=1), nonce TEXT NOT NULL);`);
     try {
       this.db.exec(`BEGIN IMMEDIATE;
@@ -123,20 +125,61 @@ export class ControlStore {
     }
     const keyFile = path.join(directory, "control.key");
     // Never silently replace a lost key when encrypted profiles already exist.
-    const saved = this.db.prepare("SELECT 1 FROM profile LIMIT 1").get();
-    this.key = Buffer.from(
-      saved ? readFileSync(keyFile, "utf8").trim() : privateFile(keyFile, 32),
-      "base64url",
-    );
-    if (this.key.length !== 32)
-      throw new ControlError(
-        "Invalid control key; restore the original key from backup.",
+    const saved = this.db.prepare("SELECT 1 FROM profile UNION ALL SELECT 1 FROM installation_config LIMIT 1").get();
+    try {
+      this.key = Buffer.from(
+        saved ? readFileSync(keyFile, "utf8").trim() : privateFile(keyFile, 32),
+        "base64url",
       );
+      if (this.key.length !== 32)
+        throw new ControlError("Invalid control key; restore the original key from backup.");
+    } catch {
+      this.db.close();
+      throw new ControlError("Missing or invalid control key; restore the original key from backup.");
+    }
     this.enrollment = path.join(directory, "bootstrap-token");
     if (!this.registered()) privateFile(this.enrollment, 32);
   }
   close() {
     this.db.close();
+  }
+  // Internal/offline API only. This staged record is not yet a runtime settings source.
+  installationConfiguration(): InstallationConfiguration | null {
+    const row = this.db.prepare("SELECT envelope FROM installation_config WHERE id=1").get();
+    if (!row) return null;
+    try {
+      const [iv, tag, data] = String(row.envelope).split(".").map(value => Buffer.from(value, "base64url"));
+      const cipher = createDecipheriv("aes-256-gcm", this.key, iv);
+      cipher.setAAD(Buffer.from("installation-config:1"));
+      cipher.setAuthTag(tag);
+      return installationConfigurationSchema.parse(JSON.parse(Buffer.concat([cipher.update(data), cipher.final()]).toString()));
+    } catch {
+      throw new ControlError("Installation configuration cannot be read. Restore the matching control store and key.");
+    }
+  }
+  stageInstallationConfiguration(input: InstallationConfiguration): "imported" | "unchanged" {
+    let serialized: string;
+    try { serialized = canonicalInstallationConfiguration(input); }
+    catch { throw new ControlError("Installation configuration failed validation. No values were imported."); }
+    return this.tx(() => {
+      const previous = this.installationConfiguration();
+      if (previous) {
+        if (canonicalInstallationConfiguration(previous) !== serialized)
+          throw new ControlError("Installation configuration already exists and differs. Explicit conflict resolution is required; nothing was overwritten.");
+        return "unchanged" as const;
+      }
+      const title = input.settings["app.title"];
+      if (title && this.organization() && this.organization()!.appTitle !== title)
+        throw new ControlError("Installation organization conflicts with the imported title. Resolve it explicitly before retrying.");
+      const iv = randomBytes(12), cipher = createCipheriv("aes-256-gcm", this.key, iv);
+      cipher.setAAD(Buffer.from("installation-config:1"));
+      const data = Buffer.concat([cipher.update(serialized, "utf8"), cipher.final()]);
+      this.db.prepare("INSERT INTO installation_config VALUES(1,?)").run(
+        [iv, cipher.getAuthTag(), data].map(value => value.toString("base64url")).join("."),
+      );
+      this.audit("installation configuration staged; runtime unchanged");
+      return "imported" as const;
+    });
   }
   private readSetup<T>(key: string): T | null {
     const row = this.db

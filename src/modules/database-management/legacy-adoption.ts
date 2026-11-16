@@ -6,6 +6,7 @@ import { checkProfile } from "./schema-service";
 import { createProfileClient } from "./profile-client";
 import { decryptAppSettingSecret } from "../../services/app-settings-encryption";
 import { authenticationSettingsSchema } from "../settings/authentication-settings.service";
+import { installationSettingKeys, canonicalInstallationConfiguration, type InstallationConfiguration } from "./installation-configuration";
 
 export const legacyProfileId = "adopted-legacy-mariadb";
 export const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
@@ -46,7 +47,33 @@ export function prepareLegacyAuthentication(settings: Map<string, string>, env: 
   return result.data;
 }
 
-export async function inspectLegacyAdoption(value: string, brandingDirectory?: string) {
+export function prepareInstallationConfiguration(
+  settings: Map<string, string>,
+  profile: ReturnType<typeof parseLegacyConnection>,
+  branding: { name: string; bytes: Buffer }[],
+): InstallationConfiguration {
+  const authentication = prepareLegacyAuthentication(settings);
+  const encrypted = settings.get("mail.clientSecretEncrypted");
+  if (encrypted) {
+    try { decryptAppSettingSecret(encrypted); }
+    catch { throw new ControlError("The original settings key must decrypt the mail credential before configuration import."); }
+  }
+  const selected = Object.fromEntries(installationSettingKeys.filter(key => settings.has(key)).map(key => [key, settings.get(key)!]));
+  if (settings.has("authentication.entra.secretReference"))
+    selected["authentication.entra.secretReference"] = authentication.entraSecretReference;
+  const payload: InstallationConfiguration = {
+    format: 1,
+    source: { provider: "mariadb", host: profile.host, port: profile.port, database: profile.database },
+    settings: selected,
+    timeZone: process.env.APP_TIME_ZONE || null,
+    branding: branding.map(file => ({ name: file.name, base64: file.bytes.toString("base64") })),
+    settingsKeyHash: process.env.APP_SETTINGS_ENCRYPTION_KEY ? digest(process.env.APP_SETTINGS_ENCRYPTION_KEY) : null,
+  };
+  try { return JSON.parse(canonicalInstallationConfiguration(payload)) as InstallationConfiguration; }
+  catch { throw new ControlError("Legacy installation configuration requires review. No values were imported."); }
+}
+
+export async function inspectLegacyAdoption(value: string, brandingDirectory?: string, includeConfiguration = false) {
   const profile = parseLegacyConnection(value);
   if (await checkProfile(profile) !== "compatible")
     throw new ControlError("Legacy schema is not compatible. Stop and review migrations on a restored copy; adoption never initializes or migrates a database.");
@@ -77,6 +104,7 @@ export async function inspectLegacyAdoption(value: string, brandingDirectory?: s
       } catch { throw new ControlError("A referenced legacy branding file is missing, unsafe or oversized. Restore the exact files before adoption."); }
     }
     return { profile, authentication, branding,
+      ...(includeConfiguration ? { installation: prepareInstallationConfiguration(settings, profile, branding) } : {}),
       settingsKeyHash: process.env.APP_SETTINGS_ENCRYPTION_KEY ? digest(process.env.APP_SETTINGS_ENCRYPTION_KEY) : null,
       entraSecretHash: authentication.entraSecretReference ? digest(process.env.IT_ASSETS_ENTRA_SECRET_UPGRADE!) : null };
   } finally { await db.$disconnect(); }

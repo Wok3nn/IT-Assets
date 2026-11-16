@@ -9,8 +9,8 @@ import { loadDeploymentSecrets } from "./deployment-secrets.mjs";
 let owner, store;
 try {
   const [operation, confirmation, ...extra] = process.argv.slice(2);
-  if (!["check", "adopt"].includes(operation) || extra.length || (operation === "check" && confirmation))
-    throw new storeModule.ControlError("Usage: node --import tsx scripts/adopt-legacy.mjs check | adopt EXACT_DATABASE_NAME. Stop the managed app first.");
+  if (!["check", "adopt", "stage-configuration"].includes(operation) || extra.length || (operation === "check" && confirmation))
+    throw new storeModule.ControlError("Usage: node --import tsx scripts/adopt-legacy.mjs check | adopt EXACT_DATABASE_NAME | stage-configuration EXACT_DATABASE_NAME. Stop the managed app first.");
   if (!process.env.IT_ASSETS_CONTROL_DIR || !path.isAbsolute(process.env.IT_ASSETS_CONTROL_DIR) || !process.env.IT_ASSETS_ADOPT_DATABASE_URL_FILE)
     throw new storeModule.ControlError("Set an absolute IT_ASSETS_CONTROL_DIR and explicit IT_ASSETS_ADOPT_DATABASE_URL_FILE. Ambient DATABASE_URL is never imported.");
   loadDeploymentSecrets();
@@ -21,11 +21,15 @@ try {
   owner.exec("BEGIN EXCLUSIVE");
   const value = readFileSync(process.env.IT_ASSETS_ADOPT_DATABASE_URL_FILE, "utf8");
   const target = adoption.parseLegacyConnection(value);
-  if (operation === "adopt" && confirmation !== target.database)
+  if (operation !== "check" && confirmation !== target.database)
     throw new storeModule.ControlError("Type the exact target database name to authorize adoption. No activation is performed.");
-  const candidate = await adoption.inspectLegacyAdoption(value, process.env.IT_ASSETS_LEGACY_BRANDING_DIR);
+  const candidate = await adoption.inspectLegacyAdoption(value, process.env.IT_ASSETS_LEGACY_BRANDING_DIR, operation === "stage-configuration");
   console.log(JSON.stringify({ provider: target.provider, host: target.host, port: target.port, database: target.database, compatible: true, brandingFiles: candidate.branding.length }));
-  if (operation === "adopt") {
+  if (operation === "stage-configuration") {
+    store = new storeModule.ControlStore(directory);
+    const result = store.stageInstallationConfiguration(candidate.installation);
+    console.log(`Installation configuration staging: ${result}. Runtime settings are NOT switched to this snapshot. Phase 5C runtime/UI integration remains required. No inventory writes or activation.`);
+  } else if (operation === "adopt") {
     store = new storeModule.ControlStore(directory);
     const id = adoption.saveLegacyAdoption(store, directory, candidate);
     console.log(`Connection saved as ${id}. Start the app, enroll/sign in, inspect and explicitly activate in Database Management. No inventory rows or schema were changed.`);

@@ -1,5 +1,10 @@
 # Phase 5: existing Docker/MariaDB upgrade — production blocked
 
+Phase 5C adds an explicit `stage-configuration EXACT_DATABASE_NAME` operation to the
+offline adoption command. It stores an encrypted, allowlisted snapshot only; it does
+**not** yet preserve runtime settings when switching databases. See the
+[ownership audit, rollback contract and remaining acceptance work](installation-configuration.md).
+
 This is a candidate upgrade procedure for 0.6.0, not production approval. The audit
 covered repository files, not the actual deployment. No production/development
 database, control store, Compose configuration or secret was accessed. Compare the

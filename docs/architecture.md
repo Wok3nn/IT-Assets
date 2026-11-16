@@ -4,6 +4,12 @@ Last updated: 2026-11-10
 
 ## Unified managed installation
 
+Phase 5C begins with an encrypted installation-configuration **staging snapshot** in
+the control store. Runtime settings have not switched to it. The complete ownership
+audit, additive import contract and remaining runtime/offline-UI work are in
+[installation configuration](installation-configuration.md). Do not treat profile-local
+authentication, branding or inventory Setting rows as installation-wide persistence yet.
+
 The managed listener supplies Next's private self-fetch origin from its bound socket.
 Public APP_URL remains separate for CSRF, cookies and callbacks. See
 [redirect routing behind Docker/proxies](managed-redirect-origin.md).
