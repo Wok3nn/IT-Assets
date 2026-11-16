@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { migrationChecksumMatches } from "./migration-checksum";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -141,17 +141,12 @@ async function inspect(db: PrismaClient, p: Profile): Promise<Classification> {
       path.join(history(p), d.name, "migration.sql"),
       "utf8",
     );
-    const checks = [
-      sql,
-      sql.replace(/\r\n/g, "\n"),
-      sql.replace(/\r?\n/g, "\r\n"),
-    ].map((s) => createHash("sha256").update(s).digest("hex"));
     if (
       !applied.some(
-        (r) => r.migration_name === d.name && checks.includes(r.checksum),
+        (r) => r.migration_name === d.name && migrationChecksumMatches(p.provider, d.name, sql, r.checksum),
       )
     )
-      return "incompatible";
+      throw new ControlError("Migration checksum or identity mismatch. Compare the deployed migration files with the recorded history; do not reset, baseline or edit the database history.");
   }
   // Match live DDL, not just names in migration history. Only allow the two known
   // filtered-index representation differences after independently verifying their predicates.

@@ -1,0 +1,2 @@
+# Historical SQL stays unchanged in Git; future checkouts use stable bytes.
+prisma/**/migration.sql text eol=lf
