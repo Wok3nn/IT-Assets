@@ -1,3 +1,4 @@
+import { InstallationEntraPanel } from "@/modules/database-management/installation-entra-panel";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { PageHero } from "@/components/layout/page-hero";
@@ -55,6 +56,7 @@ export default async function ManagementWorkspace({
       {message && !activation && <p role="status">{message}</p>}
       {activation && <ActivationStatus {...activation} />}
       <InstallationPresentationPanel />
+      <InstallationEntraPanel />
       <ConfigurationReviewPanel />
       <DatabasePanel
         {...state}

@@ -48,6 +48,7 @@ function normalizeGroupId(groupId: string) {
 }
 
 export type EntraAuthenticationConfig = {
+  version?: string;
   enabled: boolean;
   tenantId: string;
   clientId: string;
@@ -121,7 +122,7 @@ function parseGroupMappings(value: string | undefined): AuthenticationGroupRoleM
   }
 }
 
-export async function getAuthenticationSettings() {
+async function getWorkspaceAuthenticationSettings() {
   if (managed()) {
     const saved=control().authentication();
     if (saved) return authenticationSettingsSchema.parse(saved);
@@ -149,6 +150,13 @@ export async function getAuthenticationSettings() {
     entraRedirectUri: settingsByKey.get(AUTH_ENTRA_REDIRECT_URI_KEY) ?? "",
     groupMappings: parseGroupMappings(settingsByKey.get(AUTH_ENTRA_GROUP_MAPPINGS_KEY)),
   } satisfies AuthenticationSettings;
+}
+
+export async function getAuthenticationSettings() {
+  const settings = await getWorkspaceAuthenticationSettings();
+  const installation = managed() ? control().entraPublic() : null;
+  return installation ? { ...settings, entraTenantId: installation.tenantId, entraClientId: installation.clientId,
+    entraRedirectUri: installation.redirectUri, entraSecretReference: "" } : settings;
 }
 
 export async function resolveEntraMappedRoleKeys(groupIds: string[]) {
@@ -180,7 +188,7 @@ export async function updateAuthenticationSettings(input: AuthenticationSettings
   }
 
   if (managed()) {
-    if(parsed.entraEnabled && !parsed.entraSecretReference) throw new Error("Enter the managed Entra secret environment variable name.");
+    if(!control().entraRuntime() && parsed.entraEnabled && !parsed.entraSecretReference) throw new Error("Enter the managed Entra secret environment variable name.");
     control().saveAuthentication(parsed);
     return parsed;
   }
@@ -212,12 +220,14 @@ function resolveSecretReference(secretReference: string) {
 export async function getEntraAuthenticationConfig() {
   const settings = await getAuthenticationSettings();
 
+  const installation = managed() ? control().entraTransport() : null;
   return {
+    version: installation?.version,
     enabled: settings.entraEnabled,
-    tenantId: settings.entraTenantId,
-    clientId: settings.entraClientId,
-    clientSecret: resolveSecretReference(settings.entraSecretReference),
-    configuredRedirectUri: settings.entraRedirectUri,
+    tenantId: installation?.tenantId ?? settings.entraTenantId,
+    clientId: installation?.clientId ?? settings.entraClientId,
+    clientSecret: installation?.clientSecret ?? resolveSecretReference(settings.entraSecretReference),
+    configuredRedirectUri: installation?.redirectUri ?? settings.entraRedirectUri,
   } satisfies EntraAuthenticationConfig;
 }
 

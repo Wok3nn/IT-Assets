@@ -61,6 +61,7 @@ function parseStateCookie(value: string | undefined) {
 
   try {
     const parsed = JSON.parse(Buffer.from(decodeURIComponent(value), "base64url").toString("utf8")) as {
+      version?: unknown;
       codeVerifier?: unknown;
       redirectUri?: unknown;
       state?: unknown;
@@ -75,6 +76,7 @@ function parseStateCookie(value: string | undefined) {
     }
 
     return {
+      version: parsed.version,
       codeVerifier: parsed.codeVerifier,
       redirectUri: parsed.redirectUri,
       state: parsed.state,
@@ -95,7 +97,7 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
 
   if (error) {
-    return redirectToLogin(request, error);
+    return redirectToLogin(request, "provider-error");
   }
 
   if (!code || !state) {
@@ -145,6 +147,8 @@ export async function GET(request: Request) {
     return redirectToLogin(request, "not-configured");
   }
 
+  if (stateCookie.version !== config.version) return redirectToLogin(request, "configuration-changed");
+
   try {
     const { accessToken, idToken } = await exchangeEntraAuthorizationCode({
       code,
@@ -184,6 +188,9 @@ export async function GET(request: Request) {
       resolvedRoleKeys: effectiveRoleKeys,
     });
 
+    const latestConfig = await getEntraAuthenticationConfig();
+    if (!latestConfig.enabled || latestConfig.version !== config.version) return redirectToLogin(request, "configuration-changed");
+
     await db.user.update({
       where: {
         id: user.id,
@@ -216,10 +223,8 @@ export async function GET(request: Request) {
     clearEntraCookies(response);
 
     return response;
-  } catch (caughtError) {
-    logger.warn("[bootstrap] Entra callback failed.", caughtError);
-    const message = caughtError instanceof Error ? caughtError.message : "entra-sign-in-failed";
-
-    return redirectToLogin(request, message);
+  } catch {
+    logger.warn("[bootstrap] Entra callback failed.");
+    return redirectToLogin(request, "entra-sign-in-failed");
   }
 }

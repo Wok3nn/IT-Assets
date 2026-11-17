@@ -107,7 +107,7 @@ test("managed capture uses managed IdP edits, verifies ciphertext, excludes work
     assert.equal(captured.branding.length, 1);
     assert.throws(() => prepareManagedConfiguration(settings, auth, profile, () => { throw new Error("missing file"); }), /missing, unsafe or oversized/);
     assert.ok(!JSON.stringify(captured).includes("do-not-transfer"));
-    assert.ok(!JSON.stringify(captured).includes("fixture-secret-never-captured"));
+    assert.equal(captured.settings["authentication.entra.clientSecret"], "fixture-secret-never-captured");
     assert.equal(settings.get("authentication.entra.tenantId"), "old-tenant");
     process.env.APP_SETTINGS_ENCRYPTION_KEY = Buffer.alloc(32, 8).toString("base64url");
     assert.throws(() => prepareManagedConfiguration(settings, auth, profile, () => Buffer.from("fixture")), /original mail settings key/);

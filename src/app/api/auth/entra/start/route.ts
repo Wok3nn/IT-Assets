@@ -15,6 +15,7 @@ import { logger } from "@/services/logger";
 import { readSetupState } from "@/services/setup-state";
 
 function encodeStateCookie(input: {
+  version?: string;
   codeVerifier: string;
   redirectUri: string;
   state: string;
@@ -73,6 +74,7 @@ export async function GET() {
     sameSite: "lax",
     secure: appConfig.useSecureCookies,
     value: encodeStateCookie({
+      version: config.version,
       codeVerifier: authRequest.codeVerifier,
       redirectUri: authRequest.redirectUri,
       state: authRequest.state,

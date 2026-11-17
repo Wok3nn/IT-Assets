@@ -7,7 +7,7 @@ export function ConfigurationReviewPanel() {
   const reviews = control().configurationReviews();
   if (!reviews.length) return null;
   return <PanelCard><h2 className="text-xl font-semibold">Captured configuration reviews</h2>
-    <p className="my-3">Compare the captured profile with installation configuration at capture time. Secrets remain hidden. Choosing the profile replaces the shared snapshot and organization title; only already-enabled appearance and session policy take effect. Entra, mail and timezone remain staged. This does not enable configuration or switch databases.</p>
+    <p className="my-3">Compare the captured profile with installation configuration at capture time. Secrets remain hidden. Choosing the profile replaces the shared snapshot and organization title; only already-enabled appearance, session policy and Entra credentials take effect. Mail and timezone remain staged. This does not enable configuration or switch databases.</p>
     {reviews.map(review => <details key={review.id} className="my-4" open={review.status === "pending"}>
       <summary>{review.profile} · {review.capturedAt} · {review.status}</summary>
       {review.stale && <p role="alert">Installation settings changed after capture. This review cannot overwrite them. Capture a refreshed review explicitly.</p>}

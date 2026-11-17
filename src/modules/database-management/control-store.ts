@@ -1,3 +1,4 @@
+import { entraFields, entraValues, persistEntraCredential, type EntraFields } from "./installation-entra";
 import {
   createCipheriv,
   createDecipheriv,
@@ -168,7 +169,7 @@ export class ControlStore {
       const previous = this.installationConfiguration();
       if (previous) {
         const runtime = this.readSetup<{ importedHash: string }>("presentationRuntime");
-        if (runtime?.importedHash === hash(serialized).toString("hex")) return "unchanged" as const;
+        if (runtime?.importedHash === hash(serialized).toString("hex") || this.entraRuntime()?.importedHash === hash(serialized).toString("hex")) return "unchanged" as const;
         if (canonicalInstallationConfiguration(previous) !== serialized)
           throw new ControlError("Installation configuration already exists and differs. Explicit conflict resolution is required; nothing was overwritten.");
         return "unchanged" as const;
@@ -186,11 +187,56 @@ export class ControlStore {
       return "imported" as const;
     });
   }
+  entraRuntime() { return this.readSetup<{ version: string; importedHash: string }>("entraRuntime"); }
+  // Secret-bearing server-only transport. Public views must use entraPublic().
+  entraTransport() {
+    return this.tx(() => {
+      const runtime = this.entraRuntime();
+      if (!runtime) return null;
+      try { return { ...entraValues(this.installationConfiguration()!), version: runtime.version }; }
+      catch { throw new ControlError("Installation Entra configuration is incomplete. Restore the control backup."); }
+    });
+  }
+  entraPublic() {
+    const values = this.entraTransport();
+    return values ? { tenantId: values.tenantId, clientId: values.clientId, redirectUri: values.redirectUri, version: values.version, credentialConfigured: true } : null;
+  }
+  enableEntra(token: string, expected: string) {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      if (this.entraRuntime()) throw new ControlError("Installation Entra is already active.");
+      if (this.presentationCandidateVersion() !== expected) throw new ControlError("Configuration changed. Reload before confirming.");
+      let candidate;
+      try { candidate = persistEntraCredential(this.installationConfiguration()!); }
+      catch { throw new ControlError("Stage complete verified Entra credentials before enabling installation Entra."); }
+      this.writeInstallationConfiguration(candidate);
+      this.writeSetup("entraRuntime", { version: randomUUID(), importedHash: expected });
+      this.audit("installation Entra enabled");
+    });
+  }
+  saveEntra(token: string, expected: string, input: EntraFields, replacementSecret: string) {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      const runtime = this.entraRuntime();
+      if (!runtime || runtime.version !== expected) throw new ControlError("Installation Entra changed. Reload before saving.");
+      let candidate;
+      try {
+        const values = entraFields.parse(input), previous = this.installationConfiguration()!;
+        candidate = persistEntraCredential({ ...previous, settings: { ...previous.settings,
+          "authentication.entra.tenantId": values.tenantId, "authentication.entra.clientId": values.clientId,
+          "authentication.entra.redirectUri": values.redirectUri,
+          "authentication.entra.clientSecret": replacementSecret || entraValues(previous).clientSecret } });
+      } catch { throw new ControlError("Enter valid Entra tenant, client and callback values and a valid client secret."); }
+      this.writeInstallationConfiguration(candidate);
+      this.writeSetup("entraRuntime", { ...runtime, version: randomUUID() });
+      this.audit("installation Entra updated");
+    });
+  }
   presentationRuntime() {
     return this.readSetup<{ version: string; importedHash: string }>("presentationRuntime");
   }
   private configurationBaseline() {
-    return configurationDigest({ configuration: this.installationConfiguration(), organization: this.organization(), runtime: this.presentationRuntime() });
+    return configurationDigest({ configuration: this.installationConfiguration(), organization: this.organization(), runtime: this.presentationRuntime(), ...(this.entraRuntime() ? { entraRuntime: this.entraRuntime() } : {}) });
   }
   private readConfigurationReview(id: string): ConfigurationReview {
     const row = this.db.prepare("SELECT envelope FROM configuration_review WHERE id=?").get(id);
@@ -222,7 +268,7 @@ export class ControlStore {
       const baseline = this.configurationBaseline(), id = configurationDigest({ sourceHash, baseline });
       if (this.db.prepare("SELECT 1 FROM configuration_review WHERE id=?").get(id)) { this.readConfigurationReview(id); return id; }
       this.writeConfigurationReview(id, { profile, profileVersion, sourceHash, baseline, candidate,
-        previous: this.installationConfiguration(), previousOrganization: this.organization(), previousRuntime: this.presentationRuntime(),
+        previous: this.installationConfiguration(), previousOrganization: this.organization(), previousRuntime: this.presentationRuntime(), previousEntraRuntime: this.entraRuntime(),
         capturedAt: new Date().toISOString(), status: "pending" });
       this.audit("configuration review captured; approval required", id);
       return id;
@@ -254,7 +300,13 @@ export class ControlStore {
       if (review.baseline !== this.configurationBaseline()) throw new ControlError("Installation settings changed after capture. Capture an explicit refreshed review; nothing was overwritten.");
       if (this.profiles().find(item => item.id === review.profile)?.version !== review.profileVersion) throw new ControlError("Source connection changed. Capture a new review.");
       if (decision === "profile") {
-        this.writeInstallationConfiguration(review.candidate);
+        let candidate = review.candidate;
+        if (this.entraRuntime()) {
+          try { candidate = persistEntraCredential(candidate); }
+          catch { throw new ControlError("Captured Entra credentials are incomplete. Capture a verified configuration first."); }
+          this.writeSetup("entraRuntime", { ...this.entraRuntime(), version: randomUUID() });
+        }
+        this.writeInstallationConfiguration(candidate);
         const values = presentationValues(review.candidate), organization = this.organization(), runtime = this.presentationRuntime();
         if (organization) this.writeSetup("organization", { ...organization, appTitle: values.appTitle, version: randomUUID() });
         if (runtime) this.writeSetup("presentationRuntime", { ...runtime, version: randomUUID() });
@@ -277,6 +329,8 @@ export class ControlStore {
       else this.db.prepare("DELETE FROM setup_record WHERE key='organization'").run();
       if (review.previousRuntime) this.writeSetup("presentationRuntime", { ...review.previousRuntime, version: randomUUID() });
       else this.db.prepare("DELETE FROM setup_record WHERE key='presentationRuntime'").run();
+      if (review.previousEntraRuntime) this.writeSetup("entraRuntime", { ...review.previousEntraRuntime, version: randomUUID() });
+      else this.db.prepare("DELETE FROM setup_record WHERE key='entraRuntime'").run();
       review.status = "restored"; this.writeConfigurationReview(id, review);
       this.audit("configuration review restored", id);
     });
@@ -618,7 +672,7 @@ export class ControlStore {
     const row = this.db.prepare("SELECT config FROM auth_config WHERE profile=?").get(id);
     const usesAdoptedSecret = row && JSON.parse(String(row.config)).entraSecretReference === "IT_ASSETS_ENTRA_SECRET_UPGRADE";
     if ((adopted.settingsKeyHash && hash(settingsKey).toString("hex") !== adopted.settingsKeyHash) ||
-      (usesAdoptedSecret && adopted.entraSecretHash && hash(entraSecret).toString("hex") !== adopted.entraSecretHash))
+      (!this.entraRuntime() && usesAdoptedSecret && adopted.entraSecretHash && hash(entraSecret).toString("hex") !== adopted.entraSecretHash))
       throw new ControlError("The adopted workspace requires its verified deployment secrets. Restore the original settings key and Entra secret before activation/startup.");
   }
   adoptLegacy(input: Profile, record: LegacyAdoption, authentication: { entraSecretReference: string }) {
@@ -702,7 +756,7 @@ export class ControlStore {
       .get(this.pinnedProfile());
     return row ? JSON.parse(String(row.config)) : null;
   }
-  saveAuthentication(config: { entraSecretReference: string }) {
+  saveAuthentication(config: { entraSecretReference: string; [key: string]: unknown }) {
     if (
       config.entraSecretReference &&
       !/^IT_ASSETS_ENTRA_SECRET_[A-Z0-9_]+$/.test(config.entraSecretReference)
@@ -712,6 +766,13 @@ export class ControlStore {
       );
     this.tx(() => {
       const id = this.pinnedProfile();
+      if (this.entraRuntime()) {
+        // Preserve original transport values for rollback; only workspace policy may change here.
+        const previous = this.profileAuthentication(id) as Record<string, unknown> | null;
+        const incoming = config as typeof config & Record<string, unknown>;
+        config = { ...incoming, entraTenantId: previous?.entraTenantId ?? "", entraClientId: previous?.entraClientId ?? "",
+          entraRedirectUri: previous?.entraRedirectUri ?? "", entraSecretReference: String(previous?.entraSecretReference ?? "") };
+      }
       this.db
         .prepare("INSERT OR REPLACE INTO auth_config VALUES(?,?)")
         .run(id, JSON.stringify(config));

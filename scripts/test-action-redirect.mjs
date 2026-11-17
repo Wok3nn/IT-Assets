@@ -113,6 +113,28 @@ try {
     const restored = await post("configuration-restore", { id: reviewId, confirmation: "RESTORE", context: "management" });
     assert.equal(restored.status, 303); await restored.text();
     assert.equal(reviewObserver.presentation().appTitle, "Persistent offline fixture");
+    const entra = reviewObserver.installationConfiguration();
+    entra.settings["authentication.entra.tenantId"] = "11111111-1111-4111-8111-111111111111";
+    entra.settings["authentication.entra.clientId"] = "22222222-2222-4222-8222-222222222222";
+    entra.settings["authentication.entra.clientSecret"] = "http-fixture-secret";
+    const entraReview = reviewObserver.captureConfigurationReview(profile.id, profile.version, entra, true);
+    await (await post("configuration-resolve", { id: entraReview, decision: "profile", confirmation: "APPLY SNAPSHOT", context: "management" })).text();
+    const enabledEntra = await post("entra-enable", { version: reviewObserver.presentationCandidateVersion(), confirmation: "ENABLE", context: "management" });
+    assert.equal(enabledEntra.status, 303); await enabledEntra.text();
+    assert.ok(reviewObserver.entraPublic().credentialConfigured);
+    const version = reviewObserver.entraPublic().version;
+    const fields = { version, tenantId: entra.settings["authentication.entra.tenantId"], clientId: entra.settings["authentication.entra.clientId"], redirectUri: "http://localhost:4052/api/auth/entra/callback", clientSecret: "http-replacement-secret", context: "management" };
+    const savedEntra = await post("entra-save", fields, "http://localhost:4052", true);
+    assert.equal(savedEntra.status, 303); await savedEntra.text();
+    assert.equal(reviewObserver.entraTransport().clientSecret, "http-replacement-secret");
+    await (await post("entra-save", { ...fields, clientSecret: "stale-secret" })).text();
+    assert.equal(reviewObserver.entraTransport().clientSecret, "http-replacement-secret");
+    const rejectedEntra = await post("entra-save", { ...fields, version: reviewObserver.entraPublic().version }, "http://attacker.invalid", "attacker.invalid");
+    assert.ok(rejectedEntra.status >= 400); await rejectedEntra.text();
+    const entraPage = await fetch("http://127.0.0.2:4050/settings/database-management/workspace", { headers: { Cookie: cookie } });
+    const entraHtml = await entraPage.text();
+    assert.match(entraHtml, /Save installation Entra credentials/);
+    assert.doesNotMatch(entraHtml, /http-fixture-secret|http-replacement-secret/);
   } finally { reviewObserver.close(); }
   const forbidden = await post("save", {}, "http://attacker.invalid");
   assert.ok(forbidden.status >= 400); await forbidden.text();
@@ -125,6 +147,8 @@ try {
   assert.equal(session.status, 401);
   const rejected = await post("presentation-save", { appTitle: "Unauthorized", sessionTimeoutMinutes: "20" });
   assert.match(rejected.headers.get("x-action-redirect"), /Session%20expired/); await rejected.text();
+  const rejectedEntraLogout = await post("entra-save", {});
+  assert.match(rejectedEntraLogout.headers.get("x-action-redirect"), /Session%20expired/); await rejectedEntraLogout.text();
   assert.doesNotMatch(logs, /failed to get redirect response|ECONNREFUSED.*4052/);
   console.log("PASS: mapped-port redirects, presentation cutover/save/upload, configuration review/apply/restore, offline management and branding, stale-write rejection, profile saves, foreign-origin rejection and logout; isolated control store only.");
 } finally { if (server.connected) server.send("stop"); await exited; }

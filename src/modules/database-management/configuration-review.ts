@@ -7,13 +7,14 @@ export type ConfigurationReview = {
   previous: InstallationConfiguration | null;
   previousOrganization: { siteName: string; appTitle: string; version: string } | null;
   previousRuntime: { version: string; importedHash: string } | null;
+  previousEntraRuntime?: { version: string; importedHash: string } | null;
   status: "pending" | "kept" | "applied" | "restored";
   result?: string;
 };
 export function configurationDifferences(previous: InstallationConfiguration | null, candidate: InstallationConfiguration) {
   const keys = new Set([...Object.keys(previous?.settings ?? {}), ...Object.keys(candidate.settings)]);
   const differences = [...keys].sort().filter(key => previous?.settings[key as keyof typeof candidate.settings] !== candidate.settings[key as keyof typeof candidate.settings]).map(key => {
-    const secret = key === "mail.clientSecretEncrypted" || key === "authentication.entra.secretReference";
+    const secret = key === "mail.clientSecretEncrypted" || key === "authentication.entra.secretReference" || key === "authentication.entra.clientSecret";
     const safe = (value: string | undefined) => secret ? (value ? "Configured (hidden)" : "Not configured") : value ?? "Not configured";
     return { key, current: safe(previous?.settings[key as keyof typeof candidate.settings]), captured: safe(candidate.settings[key as keyof typeof candidate.settings]) };
   });

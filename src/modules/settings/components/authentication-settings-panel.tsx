@@ -19,6 +19,7 @@ type RoleOption = {
 
 type AuthenticationSettingsPanelProps = {
   initialError?: string | null;
+  installationEntra?: boolean;
   initialSaved: boolean;
   roles: RoleOption[];
   settings: AuthenticationSettings;
@@ -88,6 +89,7 @@ function AuthenticationHeaderActions({
 
 export function AuthenticationSettingsPanel({
   initialError,
+  installationEntra = false,
   initialSaved,
   roles,
   settings,
@@ -270,22 +272,23 @@ export function AuthenticationSettingsPanel({
               Users with login enabled can sign in through Entra without a local password when SSO is enabled. Local email/password sign-in still requires a real local password.
             </div>
 
+            {installationEntra && <p>Provider credentials belong to the installation. <Link href="/settings/database-management">Sign in as installation administrator to edit them.</Link> Sign-in policy and group mappings below belong to this workspace.</p>}
             <div className="grid gap-3 md:grid-cols-2">
               <FieldLabel>
                 <FieldLabelText>Tenant ID</FieldLabelText>
-                <TextField name="entraTenantId" onChange={(event) => { clearSavedState(); setEntraTenantId(event.target.value); }} placeholder="00000000-0000-0000-0000-000000000000" value={entraTenantId} />
+                <TextField readOnly={installationEntra} name="entraTenantId" onChange={(event) => { clearSavedState(); setEntraTenantId(event.target.value); }} placeholder="00000000-0000-0000-0000-000000000000" value={entraTenantId} />
               </FieldLabel>
               <FieldLabel>
                 <FieldLabelText>Client ID</FieldLabelText>
-                <TextField name="entraClientId" onChange={(event) => { clearSavedState(); setEntraClientId(event.target.value); }} placeholder="Application client ID" value={entraClientId} />
+                <TextField readOnly={installationEntra} name="entraClientId" onChange={(event) => { clearSavedState(); setEntraClientId(event.target.value); }} placeholder="Application client ID" value={entraClientId} />
               </FieldLabel>
               <FieldLabel>
-                <FieldLabelText>Client secret reference</FieldLabelText>
-                <TextField name="entraSecretReference" onChange={(event) => { clearSavedState(); setEntraSecretReference(event.target.value); }} placeholder="Environment variable or vault reference" type="password" value={entraSecretReference} />
+                <FieldLabelText>{installationEntra ? "Client secret (configured, hidden)" : "Client secret reference"}</FieldLabelText>
+                <TextField readOnly={installationEntra} name="entraSecretReference" onChange={(event) => { clearSavedState(); setEntraSecretReference(event.target.value); }} placeholder="Environment variable or vault reference" type="password" value={entraSecretReference} />
               </FieldLabel>
               <FieldLabel>
                 <FieldLabelText>Redirect URI / callback</FieldLabelText>
-                <TextField name="entraRedirectUri" onChange={(event) => { clearSavedState(); setEntraRedirectUri(event.target.value); }} placeholder={ENTRA_REDIRECT_URI_EXAMPLE} value={entraRedirectUri} />
+                <TextField readOnly={installationEntra} name="entraRedirectUri" onChange={(event) => { clearSavedState(); setEntraRedirectUri(event.target.value); }} placeholder={ENTRA_REDIRECT_URI_EXAMPLE} value={entraRedirectUri} />
               </FieldLabel>
             </div>
 

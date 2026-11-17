@@ -24,6 +24,7 @@ export function prepareManagedConfiguration(settings: Map<string, string>, authe
   const reference = selected["authentication.entra.secretReference"];
   if (reference && (!/^IT_ASSETS_ENTRA_SECRET_[A-Z0-9_]+$/.test(reference) || !process.env[reference]))
     throw new ControlError("Capture requires a configured managed Entra secret reference. Resolve legacy literals through verified legacy adoption first.");
+  if (reference) selected["authentication.entra.clientSecret"] = process.env[reference]!;
   const encrypted = selected["mail.clientSecretEncrypted"];
   if (encrypted) {
     try { decryptAppSettingSecret(encrypted); }

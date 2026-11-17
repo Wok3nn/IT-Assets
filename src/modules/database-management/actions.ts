@@ -82,6 +82,13 @@ async function execute(
         if (v("confirmation") !== "RESTORE") throw new ControlError("Type RESTORE to confirm rollback of this configuration resolution.");
         store.restoreConfigurationReview(token, id);
         message = "Previous installation configuration restored.";
+      } else if (op === "entra-enable") {
+        if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide Entra credentials.");
+        store.enableEntra(token, v("version"));
+        message = "Installation Entra enabled.";
+      } else if (op === "entra-save") {
+        store.saveEntra(token, v("version"), { tenantId: v("tenantId"), clientId: v("clientId"), redirectUri: v("redirectUri") }, v("clientSecret"));
+        message = "Installation Entra saved.";
       } else if (op === "presentation-enable") {
         if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide presentation settings.");
         store.enablePresentation(token, v("version"));

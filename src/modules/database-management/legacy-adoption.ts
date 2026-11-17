@@ -61,6 +61,8 @@ export function prepareInstallationConfiguration(
   const selected = Object.fromEntries(installationSettingKeys.filter(key => settings.has(key)).map(key => [key, settings.get(key)!]));
   if (settings.has("authentication.entra.secretReference"))
     selected["authentication.entra.secretReference"] = authentication.entraSecretReference;
+  if (authentication.entraSecretReference && process.env[authentication.entraSecretReference])
+    selected["authentication.entra.clientSecret"] = process.env[authentication.entraSecretReference]!;
   const payload: InstallationConfiguration = {
     format: 1,
     source: { provider: "mariadb", host: profile.host, port: profile.port, database: profile.database },

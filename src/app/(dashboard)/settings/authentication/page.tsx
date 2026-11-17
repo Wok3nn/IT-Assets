@@ -1,3 +1,4 @@
+import { control, managed } from "@/modules/database-management/control-store";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/navigation/app-shell";
@@ -106,6 +107,7 @@ export default async function AuthenticationSettingsPage({
   return (
     <AppShell>
       <AuthenticationSettingsPanel
+        installationEntra={managed() && Boolean(control().entraRuntime())}
         initialError={initialError}
         initialSaved={initialSaved}
         roles={roles.map((role) => ({ key: role.key, name: role.name }))}

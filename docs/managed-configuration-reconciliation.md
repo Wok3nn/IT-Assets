@@ -3,7 +3,10 @@
 Status (2026-11-17): **Priority 1 increment; full configuration runtime acceptance
 remains incomplete.** This builds on `abe8f3d` and `9cfe6bd`. It adds capture, explicit
 review, conflict rejection and protected rollback for existing managed-profile edits.
-It does not make Entra/mail/timezone runtime installation-wide.
+Entra runtime is subsequently implemented in [Phase 5C.4](installation-entra-runtime.md);
+mail/timezone runtime remains outstanding. The table below describes the original increment;
+new captures now preserve verified Entra secrets inside encrypted envelopes and already-enabled
+Entra consumes explicitly approved complete snapshots. Public reviews never display secrets.
 
 ## Ownership and precedence
 
@@ -14,7 +17,7 @@ It does not make Entra/mail/timezone runtime installation-wide.
 | Managed profile auth_config | Overrides legacy Setting values for tenant ID, client ID, secret reference and redirect URI when present. Local-login policy, SSO enablement and group mappings are not copied. Invalid auth_config fails capture. |
 | Managed branding | Read referenced files from the selected profile's persistent branding directory; convert `/api/workspace-branding/<name>` references into the existing snapshot format. No files are written or moved. |
 | Mail secret | Preserve exact ciphertext only after successful decryption with the source's original settings key. No re-encryption of legacy records or display of ciphertext/plaintext. |
-| Entra secret | Require an available managed environment reference, never import a literal. Legacy literals must first use the verified legacy adoption path. Secret values are never put in reviews. |
+| Entra secret | Require an available managed environment reference, never import a literal. Legacy literals must first use the verified legacy adoption path. Secret values are now preserved only inside encrypted review envelopes, never public review views (Phase 5C.4). |
 | Timezone | Capture the existing calendar helper's effective APP_TIME_ZONE → TZ → UTC behavior using the explicitly supplied deployment environment. Invalid zones retain that helper's UTC fallback. Runtime scheduling remains unchanged. |
 | Keep current installation | Closes the review without changing configuration. Safe even if the captured baseline is stale. |
 | Use captured profile | Requires separate installation authentication and `APPLY SNAPSHOT`. Replaces the shared snapshot and synchronizes organization title atomically. Does not activate a database or enable runtime configuration. |
