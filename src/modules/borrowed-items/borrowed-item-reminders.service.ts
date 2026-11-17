@@ -1,3 +1,4 @@
+import { managed } from "@/modules/database-management/control-store";
 import { Prisma } from "@prisma/client";
 
 import {
@@ -253,6 +254,7 @@ async function processReminder(input: {
 }
 
 export async function processBorrowedItemReminders(options?: { dryRun?: boolean; now?: Date }) {
+  if (managed()) throw new Error("Scheduled reminders are disabled for managed database selection.");
   const dryRun = options?.dryRun ?? false;
   const now = options?.now ?? new Date();
   const summary = getEmptySummary(dryRun);

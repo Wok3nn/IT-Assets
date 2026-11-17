@@ -111,7 +111,10 @@ test("legacy mail ciphertext requires the original key and stays unchanged insid
     const settings = new Map([["mail.clientSecretEncrypted", ciphertext]]);
     const payload = prepareInstallationConfiguration(settings, profile, []);
     assert.equal(payload.settings["mail.clientSecretEncrypted"], ciphertext);
-    assert.ok(!JSON.stringify(payload).includes("disposable-mail-secret"));
+    assert.equal(payload.settings["mail.clientSecret"], "disposable-mail-secret");
+    const dir = directory(), store = new ControlStore(dir);
+    store.stageInstallationConfiguration(payload); store.close();
+    assert.ok(!readFileSync(path.join(dir, "control.sqlite")).includes(Buffer.from("disposable-mail-secret")));
     process.env.APP_SETTINGS_ENCRYPTION_KEY = Buffer.alloc(32, 10).toString("base64url");
     assert.throws(() => prepareInstallationConfiguration(settings, profile, []), /original settings key/);
   } finally {

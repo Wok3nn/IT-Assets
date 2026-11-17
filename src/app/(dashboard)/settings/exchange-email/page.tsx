@@ -1,3 +1,4 @@
+import { control, managed } from "@/modules/database-management/control-store";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/navigation/app-shell";
@@ -147,6 +148,7 @@ export default async function ExchangeEmailSettingsPage({
   return (
     <AppShell>
       <ExchangeEmailSettingsPanel
+        installationMail={managed() && Boolean(control().mailRuntime())}
         initialError={initialError}
         initialSaved={initialSaved}
         saveExchangeEmailSettingsAction={saveExchangeEmailSettingsAction}

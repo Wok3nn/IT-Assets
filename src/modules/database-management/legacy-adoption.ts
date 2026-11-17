@@ -1,3 +1,4 @@
+import { deploymentTimeZone } from "./installation-timezone";
 import { createHash } from "node:crypto";
 import { readFileSync, mkdirSync, writeFileSync, lstatSync } from "node:fs";
 import path from "node:path";
@@ -63,11 +64,12 @@ export function prepareInstallationConfiguration(
     selected["authentication.entra.secretReference"] = authentication.entraSecretReference;
   if (authentication.entraSecretReference && process.env[authentication.entraSecretReference])
     selected["authentication.entra.clientSecret"] = process.env[authentication.entraSecretReference]!;
+  if (encrypted) selected["mail.clientSecret"] = decryptAppSettingSecret(encrypted);
   const payload: InstallationConfiguration = {
     format: 1,
     source: { provider: "mariadb", host: profile.host, port: profile.port, database: profile.database },
     settings: selected,
-    timeZone: process.env.APP_TIME_ZONE || null,
+    timeZone: deploymentTimeZone(),
     branding: branding.map(file => ({ name: file.name, base64: file.bytes.toString("base64") })),
     settingsKeyHash: process.env.APP_SETTINGS_ENCRYPTION_KEY ? digest(process.env.APP_SETTINGS_ENCRYPTION_KEY) : null,
   };

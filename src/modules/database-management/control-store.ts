@@ -1,3 +1,5 @@
+import { mailFields, mailValues, persistMailCredential, type MailFields } from "./installation-mail";
+import { deploymentTimeZone, timeZoneSchema } from "./installation-timezone";
 import { entraFields, entraValues, persistEntraCredential, type EntraFields } from "./installation-entra";
 import {
   createCipheriv,
@@ -169,7 +171,7 @@ export class ControlStore {
       const previous = this.installationConfiguration();
       if (previous) {
         const runtime = this.readSetup<{ importedHash: string }>("presentationRuntime");
-        if (runtime?.importedHash === hash(serialized).toString("hex") || this.entraRuntime()?.importedHash === hash(serialized).toString("hex")) return "unchanged" as const;
+        if (runtime?.importedHash === hash(serialized).toString("hex") || [this.entraRuntime(), this.mailRuntime(), this.timezoneRuntime()].some(item => item?.importedHash === hash(serialized).toString("hex"))) return "unchanged" as const;
         if (canonicalInstallationConfiguration(previous) !== serialized)
           throw new ControlError("Installation configuration already exists and differs. Explicit conflict resolution is required; nothing was overwritten.");
         return "unchanged" as const;
@@ -185,6 +187,81 @@ export class ControlStore {
       );
       this.audit("installation configuration staged; runtime unchanged");
       return "imported" as const;
+    });
+  }
+  mailRuntime() { return this.readSetup<{ version: string; importedHash: string }>("mailRuntime"); }
+  timezoneRuntime() { return this.readSetup<{ version: string; importedHash: string }>("timezoneRuntime"); }
+  mailTransport() {
+    return this.tx(() => {
+      const runtime = this.mailRuntime();
+      if (!runtime) return null;
+      try { return { ...mailValues(this.installationConfiguration()!), version: runtime.version }; }
+      catch { throw new ControlError("Installation mail configuration is invalid. Restore the control backup."); }
+    });
+  }
+  mailPublic() {
+    const values = this.mailTransport();
+    return values ? { tenantId: values.tenantId, clientId: values.clientId, senderMailbox: values.senderMailbox,
+      credentialConfigured: Boolean(values.clientSecret), version: values.version } : null;
+  }
+  timezone() {
+    return this.tx(() => {
+      const runtime = this.timezoneRuntime();
+      if (!runtime) return null;
+      try { return { timeZone: timeZoneSchema.parse(this.installationConfiguration()?.timeZone), version: runtime.version }; }
+      catch { throw new ControlError("Installation timezone is invalid. Restore the control backup."); }
+    });
+  }
+  enableMailTimezone(token: string, expected: string, category: "mail" | "timezone") {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      if (!["mail", "timezone"].includes(category)) throw new ControlError("Invalid configuration category.");
+      const key = category === "mail" ? "mailRuntime" : "timezoneRuntime";
+      const existing = this.readSetup<{ importedHash: string }>(key);
+      if (existing?.importedHash === expected) return;
+      if (existing) throw new ControlError("Installation configuration is already active.");
+      if (this.presentationCandidateVersion() !== expected) throw new ControlError("Configuration changed. Reload before confirming.");
+      let candidate = this.installationConfiguration();
+      if (!candidate) {
+        if (this.profiles().length || this.legacyAdoption()) throw new ControlError("Stage existing configuration before enabling installation settings.");
+        candidate = { format: 1, source: { provider: "installation" }, settings: { "app.title": this.organization()?.appTitle || "IT-Asset-Tracker", "session.timeoutMinutes": "15" }, branding: [], timeZone: deploymentTimeZone(), settingsKeyHash: null };
+      }
+      try {
+        candidate = category === "mail" ? persistMailCredential(candidate) : { ...candidate, timeZone: timeZoneSchema.parse(candidate.timeZone ?? deploymentTimeZone()) };
+      } catch { throw new ControlError("Staged configuration is invalid or needs the original mail key. No runtime settings changed."); }
+      this.writeInstallationConfiguration(candidate);
+      this.writeSetup(key, { version: randomUUID(), importedHash: expected });
+      this.audit("installation " + category + " enabled");
+    });
+  }
+  saveMail(token: string, expected: string, input: MailFields, replacementSecret: string, clearSecret = false) {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      const runtime = this.mailRuntime();
+      if (!runtime || runtime.version !== expected) throw new ControlError("Installation mail changed. Reload before saving.");
+      let candidate;
+      try {
+        const fields = mailFields.parse(input), previous = this.installationConfiguration()!;
+        if (clearSecret && replacementSecret) throw new Error();
+        candidate = { ...previous, settings: { ...previous.settings, "mail.tenantId": fields.tenantId, "mail.clientId": fields.clientId,
+          "mail.senderMailbox": fields.senderMailbox, "mail.clientSecret": clearSecret ? "" : replacementSecret || mailValues(previous).clientSecret } };
+        mailValues(candidate);
+      } catch { throw new ControlError("Enter valid mail tenant, client, sender and credential values."); }
+      this.writeInstallationConfiguration(candidate);
+      this.writeSetup("mailRuntime", { ...runtime, version: randomUUID() });
+      this.audit("installation mail updated");
+    });
+  }
+  saveTimezone(token: string, expected: string, input: string) {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      const runtime = this.timezoneRuntime();
+      if (!runtime || runtime.version !== expected) throw new ControlError("Installation timezone changed. Reload before saving.");
+      const parsed = timeZoneSchema.safeParse(input);
+      if (!parsed.success) throw new ControlError("Enter a valid IANA timezone identifier.");
+      this.writeInstallationConfiguration({ ...this.installationConfiguration()!, timeZone: parsed.data });
+      this.writeSetup("timezoneRuntime", { ...runtime, version: randomUUID() });
+      this.audit("installation timezone updated");
     });
   }
   entraRuntime() { return this.readSetup<{ version: string; importedHash: string }>("entraRuntime"); }
@@ -236,7 +313,7 @@ export class ControlStore {
     return this.readSetup<{ version: string; importedHash: string }>("presentationRuntime");
   }
   private configurationBaseline() {
-    return configurationDigest({ configuration: this.installationConfiguration(), organization: this.organization(), runtime: this.presentationRuntime(), ...(this.entraRuntime() ? { entraRuntime: this.entraRuntime() } : {}) });
+    return configurationDigest({ configuration: this.installationConfiguration(), organization: this.organization(), runtime: this.presentationRuntime(), ...(this.entraRuntime() ? { entraRuntime: this.entraRuntime() } : {}), ...(this.mailRuntime() ? { mailRuntime: this.mailRuntime() } : {}), ...(this.timezoneRuntime() ? { timezoneRuntime: this.timezoneRuntime() } : {}) });
   }
   private readConfigurationReview(id: string): ConfigurationReview {
     const row = this.db.prepare("SELECT envelope FROM configuration_review WHERE id=?").get(id);
@@ -268,7 +345,7 @@ export class ControlStore {
       const baseline = this.configurationBaseline(), id = configurationDigest({ sourceHash, baseline });
       if (this.db.prepare("SELECT 1 FROM configuration_review WHERE id=?").get(id)) { this.readConfigurationReview(id); return id; }
       this.writeConfigurationReview(id, { profile, profileVersion, sourceHash, baseline, candidate,
-        previous: this.installationConfiguration(), previousOrganization: this.organization(), previousRuntime: this.presentationRuntime(), previousEntraRuntime: this.entraRuntime(),
+        previous: this.installationConfiguration(), previousOrganization: this.organization(), previousRuntime: this.presentationRuntime(), previousEntraRuntime: this.entraRuntime(), previousMailRuntime: this.mailRuntime(), previousTimezoneRuntime: this.timezoneRuntime(),
         capturedAt: new Date().toISOString(), status: "pending" });
       this.audit("configuration review captured; approval required", id);
       return id;
@@ -306,6 +383,16 @@ export class ControlStore {
           catch { throw new ControlError("Captured Entra credentials are incomplete. Capture a verified configuration first."); }
           this.writeSetup("entraRuntime", { ...this.entraRuntime(), version: randomUUID() });
         }
+        if (this.mailRuntime()) {
+          try { candidate = persistMailCredential(candidate); }
+          catch { throw new ControlError("Captured mail credentials are invalid. Capture with the original key before applying."); }
+          this.writeSetup("mailRuntime", { ...this.mailRuntime(), version: randomUUID() });
+        }
+        if (this.timezoneRuntime()) {
+          try { candidate = { ...candidate, timeZone: timeZoneSchema.parse(candidate.timeZone) }; }
+          catch { throw new ControlError("Captured timezone is missing or invalid. Recapture the source timezone before applying."); }
+          this.writeSetup("timezoneRuntime", { ...this.timezoneRuntime(), version: randomUUID() });
+        }
         this.writeInstallationConfiguration(candidate);
         const values = presentationValues(review.candidate), organization = this.organization(), runtime = this.presentationRuntime();
         if (organization) this.writeSetup("organization", { ...organization, appTitle: values.appTitle, version: randomUUID() });
@@ -331,6 +418,10 @@ export class ControlStore {
       else this.db.prepare("DELETE FROM setup_record WHERE key='presentationRuntime'").run();
       if (review.previousEntraRuntime) this.writeSetup("entraRuntime", { ...review.previousEntraRuntime, version: randomUUID() });
       else this.db.prepare("DELETE FROM setup_record WHERE key='entraRuntime'").run();
+      if (review.previousMailRuntime) this.writeSetup("mailRuntime", { ...review.previousMailRuntime, version: randomUUID() });
+      else this.db.prepare("DELETE FROM setup_record WHERE key='mailRuntime'").run();
+      if (review.previousTimezoneRuntime) this.writeSetup("timezoneRuntime", { ...review.previousTimezoneRuntime, version: randomUUID() });
+      else this.db.prepare("DELETE FROM setup_record WHERE key='timezoneRuntime'").run();
       review.status = "restored"; this.writeConfigurationReview(id, review);
       this.audit("configuration review restored", id);
     });
@@ -671,7 +762,7 @@ export class ControlStore {
     if (!adopted || adopted.id !== id) return;
     const row = this.db.prepare("SELECT config FROM auth_config WHERE profile=?").get(id);
     const usesAdoptedSecret = row && JSON.parse(String(row.config)).entraSecretReference === "IT_ASSETS_ENTRA_SECRET_UPGRADE";
-    if ((adopted.settingsKeyHash && hash(settingsKey).toString("hex") !== adopted.settingsKeyHash) ||
+    if ((!this.mailRuntime() && adopted.settingsKeyHash && hash(settingsKey).toString("hex") !== adopted.settingsKeyHash) ||
       (!this.entraRuntime() && usesAdoptedSecret && adopted.entraSecretHash && hash(entraSecret).toString("hex") !== adopted.entraSecretHash))
       throw new ControlError("The adopted workspace requires its verified deployment secrets. Restore the original settings key and Entra secret before activation/startup.");
   }

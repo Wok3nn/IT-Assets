@@ -1,3 +1,4 @@
+import { control, managed } from "@/modules/database-management/control-store";
 import { z } from "zod";
 
 import {
@@ -128,12 +129,13 @@ export async function getExchangeEmailSettings() {
   });
   const settingsByKey = new Map(settings.map((setting) => [setting.key, setting.value]));
 
+  const installation = managed() ? control().mailPublic() : null;
   return {
     mailEnabled: parseBooleanSetting(settingsByKey.get(EXCHANGE_ENABLED_KEY), false),
-    tenantId: settingsByKey.get(EXCHANGE_TENANT_ID_KEY) ?? "",
-    clientId: settingsByKey.get(EXCHANGE_CLIENT_ID_KEY) ?? "",
+    tenantId: installation?.tenantId ?? settingsByKey.get(EXCHANGE_TENANT_ID_KEY) ?? "",
+    clientId: installation?.clientId ?? settingsByKey.get(EXCHANGE_CLIENT_ID_KEY) ?? "",
     clientSecret: "",
-    senderMailbox: settingsByKey.get(EXCHANGE_SENDER_MAILBOX_KEY) ?? "",
+    senderMailbox: installation?.senderMailbox ?? settingsByKey.get(EXCHANGE_SENDER_MAILBOX_KEY) ?? "",
     adminRecipient: settingsByKey.get(EXCHANGE_ADMIN_RECIPIENT_KEY) ?? "",
     notifyBorrowerOnBorrow: parseBooleanSetting(settingsByKey.get(EXCHANGE_NOTIFY_BORROWER_ON_BORROW_KEY), true),
     notifyBorrowerOnReturn: parseBooleanSetting(settingsByKey.get(EXCHANGE_NOTIFY_BORROWER_ON_RETURN_KEY), true),
@@ -142,7 +144,7 @@ export async function getExchangeEmailSettings() {
     dueReminderEnabled: parseBooleanSetting(settingsByKey.get(EXCHANGE_DUE_REMINDER_ENABLED_KEY), true),
     overdueRemindersEnabled: parseBooleanSetting(settingsByKey.get(EXCHANGE_OVERDUE_REMINDERS_ENABLED_KEY), true),
     overdueReminderIntervalDays: parseIntegerSetting(settingsByKey.get(EXCHANGE_OVERDUE_REMINDER_INTERVAL_DAYS_KEY), 3),
-    credentialStatus: getExchangeEmailCredentialStatus(settingsByKey),
+    credentialStatus: installation ? { tenantIdConfigured: Boolean(installation.tenantId), clientIdConfigured: Boolean(installation.clientId), clientSecretConfigured: installation.credentialConfigured, encryptionKeyConfigured: true } : getExchangeEmailCredentialStatus(settingsByKey),
   } satisfies ExchangeEmailSettings;
 }
 
@@ -156,11 +158,13 @@ export async function updateExchangeEmailSettings(input: Omit<ExchangeEmailSetti
   const parsed = result.data;
   const replacementSecret = parsed.clientSecret?.trim();
 
+  const sharedTransport = managed() && Boolean(control().mailRuntime());
+  if (sharedTransport && replacementSecret) throw new Error("Sign in as installation administrator to change mail credentials.");
   await Promise.all([
     upsertExchangeEmailSetting(EXCHANGE_ENABLED_KEY, String(parsed.mailEnabled)),
-    upsertExchangeEmailSetting(EXCHANGE_TENANT_ID_KEY, parsed.tenantId),
-    upsertExchangeEmailSetting(EXCHANGE_CLIENT_ID_KEY, parsed.clientId),
-    upsertExchangeEmailSetting(EXCHANGE_SENDER_MAILBOX_KEY, parsed.senderMailbox),
+    ...(!sharedTransport ? [upsertExchangeEmailSetting(EXCHANGE_TENANT_ID_KEY, parsed.tenantId)] : []),
+    ...(!sharedTransport ? [upsertExchangeEmailSetting(EXCHANGE_CLIENT_ID_KEY, parsed.clientId)] : []),
+    ...(!sharedTransport ? [upsertExchangeEmailSetting(EXCHANGE_SENDER_MAILBOX_KEY, parsed.senderMailbox)] : []),
     upsertExchangeEmailSetting(EXCHANGE_ADMIN_RECIPIENT_KEY, parsed.adminRecipient),
     upsertExchangeEmailSetting(EXCHANGE_NOTIFY_BORROWER_ON_BORROW_KEY, String(parsed.notifyBorrowerOnBorrow)),
     upsertExchangeEmailSetting(EXCHANGE_NOTIFY_BORROWER_ON_RETURN_KEY, String(parsed.notifyBorrowerOnReturn)),
@@ -171,7 +175,7 @@ export async function updateExchangeEmailSettings(input: Omit<ExchangeEmailSetti
     upsertExchangeEmailSetting(EXCHANGE_OVERDUE_REMINDER_INTERVAL_DAYS_KEY, String(parsed.overdueReminderIntervalDays)),
   ]);
 
-  if (replacementSecret) {
+  if (!sharedTransport && replacementSecret) {
     await upsertExchangeEmailSetting(EXCHANGE_CLIENT_SECRET_ENCRYPTED_KEY, encryptAppSettingSecret(replacementSecret));
   }
 
@@ -179,6 +183,7 @@ export async function updateExchangeEmailSettings(input: Omit<ExchangeEmailSetti
 }
 
 export async function clearExchangeEmailClientSecret() {
+  if (managed() && control().mailRuntime()) throw new Error("Sign in as installation administrator to clear mail credentials.");
   await db.setting.deleteMany({
     where: {
       key: EXCHANGE_CLIENT_SECRET_ENCRYPTED_KEY,
@@ -194,6 +199,11 @@ async function getEncryptedClientSecretSetting() {
 }
 
 export async function getExchangeEmailRuntimeConfig() {
+  if (managed()) {
+    const installation = control().mailTransport();
+    if (installation) return installation.tenantId && installation.clientId && installation.clientSecret && installation.senderMailbox
+      ? { tenantId: installation.tenantId, clientId: installation.clientId, clientSecret: installation.clientSecret, senderMailbox: installation.senderMailbox } : null;
+  }
   const settings = await getExchangeEmailSettings();
   const tenantId = settings.tenantId.trim();
   const clientId = settings.clientId.trim();

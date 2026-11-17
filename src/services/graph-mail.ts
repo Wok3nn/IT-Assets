@@ -1,3 +1,4 @@
+import { control, managed } from "@/modules/database-management/control-store";
 import type { ExchangeEmailRuntimeConfig } from "@/modules/settings/exchange-email-settings.service";
 
 type GraphTokenResponse = {
@@ -20,25 +21,6 @@ export class GraphMailError extends Error {
   }
 }
 
-function sanitizeGraphError(value: unknown) {
-  if (!value) {
-    return "Microsoft Graph request failed.";
-  }
-
-  if (typeof value === "string") {
-    return value.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]").slice(0, 500);
-  }
-
-  try {
-    return JSON.stringify(value)
-      .replace(/"access_token"\s*:\s*"[^"]+"/gi, "\"access_token\":\"[redacted]\"")
-      .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]")
-      .slice(0, 500);
-  } catch {
-    return "Microsoft Graph request failed.";
-  }
-}
-
 async function requestGraphAccessToken(config: ExchangeEmailRuntimeConfig) {
   const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(config.tenantId)}/oauth2/v2.0/token`, {
     method: "POST",
@@ -56,14 +38,22 @@ async function requestGraphAccessToken(config: ExchangeEmailRuntimeConfig) {
   const body = await response.json().catch(() => ({})) as GraphTokenResponse;
 
   if (!response.ok || !body.access_token) {
-    throw new GraphMailError(`Microsoft Graph token request failed: ${sanitizeGraphError(body.error_description ?? body.error ?? response.statusText)}`);
+    throw new GraphMailError(`Microsoft Graph token request failed (HTTP ${response.status}).`);
   }
 
   return body.access_token;
 }
 
+function assertActiveWorkspace() {
+  if (!managed()) return;
+  const state = control().state();
+  if (!state.active || String(state.revision) !== process.env.IT_ASSETS_REVISION) throw new GraphMailError("Workspace changed; email was not dispatched.");
+}
+
 export async function sendGraphMail(config: ExchangeEmailRuntimeConfig, message: GraphMailMessage) {
+  assertActiveWorkspace();
   const accessToken = await requestGraphAccessToken(config);
+  assertActiveWorkspace();
   const sendResponse = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(config.senderMailbox)}/sendMail`, {
     method: "POST",
     headers: {
@@ -90,15 +80,11 @@ export async function sendGraphMail(config: ExchangeEmailRuntimeConfig, message:
   });
 
   if (!sendResponse.ok) {
-    const body = await sendResponse.json().catch(() => ({}));
-    throw new GraphMailError(`Microsoft Graph sendMail failed: ${sanitizeGraphError(body)}`);
+    throw new GraphMailError(`Microsoft Graph sendMail failed (HTTP ${sendResponse.status}).`);
   }
 }
 
 export function sanitizeMailError(error: unknown) {
-  if (error instanceof Error) {
-    return sanitizeGraphError(error.message);
-  }
-
-  return sanitizeGraphError(error);
+  if (error instanceof GraphMailError && /^Microsoft Graph (?:token request|sendMail) failed \(HTTP \d{3}\)\.$/.test(error.message)) return error.message;
+  return "Email transport failed. Check configuration and connectivity.";
 }

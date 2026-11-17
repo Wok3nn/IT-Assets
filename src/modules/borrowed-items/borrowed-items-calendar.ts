@@ -1,17 +1,8 @@
-const DEFAULT_TIME_ZONE = "UTC";
-
-function isValidTimeZone(value: string) {
-  try {
-    new Intl.DateTimeFormat("en-CA", { timeZone: value }).format(new Date());
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { control, managed } from "../database-management/control-store";
+import { deploymentTimeZone } from "../database-management/installation-timezone";
 
 export function getApplicationTimeZone() {
-  const configured = process.env.APP_TIME_ZONE?.trim() || process.env.TZ?.trim() || DEFAULT_TIME_ZONE;
-  return isValidTimeZone(configured) ? configured : DEFAULT_TIME_ZONE;
+  return (managed() ? control().timezone()?.timeZone : null) ?? deploymentTimeZone();
 }
 
 export function getCalendarDateKey(value: Date, timeZone = getApplicationTimeZone()) {

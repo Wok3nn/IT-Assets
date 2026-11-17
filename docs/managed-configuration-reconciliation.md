@@ -4,7 +4,7 @@ Status (2026-11-17): **Priority 1 increment; full configuration runtime acceptan
 remains incomplete.** This builds on `abe8f3d` and `9cfe6bd`. It adds capture, explicit
 review, conflict rejection and protected rollback for existing managed-profile edits.
 Entra runtime is subsequently implemented in [Phase 5C.4](installation-entra-runtime.md);
-mail/timezone runtime remains outstanding. The table below describes the original increment;
+[mail/timezone runtime](installation-mail-timezone-runtime.md) follows in Phase 5C.5. The table below describes the original increment;
 new captures now preserve verified Entra secrets inside encrypted envelopes and already-enabled
 Entra consumes explicitly approved complete snapshots. Public reviews never display secrets.
 

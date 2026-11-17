@@ -9,7 +9,9 @@ adds explicit runtime authority for title, session timeout and branding, with of
 installation-admin editing and atomic image storage. Phase 5C.4 adds explicitly enabled
 encrypted installation Entra credentials with offline administration; workspace sign-in
 policy, users and role mappings remain isolated. See [Entra runtime](installation-entra-runtime.md).
-Mail/timezone runtime integration remains outstanding. See [runtime transition](installation-presentation-runtime.md)
+Phase 5C.5 adds separately enabled encrypted installation mail transport and timezone;
+notification policies/history stay workspace-bound and managed scheduled reminders remain
+disabled. See [mail/timezone runtime](installation-mail-timezone-runtime.md). See [runtime transition](installation-presentation-runtime.md)
 and the complete [ownership audit](installation-configuration.md).
 Phase 5C.3 adds encrypted managed-profile capture, explicit conflict review and guarded
 rollback without automatically enabling configuration or changing databases. See

@@ -82,6 +82,16 @@ async function execute(
         if (v("confirmation") !== "RESTORE") throw new ControlError("Type RESTORE to confirm rollback of this configuration resolution.");
         store.restoreConfigurationReview(token, id);
         message = "Previous installation configuration restored.";
+      } else if (op === "mail-enable" || op === "timezone-enable") {
+        if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide settings.");
+        store.enableMailTimezone(token, v("version"), op === "mail-enable" ? "mail" : "timezone");
+        message = "Installation settings enabled.";
+      } else if (op === "mail-save") {
+        store.saveMail(token, v("version"), { tenantId: v("tenantId"), clientId: v("clientId"), senderMailbox: v("senderMailbox") }, v("clientSecret"), v("clearSecret") === "CLEAR");
+        message = "Installation mail saved.";
+      } else if (op === "timezone-save") {
+        store.saveTimezone(token, v("version"), v("timeZone"));
+        message = "Installation timezone saved.";
       } else if (op === "entra-enable") {
         if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide Entra credentials.");
         store.enableEntra(token, v("version"));

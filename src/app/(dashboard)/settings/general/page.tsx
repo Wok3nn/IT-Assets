@@ -1,3 +1,4 @@
+import { getApplicationTimeZone } from "@/modules/borrowed-items/borrowed-items-calendar";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { control, managed } from "@/modules/database-management/control-store";
@@ -114,6 +115,7 @@ export default async function GeneralSettingsPage({
   return (
     <AppShell>
       {managed() && control().presentationRuntime() && <p className="mb-4">Application title and session timeout apply installation-wide. <Link className="underline" href="/settings/database-management">Sign in as Installation Administrator to change them.</Link> Asset settings remain workspace-specific.</p>}
+      <p className="mb-4">Application timezone: <strong>{getApplicationTimeZone()}</strong>. {managed() && <Link className="underline" href="/settings/database-management">Manage installation timezone with a separate installation sign-in.</Link>}</p>
       <GeneralSettingsPanels
         installationManaged={Boolean(managed() && control().presentationRuntime())}
         assetStatuses={assetStatuses as AssetStatus[]}

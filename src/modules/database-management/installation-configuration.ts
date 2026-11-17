@@ -15,7 +15,7 @@ export const installationConfigurationSchema = z.object({
     provider: z.enum(["mariadb", "sqlserver"]), host: z.string().min(1),
     port: z.number().int().min(1).max(65535), database: z.string().min(1),
   }).strict(), z.object({ provider: z.literal("installation") }).strict()]),
-  settings: z.record(z.enum([...installationSettingKeys, "authentication.entra.clientSecret"]), z.string().max(16384)),
+  settings: z.record(z.enum([...installationSettingKeys, "authentication.entra.clientSecret", "mail.clientSecret"]), z.string().max(16384)),
   // Deployment timezone is captured only when explicitly supplied, never inferred.
   timeZone: z.string().max(120).nullable(),
   // Staging embeds files atomically; runtime publication is a later increment.

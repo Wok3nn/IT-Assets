@@ -1,3 +1,4 @@
+import { deploymentTimeZone } from "./installation-timezone";
 import { readFileSync, lstatSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -8,12 +9,11 @@ import { authenticationSettingsSchema } from "../settings/authentication-setting
 import { decryptAppSettingSecret } from "../../services/app-settings-encryption";
 import { installationSettingKeys, canonicalInstallationConfiguration, type InstallationConfiguration } from "./installation-configuration";
 import { brandingFilePattern } from "./installation-presentation";
-import { getApplicationTimeZone } from "../borrowed-items/borrowed-items-calendar";
 
 // Inventory Setting is the source; a saved managed auth_config overrides only IdP
 // transport fields. Workspace policies/mappings are deliberately not imported.
 export function prepareManagedConfiguration(settings: Map<string, string>, authentication: unknown, profile: Profile,
-  readBranding: (name: string) => Buffer, timeZone: string | null = getApplicationTimeZone()): InstallationConfiguration {
+  readBranding: (name: string) => Buffer, timeZone: string | null = deploymentTimeZone()): InstallationConfiguration {
   const selected = Object.fromEntries(installationSettingKeys.filter(key => settings.has(key)).map(key => [key, settings.get(key)!]));
   if (authentication) {
     const parsed = authenticationSettingsSchema.safeParse(authentication);
@@ -27,7 +27,7 @@ export function prepareManagedConfiguration(settings: Map<string, string>, authe
   if (reference) selected["authentication.entra.clientSecret"] = process.env[reference]!;
   const encrypted = selected["mail.clientSecretEncrypted"];
   if (encrypted) {
-    try { decryptAppSettingSecret(encrypted); }
+    try { selected["mail.clientSecret"] = decryptAppSettingSecret(encrypted); }
     catch { throw new ControlError("The original mail settings key must decrypt the configured credential. No configuration captured."); }
   }
   const branding: InstallationConfiguration["branding"] = [];

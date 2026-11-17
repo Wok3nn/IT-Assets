@@ -19,6 +19,7 @@ export type ExchangeTestEmailState = {
 };
 
 type ExchangeEmailSettingsPanelProps = {
+  installationMail?: boolean;
   clearClientSecretAction: () => void | Promise<void>;
   initialError?: string | null;
   initialSaved: boolean;
@@ -142,6 +143,7 @@ function ToggleField({
 }
 
 export function ExchangeEmailSettingsPanel({
+  installationMail = false,
   clearClientSecretAction,
   initialError,
   initialSaved,
@@ -234,6 +236,7 @@ export function ExchangeEmailSettingsPanel({
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Store Microsoft 365 app mail settings here. The Client Secret is encrypted before database storage.</p>
             </div>
 
+            {installationMail && <p className="mt-3">Transport settings belong to the installation. <Link className="underline" href="/settings/database-management">Sign in as Installation Administrator to change them.</Link> Notification enablement, recipients and reminder policies remain workspace-specific.</p>}
             <div className="mt-5 space-y-4">
               <ToggleField
                 checked={mailEnabled}
@@ -249,6 +252,7 @@ export function ExchangeEmailSettingsPanel({
                 <FieldLabel>
                   <FieldLabelText>Tenant ID</FieldLabelText>
                   <TextField
+                    readOnly={installationMail}
                     name="tenantId"
                     onChange={(event) => {
                       clearSavedState();
@@ -261,6 +265,7 @@ export function ExchangeEmailSettingsPanel({
                 <FieldLabel>
                   <FieldLabelText>Client ID</FieldLabelText>
                   <TextField
+                    readOnly={installationMail}
                     name="clientId"
                     onChange={(event) => {
                       clearSavedState();
@@ -277,7 +282,8 @@ export function ExchangeEmailSettingsPanel({
                     <FieldLabelText>Client Secret</FieldLabelText>
                     <TextField
                       autoComplete="new-password"
-                      name="clientSecret"
+                      readOnly={installationMail}
+                    name="clientSecret"
                       onChange={(event) => {
                         clearSavedState();
                         setClientSecret(event.target.value);
@@ -288,7 +294,7 @@ export function ExchangeEmailSettingsPanel({
                     />
                   </FieldLabel>
                   <Button
-                    disabled={!settings.credentialStatus.clientSecretConfigured}
+                    disabled={installationMail || !settings.credentialStatus.clientSecretConfigured}
                     onClick={() => setIsClearSecretOpen(true)}
                     type="button"
                     variant="secondary"
@@ -305,6 +311,7 @@ export function ExchangeEmailSettingsPanel({
                 <FieldLabel>
                   <FieldLabelText>Sender Mailbox</FieldLabelText>
                   <TextField
+                    readOnly={installationMail}
                     name="senderMailbox"
                     onChange={(event) => {
                       clearSavedState();
@@ -348,7 +355,7 @@ export function ExchangeEmailSettingsPanel({
               <CredentialStatus configured={settings.credentialStatus.encryptionKeyConfigured} label="Encryption Key" />
             </div>
             <div className="mt-4 rounded-2xl border border-[#f2c28c]/70 bg-[rgba(246,150,41,0.08)] px-3.5 py-3 text-xs text-slate-700 dark:border-[#7f5a2d]/80 dark:bg-[rgba(246,150,41,0.12)] dark:text-slate-200">
-              Required server variable: `APP_SETTINGS_ENCRYPTION_KEY`. Tenant ID, Client ID, Client Secret, and sender mailbox are managed in this page.
+              {installationMail ? "Credentials are encrypted in the persistent installation control store. Use separate installation administration to change transport settings." : "Required server variable: APP_SETTINGS_ENCRYPTION_KEY. Tenant ID, Client ID, Client Secret, and sender mailbox are managed in this page."}
             </div>
           </PanelCard>
         </div>

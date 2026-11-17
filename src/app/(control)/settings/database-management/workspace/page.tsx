@@ -1,3 +1,4 @@
+import { InstallationMailTimezonePanel } from "@/modules/database-management/installation-mail-timezone-panel";
 import { InstallationEntraPanel } from "@/modules/database-management/installation-entra-panel";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -57,6 +58,7 @@ export default async function ManagementWorkspace({
       {activation && <ActivationStatus {...activation} />}
       <InstallationPresentationPanel />
       <InstallationEntraPanel />
+      <InstallationMailTimezonePanel />
       <ConfigurationReviewPanel />
       <DatabasePanel
         {...state}

@@ -135,6 +135,34 @@ try {
     const entraHtml = await entraPage.text();
     assert.match(entraHtml, /Save installation Entra credentials/);
     assert.doesNotMatch(entraHtml, /http-fixture-secret|http-replacement-secret/);
+    const mailEnable = await post("mail-enable", { version: reviewObserver.presentationCandidateVersion(), confirmation: "ENABLE", context: "management" });
+    assert.equal(mailEnable.status, 303); await mailEnable.text();
+    const mailVersion = reviewObserver.mailPublic().version;
+    const mailFields = { version: mailVersion, tenantId: entra.settings["authentication.entra.tenantId"], clientId: entra.settings["authentication.entra.clientId"], senderMailbox: "fixture@example.invalid", clientSecret: "http-mail-secret", context: "management" };
+    const mailSave = await post("mail-save", mailFields, "http://localhost:4052", true);
+    assert.equal(mailSave.status, 303); await mailSave.text();
+    assert.equal(reviewObserver.mailTransport().clientSecret, "http-mail-secret");
+    await (await post("mail-save", { ...mailFields, clientSecret: "lost-mail-secret" })).text();
+    assert.equal(reviewObserver.mailTransport().clientSecret, "http-mail-secret");
+    const timezoneEnable = await post("timezone-enable", { version: reviewObserver.presentationCandidateVersion(), confirmation: "ENABLE", context: "management" });
+    assert.equal(timezoneEnable.status, 303); await timezoneEnable.text();
+    const timeVersion = reviewObserver.timezone().version;
+    await (await post("timezone-save", { version: timeVersion, timeZone: "America/Toronto", context: "management" })).text();
+    assert.equal(reviewObserver.timezone().timeZone, "America/Toronto");
+    await (await post("timezone-save", { version: timeVersion, timeZone: "UTC" })).text();
+    assert.equal(reviewObserver.timezone().timeZone, "America/Toronto");
+    const invalidZone = await post("timezone-save", { version: reviewObserver.timezone().version, timeZone: "Invalid/Zone" });
+    await invalidZone.text(); assert.equal(reviewObserver.timezone().timeZone, "America/Toronto");
+    const offlineMailPage = await fetch("http://127.0.0.2:4050/settings/database-management/workspace", { headers: { Cookie: cookie } });
+    const mailHtml = await offlineMailPage.text();
+    assert.match(mailHtml, /Save installation mail transport/); assert.match(mailHtml, /America\/Toronto/);
+    assert.doesNotMatch(mailHtml, /http-mail-secret|http-replacement-secret/);
+    const mailForbidden = await post("mail-save", { ...mailFields, version: reviewObserver.mailPublic().version, clientSecret: "forged-mail-secret" }, "http://attacker.invalid", "attacker.invalid");
+    assert.ok(mailForbidden.status >= 400); await mailForbidden.text();
+    assert.equal(reviewObserver.mailTransport().clientSecret, "http-mail-secret");
+    const timezoneForbidden = await post("timezone-save", { version: reviewObserver.timezone().version, timeZone: "UTC" }, "http://attacker.invalid", "attacker.invalid");
+    assert.ok(timezoneForbidden.status >= 400); await timezoneForbidden.text();
+    assert.equal(reviewObserver.timezone().timeZone, "America/Toronto");
   } finally { reviewObserver.close(); }
   const forbidden = await post("save", {}, "http://attacker.invalid");
   assert.ok(forbidden.status >= 400); await forbidden.text();
@@ -149,6 +177,9 @@ try {
   assert.match(rejected.headers.get("x-action-redirect"), /Session%20expired/); await rejected.text();
   const rejectedEntraLogout = await post("entra-save", {});
   assert.match(rejectedEntraLogout.headers.get("x-action-redirect"), /Session%20expired/); await rejectedEntraLogout.text();
+  for (const op of ["mail-save", "timezone-save"]) {
+    const denied = await post(op); assert.match(denied.headers.get("x-action-redirect"), /Session%20expired/); await denied.text();
+  }
   assert.doesNotMatch(logs, /failed to get redirect response|ECONNREFUSED.*4052/);
-  console.log("PASS: mapped-port redirects, presentation cutover/save/upload, configuration review/apply/restore, offline management and branding, stale-write rejection, profile saves, foreign-origin rejection and logout; isolated control store only.");
+  console.log("PASS: mapped-port redirects, presentation cutover/save/upload, configuration review/apply/restore, Entra/mail/timezone enable/save, offline management and branding, stale-write rejection, profile saves, foreign-origin rejection and logout; isolated control store only.");
 } finally { if (server.connected) server.send("stop"); await exited; }
