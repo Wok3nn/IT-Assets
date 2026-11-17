@@ -72,7 +72,17 @@ async function execute(
         destination = entry;
         throw new ControlError("Sign in as the installation administrator.");
       }
-      if (op === "presentation-enable") {
+      if (op === "configuration-resolve") {
+        const decision = v("decision");
+        if (decision !== "keep" && decision !== "profile") throw new ControlError("Choose an explicit configuration resolution.");
+        if (decision === "profile" && v("confirmation") !== "APPLY SNAPSHOT") throw new ControlError("Type APPLY SNAPSHOT to confirm the captured values.");
+        store.resolveConfigurationReview(token, id, decision);
+        message = "Configuration review resolved.";
+      } else if (op === "configuration-restore") {
+        if (v("confirmation") !== "RESTORE") throw new ControlError("Type RESTORE to confirm rollback of this configuration resolution.");
+        store.restoreConfigurationReview(token, id);
+        message = "Previous installation configuration restored.";
+      } else if (op === "presentation-enable") {
         if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide presentation settings.");
         store.enablePresentation(token, v("version"));
         message = "Installation-wide presentation enabled.";

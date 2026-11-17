@@ -13,6 +13,7 @@ import { z } from "zod";
 import { hashPassword, verifyPassword } from "../../services/password";
 import { canonicalInstallationConfiguration, installationConfigurationSchema, type InstallationConfiguration } from "./installation-configuration";
 import { presentationSchema, presentationValues } from "./installation-presentation";
+import { configurationDigest, configurationDifferences, validatedReviewCandidate, type ConfigurationReview } from "./configuration-review";
 import {
   organizationSchema,
   type Organization,
@@ -109,6 +110,7 @@ export class ControlStore {
       CREATE TABLE IF NOT EXISTS throttle(id INTEGER PRIMARY KEY CHECK(id=1), attempts INTEGER, untilMs INTEGER);
       CREATE TABLE IF NOT EXISTS auth_config(profile TEXT PRIMARY KEY, config TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS installation_config(id INTEGER PRIMARY KEY CHECK(id=1), envelope TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS configuration_review(id TEXT PRIMARY KEY, sourceHash TEXT NOT NULL, envelope TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS operation(id INTEGER PRIMARY KEY CHECK(id=1), nonce TEXT NOT NULL);`);
     try {
       this.db.exec(`BEGIN IMMEDIATE;
@@ -126,7 +128,7 @@ export class ControlStore {
     }
     const keyFile = path.join(directory, "control.key");
     // Never silently replace a lost key when encrypted profiles already exist.
-    const saved = this.db.prepare("SELECT 1 FROM profile UNION ALL SELECT 1 FROM installation_config LIMIT 1").get();
+    const saved = this.db.prepare("SELECT 1 FROM profile UNION ALL SELECT 1 FROM installation_config UNION ALL SELECT 1 FROM configuration_review LIMIT 1").get();
     try {
       this.key = Buffer.from(
         saved ? readFileSync(keyFile, "utf8").trim() : privateFile(keyFile, 32),
@@ -186,6 +188,103 @@ export class ControlStore {
   }
   presentationRuntime() {
     return this.readSetup<{ version: string; importedHash: string }>("presentationRuntime");
+  }
+  private configurationBaseline() {
+    return configurationDigest({ configuration: this.installationConfiguration(), organization: this.organization(), runtime: this.presentationRuntime() });
+  }
+  private readConfigurationReview(id: string): ConfigurationReview {
+    const row = this.db.prepare("SELECT envelope FROM configuration_review WHERE id=?").get(id);
+    if (!row) throw new ControlError("Configuration review does not exist.");
+    try {
+      const [iv, tag, data] = String(row.envelope).split(".").map(value => Buffer.from(value, "base64url"));
+      const cipher = createDecipheriv("aes-256-gcm", this.key, iv);
+      cipher.setAAD(Buffer.from("configuration-review:" + id)); cipher.setAuthTag(tag);
+      return JSON.parse(Buffer.concat([cipher.update(data), cipher.final()]).toString()) as ConfigurationReview;
+    } catch { throw new ControlError("Configuration review cannot be read. Restore the matching control backup and key."); }
+  }
+  private writeConfigurationReview(id: string, review: ConfigurationReview) {
+    const iv = randomBytes(12), cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    cipher.setAAD(Buffer.from("configuration-review:" + id));
+    const data = Buffer.concat([cipher.update(JSON.stringify(review), "utf8"), cipher.final()]);
+    this.db.prepare("INSERT OR REPLACE INTO configuration_review VALUES(?,?,?)").run(id, review.sourceHash, [iv, cipher.getAuthTag(), data].map(value => value.toString("base64url")).join("."));
+  }
+  captureConfigurationReview(profile: string, profileVersion: string, input: InstallationConfiguration, refresh = false) {
+    let candidate: InstallationConfiguration;
+    try { candidate = validatedReviewCandidate(input); presentationValues(candidate); }
+    catch { throw new ControlError("Captured configuration is invalid. No review was saved."); }
+    return this.tx(() => {
+      if (this.profiles().find(item => item.id === profile)?.version !== profileVersion) throw new ControlError("Source connection changed. Capture again.");
+      const sourceHash = configurationDigest({ profile, profileVersion, candidate });
+      if (!refresh) {
+        const existing = this.db.prepare("SELECT id FROM configuration_review WHERE sourceHash=? ORDER BY rowid DESC LIMIT 1").get(sourceHash);
+        if (existing) { this.readConfigurationReview(String(existing.id)); return String(existing.id); }
+      }
+      const baseline = this.configurationBaseline(), id = configurationDigest({ sourceHash, baseline });
+      if (this.db.prepare("SELECT 1 FROM configuration_review WHERE id=?").get(id)) { this.readConfigurationReview(id); return id; }
+      this.writeConfigurationReview(id, { profile, profileVersion, sourceHash, baseline, candidate,
+        previous: this.installationConfiguration(), previousOrganization: this.organization(), previousRuntime: this.presentationRuntime(),
+        capturedAt: new Date().toISOString(), status: "pending" });
+      this.audit("configuration review captured; approval required", id);
+      return id;
+    });
+  }
+  configurationReviews() {
+    return this.db.prepare("SELECT id FROM configuration_review ORDER BY rowid DESC").all().map(row => {
+      const id = String(row.id), review = this.readConfigurationReview(id);
+      const differences = configurationDifferences(review.previous, review.candidate);
+      if (review.previousOrganization?.appTitle !== presentationValues(review.candidate).appTitle)
+        differences.push({ key: "organization.appTitle", current: review.previousOrganization?.appTitle ?? "Not configured", captured: presentationValues(review.candidate).appTitle });
+      return { id, profile: review.profile, capturedAt: review.capturedAt, status: review.status,
+        stale: review.status === "pending" && review.baseline !== this.configurationBaseline(),
+        differences };
+    });
+  }
+  resolveConfigurationReview(token: string, id: string, decision: "keep" | "profile") {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      if (!["keep", "profile"].includes(decision)) throw new ControlError("Choose an explicit configuration resolution.");
+      const review = this.readConfigurationReview(id);
+      if (review.status === (decision === "keep" ? "kept" : "applied")) return;
+      if (review.status !== "pending") throw new ControlError("This review was already resolved differently.");
+      if (decision === "keep") {
+        review.status = "kept"; review.result = this.configurationBaseline();
+        this.writeConfigurationReview(id, review); this.audit("configuration review resolved: keep", id);
+        return;
+      }
+      if (review.baseline !== this.configurationBaseline()) throw new ControlError("Installation settings changed after capture. Capture an explicit refreshed review; nothing was overwritten.");
+      if (this.profiles().find(item => item.id === review.profile)?.version !== review.profileVersion) throw new ControlError("Source connection changed. Capture a new review.");
+      if (decision === "profile") {
+        this.writeInstallationConfiguration(review.candidate);
+        const values = presentationValues(review.candidate), organization = this.organization(), runtime = this.presentationRuntime();
+        if (organization) this.writeSetup("organization", { ...organization, appTitle: values.appTitle, version: randomUUID() });
+        if (runtime) this.writeSetup("presentationRuntime", { ...runtime, version: randomUUID() });
+      }
+      review.status = "applied";
+      review.result = this.configurationBaseline();
+      this.writeConfigurationReview(id, review);
+      this.audit("configuration review resolved: " + decision, id);
+    });
+  }
+  restoreConfigurationReview(token: string, id: string) {
+    this.tx(() => {
+      if (!this.authorized(token)) throw new ControlError("Installation administrator sign-in required.");
+      const review = this.readConfigurationReview(id);
+      if (review.status === "restored") return;
+      if (review.status !== "applied" || review.result !== this.configurationBaseline()) throw new ControlError("Configuration changed since this resolution. Restore would overwrite later edits; review the protected backup instead.");
+      if (review.previous) this.writeInstallationConfiguration(review.previous);
+      else this.db.prepare("DELETE FROM installation_config WHERE id=1").run();
+      if (review.previousOrganization) this.writeSetup("organization", { ...review.previousOrganization, version: randomUUID() });
+      else this.db.prepare("DELETE FROM setup_record WHERE key='organization'").run();
+      if (review.previousRuntime) this.writeSetup("presentationRuntime", { ...review.previousRuntime, version: randomUUID() });
+      else this.db.prepare("DELETE FROM setup_record WHERE key='presentationRuntime'").run();
+      review.status = "restored"; this.writeConfigurationReview(id, review);
+      this.audit("configuration review restored", id);
+    });
+  }
+  profileAuthentication(id: string): unknown {
+    this.profile(id);
+    const row = this.db.prepare("SELECT config FROM auth_config WHERE profile=?").get(id);
+    return row ? JSON.parse(String(row.config)) : null;
   }
   presentation() {
     return this.tx(() => {

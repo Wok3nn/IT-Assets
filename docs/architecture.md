@@ -9,6 +9,9 @@ adds explicit runtime authority for title, session timeout and branding, with of
 installation-admin editing and atomic image storage. Entra/mail/timezone runtime
 integration remains outstanding. See [runtime transition](installation-presentation-runtime.md)
 and the complete [ownership audit](installation-configuration.md).
+Phase 5C.3 adds encrypted managed-profile capture, explicit conflict review and guarded
+rollback without automatically enabling configuration or changing databases. See
+[reconciliation and remaining runtime work](managed-configuration-reconciliation.md).
 
 The managed listener supplies Next's private self-fetch origin from its bound socket.
 Public APP_URL remains separate for CSRF, cookies and callbacks. See

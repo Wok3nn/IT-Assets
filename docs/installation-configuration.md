@@ -1,6 +1,8 @@
 # Phase 5C — ownership audit and staging foundation
 
 Status: **partial implementation; acceptance goal not yet met** (2026-11-16).
+Current follow-up: [managed-profile reconciliation](managed-configuration-reconciliation.md)
+adds explicit capture/review/rollback; Entra/mail/timezone runtime integration is still pending.
 Phase 5C.2 now supports explicit runtime enablement for title, session timeout and
 branding; see [the current runtime increment](installation-presentation-runtime.md).
 The staging implementation/history below describes the original `abe8f3d` increment.

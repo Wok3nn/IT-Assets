@@ -1,5 +1,9 @@
 # Phase 5: existing Docker/MariaDB upgrade — production blocked
 
+Existing managed-profile edits now have an explicit
+[capture/review/rollback procedure](managed-configuration-reconciliation.md). This
+does not authorize production execution or complete Entra/mail/timezone runtime integration.
+
 Phase 5C adds an explicit `stage-configuration EXACT_DATABASE_NAME` operation to the
 offline adoption command. It stores an encrypted, allowlisted snapshot only; it does
 **not by itself** preserve runtime settings when switching databases. A separate,

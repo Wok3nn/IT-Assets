@@ -99,6 +99,21 @@ try {
     assert.match(response.headers.get("x-action-redirect"), /Profile%20saved/);
     await response.text();
   }
+  const reviewObserver = new storeModule.ControlStore(directory);
+  try {
+    const profile = reviewObserver.profiles()[0], captured = reviewObserver.installationConfiguration();
+    captured.settings["app.title"] = "Reviewed offline fixture";
+    captured.source = { provider: profile.provider, host: profile.host, port: profile.port, database: profile.database };
+    const reviewId = reviewObserver.captureConfigurationReview(profile.id, profile.version, captured);
+    const reviewPage = await fetch("http://127.0.0.2:4050/settings/database-management/workspace", { headers: { Cookie: cookie } });
+    assert.equal(reviewPage.status, 200); assert.match(await reviewPage.text(), /Captured configuration reviews/);
+    const applied = await post("configuration-resolve", { id: reviewId, decision: "profile", confirmation: "APPLY SNAPSHOT", context: "management" });
+    assert.equal(applied.status, 303); await applied.text();
+    assert.equal(reviewObserver.presentation().appTitle, "Reviewed offline fixture");
+    const restored = await post("configuration-restore", { id: reviewId, confirmation: "RESTORE", context: "management" });
+    assert.equal(restored.status, 303); await restored.text();
+    assert.equal(reviewObserver.presentation().appTitle, "Persistent offline fixture");
+  } finally { reviewObserver.close(); }
   const forbidden = await post("save", {}, "http://attacker.invalid");
   assert.ok(forbidden.status >= 400); await forbidden.text();
   // Matching forged proxy headers must still fail the application's APP_URL check.
@@ -111,5 +126,5 @@ try {
   const rejected = await post("presentation-save", { appTitle: "Unauthorized", sessionTimeoutMinutes: "20" });
   assert.match(rejected.headers.get("x-action-redirect"), /Session%20expired/); await rejected.text();
   assert.doesNotMatch(logs, /failed to get redirect response|ECONNREFUSED.*4052/);
-  console.log("PASS: mapped-port redirects, presentation cutover/save/upload, offline management and public branding, stale-write rejection, repeated profile saves, foreign-origin rejection and logout; isolated control store only.");
+  console.log("PASS: mapped-port redirects, presentation cutover/save/upload, configuration review/apply/restore, offline management and branding, stale-write rejection, profile saves, foreign-origin rejection and logout; isolated control store only.");
 } finally { if (server.connected) server.send("stop"); await exited; }

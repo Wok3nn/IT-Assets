@@ -12,7 +12,7 @@ export const installationSettingKeys = [
 export const installationConfigurationSchema = z.object({
   format: z.literal(1),
   source: z.union([z.object({
-    provider: z.literal("mariadb"), host: z.string().min(1),
+    provider: z.enum(["mariadb", "sqlserver"]), host: z.string().min(1),
     port: z.number().int().min(1).max(65535), database: z.string().min(1),
   }).strict(), z.object({ provider: z.literal("installation") }).strict()]),
   settings: z.record(z.enum(installationSettingKeys), z.string().max(16384)),

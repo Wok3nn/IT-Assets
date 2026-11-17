@@ -1,6 +1,9 @@
 # Phase 5C.2 — appearance and session policy runtime increment
 
 This is an independently testable runtime increment, not completion of Phase 5C.
+For the subsequent managed-profile capture/reconciliation path, see
+[Phase 5C.3](managed-configuration-reconciliation.md); the limitations below describe
+this increment's original baseline unless superseded there.
 It builds on `abe8f3d` and the [configuration ownership audit](installation-configuration.md).
 No production or existing staging configuration was inspected or changed.
 
