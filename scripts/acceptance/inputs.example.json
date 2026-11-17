@@ -1,0 +1,11 @@
+{
+  "database_dump": "REPLACE_WITH_MANIFEST_RELATIVE_SQL_OR_SQL_GZ",
+  "application_data_tar": "REPLACE_WITH_MANIFEST_RELATIVE_APP_TAR",
+  "branding_tar": "REPLACE_WITH_MANIFEST_RELATIVE_BRANDING_TAR",
+  "settings_key": "REPLACE_WITH_MANIFEST_RELATIVE_ORIGINAL_SETTINGS_KEY",
+  "application_inspect": "REPLACE_WITH_MANIFEST_RELATIVE_APP_INSPECT_JSON",
+  "entra_secret": null,
+  "entra_reference_env": null,
+  "application_data_prefix": "data",
+  "branding_prefix": "uploads"
+}

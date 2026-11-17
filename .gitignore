@@ -64,3 +64,6 @@ next-env.d.ts
 /prisma/providers/data/db/*.db-journal
 /prisma/providers/data/db/*.db-wal
 /prisma/providers/data/db/*.db-shm
+
+# Local Python acceptance-test bytecode
+__pycache__/

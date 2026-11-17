@@ -1,5 +1,10 @@
 # Phase 5: existing Docker/MariaDB upgrade — production blocked
 
+Current operator procedure: [Phase 5D isolated acceptance kit](docker-upgrade-acceptance.md).
+Persistent presentation, Entra, mail and timezone runtime is now implemented through
+Phase 5C.5; the historical implementation notes below describe earlier phases.
+Live Docker/cross-provider acceptance and production approval remain outstanding.
+
 Existing managed-profile edits now have an explicit
 [capture/review/rollback procedure](managed-configuration-reconciliation.md). This
 does not authorize production execution or complete Entra/mail/timezone runtime integration.

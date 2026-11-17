@@ -1,0 +1,12 @@
+# ONLY after approval of the disposable SQL database AND an egress-restricted network.
+# The operator-provisioned network must permit only the approved SQL endpoint/port,
+# deny Graph/Entra/web egress, and have no Astra/staging containers attached.
+services:
+  app:
+    networks: [isolated, approved_sql]
+  maintenance:
+    networks: [isolated, approved_sql]
+networks:
+  approved_sql:
+    external: true
+    name: ${ACCEPTANCE_APPROVED_SQL_NETWORK:?Separate SQL/network approval required}

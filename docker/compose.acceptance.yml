@@ -1,0 +1,95 @@
+# Operator-run only. Never use the production/staging Compose projects or volumes.
+name: it-assets-v060-upgrade-acceptance
+x-managed: &managed
+  image: ${ACCEPTANCE_MANAGED_IMAGE:?Set the locally built acceptance image ID or digest}
+  entrypoint: ["node", "/acceptance/runtime.mjs"]
+  environment:
+    IT_ASSETS_CONTROL_DIR: /data/control
+    IT_ASSETS_BIND: 0.0.0.0
+    IT_ASSETS_MANAGED_URL: http://localhost:4053
+    APP_URL: http://localhost:4053
+  volumes:
+    - control:/data/control
+    - ${ACCEPTANCE_RUN:?Set the new private acceptance directory}/private/app:/acceptance-private:ro
+    - ${ACCEPTANCE_RUN}/evidence:/evidence
+    - ../scripts/acceptance:/acceptance:ro
+    - ${ACCEPTANCE_RUN}/branding:/legacy-branding:ro
+  networks: [isolated]
+  init: true
+  stop_grace_period: 45s
+  restart: "no"
+x-db: &db
+  image: ${ACCEPTANCE_MARIADB_IMAGE:?Pin the backup-compatible MariaDB image digest}
+  environment:
+    MARIADB_DATABASE: it_assets
+    MARIADB_USER: acceptance
+    MARIADB_PASSWORD_FILE: /run/secrets/db_password
+    MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+  secrets: [db_password, db_root_password, db_client]
+  networks: [isolated]
+  restart: "no"
+  healthcheck:
+    test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+services:
+  inventory:
+    <<: *db
+    volumes: [inventory:/var/lib/mysql]
+  rollback-db:
+    <<: *db
+    profiles: [rollback]
+    volumes: [rollback_inventory:/var/lib/mysql]
+  app:
+    <<: *managed
+    command: [managed]
+    ports: ["127.0.0.1:4053:4050"]
+  maintenance:
+    <<: *managed
+    profiles: [maintenance]
+    command: [check]
+  legacy-check:
+    image: ${ACCEPTANCE_LEGACY_IMAGE:?Pin the exact backed-up legacy application image}
+    profiles: [legacy]
+    entrypoint: ["node", "/acceptance/runtime.mjs"]
+    command: [legacy]
+    environment:
+      ACCEPTANCE_DATABASE_HOST: inventory
+    ports: ["127.0.0.1:4053:4050"]
+    volumes:
+      - ../scripts/acceptance:/acceptance:ro
+      - ${ACCEPTANCE_RUN}/private/app:/acceptance-private:ro
+      - ${ACCEPTANCE_RUN}/legacy-data:/data
+      - ${ACCEPTANCE_RUN}/legacy-branding:/app/public/branding/uploads
+    networks: [isolated]
+    restart: "no"
+  rollback:
+    image: ${ACCEPTANCE_LEGACY_IMAGE}
+    profiles: [rollback]
+    entrypoint: ["node", "/acceptance/runtime.mjs"]
+    command: [legacy]
+    environment:
+      ACCEPTANCE_DATABASE_HOST: rollback-db
+    ports: ["127.0.0.1:4053:4050"]
+    volumes:
+      - ../scripts/acceptance:/acceptance:ro
+      - ${ACCEPTANCE_RUN}/private/app:/acceptance-private:ro
+      - ${ACCEPTANCE_RUN}/rollback-data:/data
+      - ${ACCEPTANCE_RUN}/rollback-branding:/app/public/branding/uploads
+    networks: [isolated]
+    restart: "no"
+volumes:
+  control: {}
+  inventory: {}
+  rollback_inventory: {}
+networks:
+  isolated:
+    internal: true
+secrets:
+  db_password:
+    file: ${ACCEPTANCE_RUN}/private/db/db_password
+  db_root_password:
+    file: ${ACCEPTANCE_RUN}/private/db/db_root_password
+  db_client:
+    file: ${ACCEPTANCE_RUN}/private/db/db_client

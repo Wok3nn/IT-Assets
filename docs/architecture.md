@@ -67,6 +67,10 @@ probed on each status request and schema inspection repeats at least every minut
 Historical inspections are labeled as such. Neither a saved selection nor a started
 process alone means ready. See [implementation and validation](unified-first-run-setup.md).
 
+The operator-run [Docker acceptance kit](docker-upgrade-acceptance.md) uses separate
+disposable restore/control volumes and does not authorize deployment. Docker/live
+cross-provider acceptance remains pending.
+
 ## Structure Overview
 
 ### `src/app`
