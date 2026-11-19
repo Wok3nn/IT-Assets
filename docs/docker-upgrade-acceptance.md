@@ -114,6 +114,19 @@ operator UID, explicitly change ownership of `$RUN/private/app`, `$RUN/evidence`
 `$RUN/branding` (and traversal rights on their prepared parents) to 1000. Do not recursively
 change the original backup. DB root files are not mounted into application containers.
 
+Acceptance scripts are bind-mounted over image paths. A read-only mount does not grant
+read permission: on the Docker host, make **only the nonsecret script directory**
+traversable/readable before starting legacy-check, managed, ingress or rollback:
+
+```bash
+find scripts/acceptance -type d -exec chmod 755 {} +
+find scripts/acceptance -type f -name '*.mjs' -exec chmod 644 {} +
+```
+
+Do not apply these modes to `$RUN`, private inputs, backups, keys or database storage.
+Those retain their private ownership/access rules above. Image permissions cannot repair
+an inaccessible bind mount or existing volume.
+
 ```bash
 dc() { docker compose --env-file "$RUN/compose.env" -p it-assets-v060-upgrade-acceptance \
   -f docker/compose.acceptance.yml "$@"; }
@@ -523,3 +536,67 @@ capabilities, disabled forwarding and no socket/secret mounts. Local TCP fixture
 unchanged Host/Origin/proxy headers and allowlisted destinations for all three app modes.
 Loopback tests needed scoped access after sandbox EACCES. No Docker executable is present;
 actual Docker publication, network egress and host/LAN binding checks remain pending.
+
+## Managed image permission repair (2026-11-19)
+
+`COPY --from=build` retained restrictive source modes: root could build the image, but
+UID 1000 could not read `src/modules/database-management/control-store.ts` at startup.
+The final image now normalizes all `/app` directories to traversable modes and files to
+readable modes, preserves executable dependencies, and keeps code root-owned without
+group/other write access. Only `.next-managed` and `/data/control` retain node ownership;
+the control directory is private (0700). The Docker build checks every runtime asset as
+UID 1000 without launching the application or accessing a database.
+
+Other paths with the same risk include `/app/scripts`, Prisma schemas/migrations and
+generated clients/native engines in `node_modules`, `public`, package/TypeScript/Next/
+Prisma configuration files, and build output. The normalization covers these and their
+`/app` parents. Separately, `/acceptance` scripts, `/acceptance-private` files, evidence,
+branding and existing control-volume permissions come from mounts; image rebuilding
+does not change them. Follow the narrowly scoped script-mode and private-input guidance
+above. Never repair a permissions error by making secrets world-readable or running the
+application as root.
+
+### Rebuild and repin an existing disposable project, without starting it
+
+On the Docker host, from this reviewed checkout, with the **existing disposable** RUN
+directory (outside the checkout), run:
+
+```bash
+set -e
+RUN=/absolute/path/TO_EXISTING_DISPOSABLE_ACCEPTANCE_RUN
+TAG="it-assets-acceptance:permissions-$(git rev-parse --short HEAD)"
+docker build -f docker/managed.Dockerfile -t "$TAG" .
+IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$TAG")
+# Repeat the unprivileged audit in an isolated throwaway container, with no mounts.
+docker run --rm --network none --entrypoint node "$IMAGE_ID" \
+  scripts/check-managed-image-permissions.mjs
+
+# Change only the one image pin; preserve all other settings and file permissions.
+python3 - "$RUN/compose.env" "$IMAGE_ID" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1])
+image = sys.argv[2]
+assert re.fullmatch(r"sha256:[0-9a-f]{64}", image), "Invalid local image ID"
+with p.open(newline="") as f:
+    original = f.read()
+updated, count = re.subn(r"^ACCEPTANCE_MANAGED_IMAGE=[^\r\n]*",
+                        "ACCEPTANCE_MANAGED_IMAGE=" + image, original, flags=re.M)
+assert count == 1, "Expected exactly one existing managed image pin"
+with p.open("w", newline="") as f:
+    f.write(updated)
+PY
+docker compose --env-file "$RUN/compose.env" -p it-assets-v060-upgrade-acceptance \
+  -f docker/compose.acceptance.yml config --quiet
+```
+
+Stop on any failed command; do not repin a failed build/audit. These commands do not start
+the acceptance project or mount its volumes. Preserve the pre-adoption baseline and
+existing database/control volumes. A running container continues using its old image.
+When separately ready to resume the rehearsal, use the existing-project recreation
+procedure above with the intended active target, recreating ingress as well as the app.
+Do not rerun restore, adoption, initialization or migrations as part of this image repair.
+
+Local validation: 78 tests passed; the POSIX mode fixture is skipped on Windows. Typecheck,
+lint and managed build passed. Docker is not installed on the
+implementation host, so the Linux image build and UID-1000 runtime audit remain required
+operator checks; they are not claimed as local passes.
