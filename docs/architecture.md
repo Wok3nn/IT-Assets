@@ -68,7 +68,8 @@ Historical inspections are labeled as such. Neither a saved selection nor a star
 process alone means ready. See [implementation and validation](unified-first-run-setup.md).
 
 The operator-run [Docker acceptance kit](docker-upgrade-acceptance.md) uses separate
-disposable restore/control volumes and does not authorize deployment. Docker/live
+disposable restore/control volumes and a fixed-target localhost TCP ingress. Only ingress
+joins a non-internal bridge; apps/databases stay isolated. This does not authorize deployment. Docker/live
 cross-provider acceptance remains pending.
 
 ## Structure Overview

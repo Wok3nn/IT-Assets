@@ -34,6 +34,23 @@ x-db: &db
     timeout: 5s
     retries: 30
 services:
+  ingress:
+    image: ${ACCEPTANCE_MANAGED_IMAGE:?Set the locally built acceptance image ID or digest}
+    entrypoint: ["node", "/acceptance/ingress.mjs"]
+    environment:
+      ACCEPTANCE_INGRESS_TARGET: ${ACCEPTANCE_INGRESS_TARGET:-legacy-check}
+    ports: ["127.0.0.1:4053:4050"]
+    volumes:
+      - ../scripts/acceptance/ingress.mjs:/acceptance/ingress.mjs:ro
+    networks: [ingress, isolated]
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    sysctls:
+      net.ipv4.ip_forward: "0"
+    init: true
+    restart: "no"
   inventory:
     <<: *db
     volumes: [inventory:/var/lib/mysql]
@@ -44,7 +61,6 @@ services:
   app:
     <<: *managed
     command: [managed]
-    ports: ["127.0.0.1:4053:4050"]
   maintenance:
     <<: *managed
     profiles: [maintenance]
@@ -56,7 +72,6 @@ services:
     command: [legacy]
     environment:
       ACCEPTANCE_DATABASE_HOST: inventory
-    ports: ["127.0.0.1:4053:4050"]
     volumes:
       - ../scripts/acceptance:/acceptance:ro
       - ${ACCEPTANCE_RUN}/private/app:/acceptance-private:ro
@@ -71,7 +86,6 @@ services:
     command: [legacy]
     environment:
       ACCEPTANCE_DATABASE_HOST: rollback-db
-    ports: ["127.0.0.1:4053:4050"]
     volumes:
       - ../scripts/acceptance:/acceptance:ro
       - ${ACCEPTANCE_RUN}/private/app:/acceptance-private:ro
@@ -84,6 +98,9 @@ volumes:
   inventory: {}
   rollback_inventory: {}
 networks:
+  ingress:
+    driver: bridge
+    enable_ipv6: false
   isolated:
     internal: true
 secrets:

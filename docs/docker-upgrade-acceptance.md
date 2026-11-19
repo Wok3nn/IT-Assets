@@ -14,7 +14,9 @@ IT-Assets_DEV. Inventory export/import remains a separate user-controlled operat
 - `docker/compose.acceptance.yml`: project `it-assets-v060-upgrade-acceptance`; new
   project-scoped inventory, rollback-inventory and managed-control volumes. No external
   volumes, fixed container names, host Docker socket or exposed database port.
-- Only one application at a time binds `127.0.0.1:4053`, forwarding to container 4050.
+- Only the hardened TCP ingress publishes `127.0.0.1:4053` to its port 4050,
+  relaying unchanged bytes to one selected application on isolated port 4050.
+  Applications never join the ingress bridge and have no published ports.
   Public URL is `http://localhost:4053`. Host/Origin/redirect safeguards remain intact.
 - Its internal network blocks server-side external Graph/Entra traffic. Browser-originated
   Entra redirects are a separate boundary: do not initiate live SSO without approval. No worker exists.
@@ -142,7 +144,8 @@ checksum-verified restore plus 23-table verification, not independent proof of s
 row completeness. The logical dump remains the source for both disposable restores.
 
 ```bash
-dc --profile legacy up -d legacy-check
+export ACCEPTANCE_INGRESS_TARGET=legacy-check
+dc --profile legacy up -d --no-deps legacy-check ingress
 ```
 
 Use `ssh -N -L 4053:127.0.0.1:4053 sysadmin@docker-vm-dev` from the operator workstation
@@ -161,7 +164,7 @@ No command in this kit opens that connection automatically.
     standalone server, stop and review its original entrypoint; never substitute latest.
 
 ```bash
-dc stop legacy-check
+dc stop ingress legacy-check
 dc run --rm maintenance snapshot inventory record pre-adoption
 ```
 
@@ -172,7 +175,8 @@ and approval. No reminder worker should be running in this project.
 ## 2. Enroll, adopt, capture, review and enable
 
 ```bash
-dc up -d app
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --no-deps app ingress
 # Copy the bootstrap token to a protected local file; do not print it in test output.
 dc cp app:/data/control/bootstrap-token "$RUN/private/bootstrap-token"
 chmod 600 "$RUN/private/bootstrap-token"
@@ -184,13 +188,14 @@ chmod 600 "$RUN/private/bootstrap-token"
 [ ] Confirm no workspace inventory access is granted by installation enrollment.
 
 ```bash
-dc stop app
+dc stop ingress app
 dc run --rm maintenance check
 dc run --rm maintenance adopt it_assets
 dc run --rm maintenance stage-configuration it_assets
 dc run --rm maintenance capture
 dc run --rm maintenance snapshot inventory compare post-adoption pre-adoption exact
-dc up -d app
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --no-deps app ingress
 ```
 
 Adoption selects only the fixed disposable URL and saves an inactive connection. It must
@@ -214,10 +219,11 @@ activation is now available through the explicit panels below, not automatically
     profile/revision. Use normal workspace login with its own credentials.
 
 ```bash
-dc stop app
+dc stop ingress app
 dc run --rm maintenance snapshot adoption record adopted-globals
 dc run --rm maintenance snapshot inventory compare activated-inventory pre-adoption workspace
-dc up -d app
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --no-deps app ingress
 ```
 
 `adoption` rechecks the restored source, decrypts original mail/Entra credentials in
@@ -234,13 +240,15 @@ other difference privately instead of expanding the exception list casually.
 ```bash
 dc restart app
 # Verify browser readiness and settings, then stop before reading SQLite offline.
-dc stop app
+dc stop ingress app
 dc run --rm maintenance snapshot configuration compare after-restart adopted-globals exact
-dc up -d --force-recreate --no-deps app
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --force-recreate --no-deps app ingress
 # Verify settings again, then capture:
-dc stop app
+dc stop ingress app
 dc run --rm maintenance snapshot configuration compare after-recreate adopted-globals exact
-dc up -d app
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --no-deps app ingress
 dc stop inventory
 ```
 
@@ -252,11 +260,12 @@ dc stop inventory
     establish a new baseline for subsequent comparisons.
 
 ```bash
-dc stop app
+dc stop ingress app
 dc run --rm maintenance snapshot configuration compare inventory-offline adopted-globals exact
 dc start inventory
 # Wait for healthy inventory.
-dc up -d app
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --no-deps app ingress
 ```
 
 The offline comparison above assumes no intentional edits. Do not classify a legitimate
@@ -286,9 +295,10 @@ Set ACCEPTANCE_APPROVED_SQL_NETWORK privately, then define:
 ```bash
 dcs() { docker compose --env-file "$RUN/compose.env" -p it-assets-v060-upgrade-acceptance \
   -f docker/compose.acceptance.yml -f docker/compose.acceptance-sql.yml "$@"; }
-dc stop app
+dc stop ingress app
 dcs config --quiet
-dcs up -d --force-recreate --no-deps app
+export ACCEPTANCE_INGRESS_TARGET=app
+dcs up -d --force-recreate --no-deps app ingress
 ```
 
 1. Confirm adopted MariaDB is active; privately verify inventory and workspace accounts.
@@ -365,21 +375,22 @@ an older binary. For legacy rollback use the original matching DB, app data, bra
 settings key, Entra alias/credential and legacy image, not the managed control directory.
 
 ```bash
-dc stop app legacy-check
+dc stop ingress app legacy-check
 # If the SQL overlay is in use, stop that app via dcs as well; same project/service.
 dc --profile rollback up -d rollback-db
 # Wait for healthy status.
 python3 scripts/acceptance/restore.py --run "$RUN" --service rollback-db \
   --confirm it-assets-v060-upgrade-acceptance:rollback-db:it_assets --expected-tables 23
 dc run --rm maintenance snapshot rollback-db compare rollback-restored restore-baseline exact
-dc --profile rollback up -d rollback
+export ACCEPTANCE_INGRESS_TARGET=rollback
+dc --profile rollback up -d --no-deps rollback ingress
 ```
 
 [ ] Exact original legacy image logs in and renders representative inventory and branding.
 [ ] Original configured mail/Entra credentials remain available with original keys; no send/login
     to external services is attempted without the separate approvals above.
 [ ] No schema migration, fake migration baseline, database reset or inventory rewrite required.
-[ ] Stop rollback before restarting managed app; they share only the host port, not data volumes.
+[ ] Stop rollback before restarting managed app; only one is selected by ingress; they do not share data volumes.
 [ ] To test rejected activation: save an unreachable disposable profile, run test/inspection,
     confirm activation cannot succeed and previous selection/readiness is preserved/recoverable.
 [ ] To test failure after approved SQL activation: have the network owner temporarily deny only
@@ -421,3 +432,94 @@ temporary-directory access. Docker Compose schema evaluation, image build/start,
 backup restoration, SQL switching and rollback execution were NOT performed. Application
 runtime code is unchanged; the managed build/HTTP success at `8f0a255` is prior validation,
 not a new Docker acceptance result.
+
+
+## Apply the ingress fix to an EXISTING disposable acceptance project
+
+Root cause: the old file requested publication on containers attached exclusively to
+`internal: true`. The reported daemon retained PortBindings intent but did not publish
+an effective host port. A listening application alone cannot fix that network boundary.
+Docker documents internal networks as externally isolated; a dual-network container
+can reach its non-internal network. We therefore dual-home only a minimal fixed-target
+relay, never the application. See [Docker internal networks](https://docs.docker.com/reference/cli/docker/network/create/)
+and [Compose networking](https://docs.docker.com/compose/how-tos/networking/).
+
+The new ingress bridge is project-local. The relay has no control/DB/secret mounts,
+runs as UID 1000 with a read-only filesystem, drops all capabilities, prohibits privilege
+gain and sets its own IPv4 forwarding to zero. IPv6 is disabled on the ingress bridge.
+It is not an HTTP CONNECT or forward proxy: every connection goes to one allowlisted
+service name at port 4050. Headers cannot choose a destination. No daemon/firewall-wide
+change or host networking is required. Host and Origin bytes are not rewritten; APP_URL
+stays http://localhost:4053. TCP streaming and WebSocket upgrades are passed unchanged.
+Idle connections close after two minutes; fresh connections resolve the service again.
+
+Use the **existing** protected RUN/compose.env and the same project name. Do not rerun
+backup preparation, restore, enrollment, adoption or initialization for this networking fix.
+Update the checkout to the local fix commit by the approved transfer method; no application
+image rebuild is needed because the relay script is mounted read-only and uses the already
+pinned managed image's Node runtime. Confirm that image is available before proceeding.
+
+On the operator-authorized Ubuntu host, from the updated checkout:
+
+```bash
+set -eu
+umask 077
+RUN=/absolute/path/to/THE_EXISTING_DISPOSABLE_ACCEPTANCE_RUN
+dc() { docker compose --env-file "$RUN/compose.env" -p it-assets-v060-upgrade-acceptance \
+  -f docker/compose.acceptance.yml "$@"; }
+dc config --quiet
+# Inspect only service/status names, not environment or secrets.
+dc --profile legacy --profile rollback ps
+# Stop only acceptance applications and relay; do not stop/recreate any database.
+dc --profile legacy --profile rollback stop ingress app legacy-check rollback
+export ACCEPTANCE_INGRESS_TARGET=legacy-check
+# Recreate the selected application to REMOVE its obsolete direct port publication.
+# Reuse all existing bind mounts/volumes and the exact old image. No migrations run.
+dc --profile legacy up -d --no-deps --force-recreate legacy-check ingress
+dc port ingress 4050
+# Expected: 127.0.0.1:4053. Application services should report no published port.
+docker port "$(dc ps -q ingress)" 4050/tcp
+curl --max-time 10 --silent --output /dev/null --write-out '%{http_code}\n' \
+  -H 'Host: localhost:4053' http://127.0.0.1:4053/login
+```
+
+Require an actual HTTP response (typically 200 or a login/setup redirect), not HTTP 000.
+Do not use `curl -L`: the purpose is local reachability, not an external authentication
+redirect. The SSH tunnel remains `ssh -N -L 4053:127.0.0.1:4053 sysadmin@docker-vm-dev`;
+visit http://localhost:4053 in the operator browser. If port remains absent, stop and
+inspect only this project's network/port metadata; do not loosen application isolation.
+
+Switch to managed app (or to rollback by substituting rollback in BOTH lines):
+
+```bash
+dc --profile legacy --profile rollback stop ingress app legacy-check rollback
+export ACCEPTANCE_INGRESS_TARGET=app
+dc --profile legacy --profile rollback up -d --no-deps --force-recreate app ingress
+dc port ingress 4050
+```
+
+Keep exactly one application running. Changing the exported target requires recreating
+(or `up`-reconciling) ingress; `restart` alone does not change its environment. Restarting
+or recreating the same application is safe: the relay resolves the fixed service per
+connection and temporarily refuses connections while the backend is down. With a separately
+approved SQL overlay, use the guide's `dcs` function instead for app/ingress operations;
+never attach apps to the new unrestricted ingress bridge. Stop ingress with applications
+before offline restore/maintenance; the restore guard deliberately rejects running ingress.
+Do not run `down`, `down -v`, volume removal, network pruning or new migrations for this fix.
+
+Record actual `dc port`, host curl and browser results on that Docker host. Verify each
+active application remains attached only to the internal network (or the separately
+approved SQL network), databases have no PortBindings, ingress forwarding is zero, and
+no Graph/Entra call succeeds from application containers. Network/port metadata and
+`/proc/sys/net/ipv4/ip_forward` can be inspected without dumping environment values.
+Do not initiate live Entra login or send real mail to test isolation. A blocked outbound
+TCP connection test to an operator-approved inert endpoint is sufficient; no credentials
+or HTTP requests are needed. Docker is unavailable on the implementation host, so these
+actual published-port and egress checks remain operator acceptance steps, not local passes.
+
+Ingress-fix local validation (2026-11-19): 77 tests, typecheck and lint passed. Compose
+regressions enforce isolated app/DB networks, ingress-only localhost publishing, dropped
+capabilities, disabled forwarding and no socket/secret mounts. Local TCP fixtures prove
+unchanged Host/Origin/proxy headers and allowlisted destinations for all three app modes.
+Loopback tests needed scoped access after sandbox EACCES. No Docker executable is present;
+actual Docker publication, network egress and host/LAN binding checks remain pending.
