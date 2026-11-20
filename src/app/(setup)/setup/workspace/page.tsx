@@ -19,17 +19,18 @@ import { WizardFooter } from "@/modules/database-management/wizard-footer";
 import { Form } from "@/modules/database-management/action-form";
 import { Button } from "@/components/ui/button";
 import { PreparationHeading } from "@/modules/database-management/preparation-heading";
+import { ExistingDatabaseSettings } from "@/modules/database-management/installation-settings";
 export const dynamic = "force-dynamic";
 export default async function SetupWorkspace({
   searchParams,
 }: {
-  searchParams: Promise<{ step?: string; message?: string }>;
+  searchParams: Promise<{ step?: string; message?: string; settings?: string }>;
 }) {
   if (!managed()) notFound();
   const store = control();
   const token = (await cookies()).get(controlCookie)?.value ?? "";
   if (!store.authorized(token)) redirect("/setup");
-  const { step: requested, message } = await searchParams;
+  const { step: requested, message, settings } = await searchParams;
   const organization = store.organization();
   const profiles = store.profiles();
   const selection = store.state();
@@ -92,6 +93,7 @@ export default async function SetupWorkspace({
               activity={[]}
               stage={step === 3 ? "connections" : "prepare"}
             />
+            {step === 3 && <ExistingDatabaseSettings open={settings === "1"} />}
           </>
         )}
         {step === 5 && (

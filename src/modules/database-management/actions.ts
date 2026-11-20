@@ -75,15 +75,15 @@ async function execute(
       if (op === "configuration-resolve") {
         const decision = v("decision");
         if (decision !== "keep" && decision !== "profile") throw new ControlError("Choose an explicit configuration resolution.");
-        if (decision === "profile" && v("confirmation") !== "APPLY SNAPSHOT") throw new ControlError("Type APPLY SNAPSHOT to confirm the captured values.");
+        if (decision === "profile" && v("confirmation") !== "APPLY SNAPSHOT") throw new ControlError("Confirm that you want to use the saved database settings.");
         store.resolveConfigurationReview(token, id, decision);
         message = "Configuration review resolved.";
       } else if (op === "configuration-restore") {
-        if (v("confirmation") !== "RESTORE") throw new ControlError("Type RESTORE to confirm rollback of this configuration resolution.");
+        if (v("confirmation") !== "RESTORE") throw new ControlError("Confirm that you want to restore the previous settings.");
         store.restoreConfigurationReview(token, id);
         message = "Previous installation configuration restored.";
       } else if (op === "mail-enable" || op === "timezone-enable") {
-        if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide settings.");
+        if (v("confirmation") !== "ENABLE") throw new ControlError("Confirm that you want to use these settings across databases.");
         store.enableMailTimezone(token, v("version"), op === "mail-enable" ? "mail" : "timezone");
         message = "Installation settings enabled.";
       } else if (op === "mail-save") {
@@ -93,14 +93,14 @@ async function execute(
         store.saveTimezone(token, v("version"), v("timeZone"));
         message = "Installation timezone saved.";
       } else if (op === "entra-enable") {
-        if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide Entra credentials.");
+        if (v("confirmation") !== "ENABLE") throw new ControlError("Confirm that you want to use these Entra credentials across databases.");
         store.enableEntra(token, v("version"));
         message = "Installation Entra enabled.";
       } else if (op === "entra-save") {
         store.saveEntra(token, v("version"), { tenantId: v("tenantId"), clientId: v("clientId"), redirectUri: v("redirectUri") }, v("clientSecret"));
         message = "Installation Entra saved.";
       } else if (op === "presentation-enable") {
-        if (v("confirmation") !== "ENABLE") throw new ControlError("Type ENABLE to confirm installation-wide presentation settings.");
+        if (v("confirmation") !== "ENABLE") throw new ControlError("Confirm that you want to use these appearance and session settings across databases.");
         store.enablePresentation(token, v("version"));
         message = "Installation-wide presentation enabled.";
       } else if (op === "presentation-save") {
@@ -294,7 +294,7 @@ async function execute(
       "?message=" +
       encodeURIComponent(message) +
       (wizard && destination === setupWorkspacePath
-        ? "&step=" + encodeURIComponent(step)
+        ? "&step=" + encodeURIComponent(step) + (/^(configuration-|presentation-|entra-|mail-|timezone-)/.test(op) ? "&settings=1#existing-database-settings" : "")
         : "") +
       (!wizard && activationRevision !== undefined
         ? "&activationProfile=" + encodeURIComponent(id) + "&activationRevision=" + activationRevision

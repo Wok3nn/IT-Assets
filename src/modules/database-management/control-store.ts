@@ -358,6 +358,9 @@ export class ControlStore {
       if (review.previousOrganization?.appTitle !== presentationValues(review.candidate).appTitle)
         differences.push({ key: "organization.appTitle", current: review.previousOrganization?.appTitle ?? "Not configured", captured: presentationValues(review.candidate).appTitle });
       return { id, profile: review.profile, capturedAt: review.capturedAt, status: review.status,
+        source: review.candidate.source,
+        currentTitle: review.previousOrganization?.appTitle ?? "Not configured",
+        capturedTitle: presentationValues(review.candidate).appTitle,
         stale: review.status === "pending" && review.baseline !== this.configurationBaseline(),
         differences };
     });

@@ -1,6 +1,6 @@
 // Run after build:managed; owns port 4050 and a new temporary control directory.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,6 +56,7 @@ async function post(op, values = {}, context = "setup") {
       .replaceAll("&lt;", "<")
       .replaceAll("&gt;", ">");
   for (const input of own.match(/<input[^>]*>/g) || []) {
+    if (input.includes('type="checkbox"') && !input.includes('checked=""')) continue;
     const name = input.match(/name="([^"]*)"/)?.[1],
       value = input.match(/value="([^"]*)"/)?.[1] ?? "";
     if (name) f.set(decode(name), decode(value));
@@ -163,6 +164,18 @@ try {
   assert.match(await post("save", {}), /Sign in/);
   assert.match(await post("login", creds), /Signed in/);
   assert.match(await page(), /Sign out of setup/);
+  const integrated = await page(workspace + "?step=3&settings=1");
+  assert.match(integrated, /id="existing-database-settings" open=""/);
+  for (const title of ["Import existing settings", "Appearance &amp; session", "Microsoft Entra sign-in", "Email settings", "Timezone"]) assert.ok(integrated.includes(title));
+  assert.doesNotMatch(integrated, /Defer setup and manage|Type ENABLE/);
+  assert.match(await post("presentation-enable"), /Confirm that you want/);
+  assert.match(await post("presentation-enable", { confirmation: "ENABLE" }), /enabled/);
+  const enabledHtml = await page(workspace + "?step=3&settings=1");
+  const presentationForm = enabledHtml.match(/<form[\s\S]*?<\/form>/g).find(form => form.includes('name="op" value="presentation-save"'));
+  const firstVersion = presentationForm.match(/name="version" value="([^"]+)"/)[1];
+  assert.match(await post("presentation-save", { appTitle: "Fixture Assets", sessionTimeoutMinutes: "20" }), /saved/);
+  assert.match(await post("presentation-save", { version: firstVersion, appTitle: "Must not replace", sessionTimeoutMinutes: "25" }), /changed|Reload/i);
+  assert.doesNotMatch(await page(), /value="Must not replace"/);
   const adminStep = await page(workspace + "?step=2");
   assert.match(adminStep, /Installation administrator created/);
   assert.match(adminStep, /operator@example.invalid/);
@@ -228,6 +241,23 @@ try {
   const getId = (h) => h.match(/name="id" value="([a-f0-9-]{36})"/i)?.[1];
   const offlineId = getId(html);
   assert.ok(offlineId);
+  const capture = spawnSync(process.execPath, ["--import", "tsx", "tests/fixtures/setup-review.ts", dir, offlineId], { encoding: "utf8" });
+  assert.equal(capture.status, 0, capture.stderr);
+  const reviewId = capture.stdout.trim();
+  assert.match(reviewId, /^[a-f0-9]{64}$/);
+  for (const target of [workspace + "?step=3&settings=1", workspace + "?step=1", workspace + "?step=3&settings=1", base + "/settings/database-management/workspace"]) {
+    const content = await page(target);
+    if (!target.endsWith("step=1")) {
+      assert.ok(content.includes(reviewId));
+      assert.match(content, /Awaiting review/);
+      assert.match(content, /SQL Server: it_assets_offline_test/);
+    }
+  }
+  assert.match(await post("configuration-resolve", { id: reviewId, decision: "profile" }), /Confirm that you want/);
+  assert.match(await page(), /Awaiting review/);
+  assert.match(await post("configuration-resolve", { id: reviewId, decision: "profile", confirmation: "APPLY SNAPSHOT" }), /resolved/);
+  assert.match(await page(), /Imported fixture/);
+  assert.match(await post("configuration-restore", { id: reviewId, confirmation: "RESTORE" }), /restored/);
   const msg = await post("validate", { id: offlineId, revision: "0" });
   assert.ok(!msg.includes("Connected —"));
   assert.doesNotMatch(msg, /connection changed/i);

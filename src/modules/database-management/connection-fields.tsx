@@ -4,6 +4,7 @@ import { SelectField } from "@/components/forms/select-field";
 import { TextField } from "@/components/forms/text-field";
 import type { PublicProfile } from "./control-store";
 import { Field } from "./field";
+import { SettingsHelp } from "./settings-section";
 import { FieldError } from "./action-form";
 
 export function ConnectionFields({ profile }: { profile?: PublicProfile }) {
@@ -13,7 +14,7 @@ export function ConnectionFields({ profile }: { profile?: PublicProfile }) {
     <div className="space-y-4">
       <p className="text-xs text-slate-600 dark:text-slate-300">* Required fields. Use database credentials, not VM, Docker host or IT Assets sign-in credentials.</p>
       <div className="grid min-w-0 items-start gap-x-5 gap-y-4 sm:grid-cols-2">
-        <Field name="name" label="Connection Name (Custom Name)" value={profile?.name}
+        <Field name="name" label="Connection name" value={profile?.name}
           help="A friendly label, such as Office Inventory. It need not match the database name." />
         <label className="flex min-w-0 flex-col gap-1 text-sm">
           <span>Database type <span aria-hidden="true">*</span></span>
@@ -25,15 +26,14 @@ export function ConnectionFields({ profile }: { profile?: PublicProfile }) {
             <option value="sqlserver">Microsoft SQL Server</option>
             <option value="mariadb">MariaDB</option>
           </SelectField>
-          <span className="text-xs text-slate-600 dark:text-slate-300">Choose the database engine hosting your inventory.</span>
           <FieldError name="provider" />
         </label>
-        <Field name="host" label="Database hostname / IP" value={profile?.host}
+        <Field name="host" label="Server address" value={profile?.host}
           help="Address reachable from IT Assets. In Compose, use the actual database service name on the shared network." />
         <label className="flex min-w-0 flex-col gap-1 text-sm">
-          <span>TCP port <span aria-hidden="true">*</span></span>
+          <span>Port <span aria-hidden="true">*</span></span>
           <TextField type="number" name="port" required min={1} max={65535} value={port} onChange={(event) => setPort(event.target.value)} />
-          <span className="text-xs text-slate-600 dark:text-slate-300">{provider === "mariadb" ? "Usually 3306" : "Usually 1433"}. Use the database listener port, or the published port when connecting through a host.</span>
+          <span className="text-xs text-slate-600 dark:text-slate-300">{provider === "mariadb" ? "Usually 3306" : "Usually 1433"}.</span>
           <FieldError name="port" />
         </label>
         <div className="sm:col-span-2">
@@ -49,9 +49,9 @@ export function ConnectionFields({ profile }: { profile?: PublicProfile }) {
         <input className="mt-1" type="checkbox" name="trust" defaultChecked={profile?.trustCertificate} />
         Trust a self-signed SQL Server certificate (isolated development only)
       </label>}
-      {provider === "mariadb" && <p className="text-xs text-slate-600 dark:text-slate-300">
+      {provider === "mariadb" && <SettingsHelp label="MariaDB connection help">
         For this repository’s legacy Compose example, the database service is mariadb. Check your deployed Compose file; the managed example supplies only web. MariaDB transport security follows the existing deployment configuration.
-      </p>}
+      </SettingsHelp>}
     </div>
   );
 }

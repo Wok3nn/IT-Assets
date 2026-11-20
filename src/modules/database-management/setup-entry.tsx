@@ -5,6 +5,7 @@ import { SetupWizardShell } from "@/components/layout/setup-wizard-shell";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/forms/text-field";
 import { Form } from "./action-form";
+import { SettingsHelp } from "./settings-section";
 import { EnrollmentHelp } from "./enrollment-help";
 import type { enrollmentGuidance } from "./enrollment-guidance";
 
@@ -35,7 +36,7 @@ export function SetupEntry({
         if (next === 1) setStep(1);
         else if (siteName.trim().length >= 2 && appTitle.trim().length >= 2) setStep(2);
       }}
-      description="One guided installation. Your local administrator and configuration work before an asset database is connected."
+      description="Name your installation, create an administrator and connect a database."
     >
       {message && <p role="status">{message}</p>}
       {navigationMessage && <p role="status">{navigationMessage}</p>}
@@ -73,15 +74,10 @@ export function SetupEntry({
                   maxLength={80}
                 />
               </label>
-              <p className="text-sm">
-                Use the theme toggle to preview light or dark mode. Default IT
-                Assets logos are included; custom workspace branding can be
-                configured after workspace sign-in.
-              </p>
-              <p className="text-sm">
-                These settings are saved locally with administrator enrollment
-                in the next step. No asset database is required.
-              </p>
+              <SettingsHelp label="About your installation name">
+                <p>Names are saved when you create the administrator in the next step. No database is needed.</p>
+                <p>Default logos are included. Change appearance later in Database Connection or Settings.</p>
+              </SettingsHelp>
             </div>
           </>
         )}

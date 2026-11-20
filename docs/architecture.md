@@ -363,3 +363,13 @@ Do not build a generic framework when a few small components are enough. The cur
 - explicit route orchestration
 
 That is the baseline to preserve.
+
+## Permanent interface guideline
+
+Keep IT Assets interfaces simple, intuitive and concise. Show a clear title, current
+status, one short description and an obvious action. Put technical explanations in
+keyboard- and touch-accessible information disclosures; never rely on hover alone.
+Keep the original first-run wizard as the setup shell. Step 3 shares installation
+settings components with post-install management; route pages only orchestrate them.
+Explicit approvals, source identity, stale-review checks and workspace isolation remain
+visible or enforced even when presentation is simplified.

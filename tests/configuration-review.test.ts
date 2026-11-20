@@ -29,6 +29,16 @@ test("review capture detects differences without promotion, hides secrets, and r
   assert.equal(store.configurationReviews().length, 1);
   assert.ok(!JSON.stringify(store.configurationReviews()).includes("opaque-fixture-ciphertext"));
   assert.ok(store.configurationReviews()[0].differences.some(item => item.key === "app.title"));
+  assert.deepEqual(store.configurationReviews()[0].source, candidate().source);
+  assert.equal(store.configurationReviews()[0].currentTitle, "Installation title");
+  assert.equal(store.configurationReviews()[0].capturedTitle, "Captured profile");
+  // Rendering/reloading the new public review projection must not resolve or stale it.
+  const before = store.configurationReviews()[0];
+  const reopened = new ControlStore(directory);
+  assert.deepEqual(reopened.configurationReviews()[0], before);
+  assert.equal(before.status, "pending");
+  assert.equal(before.stale, false);
+  reopened.close();
   assert.throws(() => store.resolveConfigurationReview("workspace-token", review, "profile"), /sign-in/);
   store.resolveConfigurationReview(token, review, "keep");
   store.resolveConfigurationReview(token, review, "keep");

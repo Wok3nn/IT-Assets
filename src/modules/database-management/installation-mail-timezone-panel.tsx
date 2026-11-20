@@ -2,37 +2,42 @@ import { control } from "./control-store";
 import { deploymentTimeZone } from "./installation-timezone";
 import { Form } from "./action-form";
 import { Field } from "./field";
-import { PanelCard } from "@/components/layout/panel-card";
+import { SettingsSection, SettingsApproval, SettingsHelp } from "./settings-section";
 import { Button } from "@/components/ui/button";
 
 export function InstallationMailTimezonePanel() {
   const store = control(), mail = store.mailPublic(), timezone = store.timezone();
   return <>
-    <PanelCard><details open={Boolean(mail)}>
-      <summary className="text-xl font-semibold">Installation Exchange email transport</summary>
-      <p className="my-3">Microsoft Graph transport is shared across databases. Notification enablement, recipients, reminders and history belong to each workspace. Saving here sends no email and does not enable the reminder worker.</p>
+    <SettingsSection title="Email settings" status={mail ? "Enabled" : "Not enabled"}
+      description="Choose the Microsoft account and mailbox used to send email."
+      help={<><p>Microsoft Graph credentials are encrypted and shared across databases. Notification choices, recipients and history stay with each workspace.</p><p>Saving sends no email and does not enable scheduled reminders. Import existing settings before enabling; older imports need the original encryption key. New installations can start with empty settings.</p></>}>
       {mail ? <Form key={mail.version} op="mail-save" version={mail.version}>
         <Field name="tenantId" label="Tenant ID" value={mail.tenantId} required={false} />
         <Field name="clientId" label="Application / client ID" value={mail.clientId} required={false} />
         <Field name="senderMailbox" label="Sender mailbox" value={mail.senderMailbox} required={false} type="email" maxLength={240} />
-        <Field name="clientSecret" label="Replace client secret" type="password" required={false} maxLength={4096} help={mail.credentialConfigured ? "A secret is encrypted and configured. Leave blank to preserve it." : "No credential configured. Mail requires tenant, client, secret and sender."} />
-        <Field name="clearSecret" label="Type CLEAR only to remove the stored runtime credential" required={false} help="Do not enter a replacement secret when clearing. Existing encrypted rollback snapshots remain protected." />
-        <Button type="submit">Save installation mail transport</Button>
-      </Form> : <>
-        <p className="my-3">Stage or capture and review existing transport settings first. Older snapshots require the original mail encryption key. New installations can enable an empty transport and configure it here.</p>
-        <Form op="mail-enable" version={store.presentationCandidateVersion()}><Field name="confirmation" label="Type ENABLE to use persistent installation mail transport" /><Button type="submit">Enable installation mail transport</Button></Form>
-      </>}
-    </details></PanelCard>
-    <PanelCard><details open={Boolean(timezone)}>
-      <summary className="text-xl font-semibold">Installation timezone</summary>
-      <p className="my-3">Calendar dates use this timezone; existing UTC timestamps are not rewritten. Changing it can change which loans are due today. The reminder worker remains disabled in managed mode.</p>
+        <Field name="clientSecret" label="Replace client secret" type="password" required={false} maxLength={4096} help={mail.credentialConfigured ? "Leave blank to keep the current secret." : "No secret configured."} />
+        <SettingsHelp label="Remove the saved email secret">
+          <Field name="clearSecret" label="Type CLEAR to remove the secret" required={false} help="Leave the replacement secret empty. Encrypted rollback copies are retained." />
+        </SettingsHelp>
+        <Button type="submit">Save email settings</Button>
+      </Form> : <Form op="mail-enable" version={store.presentationCandidateVersion()}>
+        <SettingsApproval>Use these email settings across databases.</SettingsApproval>
+        <Button type="submit">Enable email settings</Button>
+      </Form>}
+    </SettingsSection>
+    <SettingsSection title="Timezone" status={timezone ? "Enabled" : "Not enabled"}
+      description="Set the timezone used for calendar dates."
+      help={<><p>This setting applies across databases and can change which loans are due today. Existing timestamps are not rewritten; scheduled reminders remain disabled.</p><p>An import without a timezone uses the deployment timezone when enabled.</p></>}>
       {timezone ? <Form key={timezone.version} op="timezone-save" version={timezone.version}>
-        <Field name="timeZone" label="IANA timezone" value={timezone.timeZone} maxLength={120} help="For example America/Toronto or UTC." />
-        <Button type="submit">Save installation timezone</Button>
+        <Field name="timeZone" label="Timezone" value={timezone.timeZone} maxLength={120} help="For example America/Toronto or UTC." />
+        <Button type="submit">Save timezone</Button>
       </Form> : <>
-        <p className="my-3">Timezone to enable: {store.installationConfiguration()?.timeZone ?? deploymentTimeZone()}. A snapshot without a timezone uses the current deployment timezone at enablement.</p>
-        <Form op="timezone-enable" version={store.presentationCandidateVersion()}><Field name="confirmation" label="Type ENABLE to persist the installation timezone" /><Button type="submit">Enable installation timezone</Button></Form>
+        <p className="text-sm">Ready to use: {store.installationConfiguration()?.timeZone ?? deploymentTimeZone()}</p>
+        <Form op="timezone-enable" version={store.presentationCandidateVersion()}>
+          <SettingsApproval>Use this timezone across databases.</SettingsApproval>
+          <Button type="submit">Enable timezone</Button>
+        </Form>
       </>}
-    </details></PanelCard>
+    </SettingsSection>
   </>;
 }

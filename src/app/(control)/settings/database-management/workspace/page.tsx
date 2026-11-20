@@ -1,5 +1,4 @@
-import { InstallationMailTimezonePanel } from "@/modules/database-management/installation-mail-timezone-panel";
-import { InstallationEntraPanel } from "@/modules/database-management/installation-entra-panel";
+import { InstallationSettings } from "@/modules/database-management/installation-settings";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { PageHero } from "@/components/layout/page-hero";
@@ -15,8 +14,6 @@ import {
   visitFingerprint,
 } from "@/modules/database-management/control-store";
 import { DatabasePanel } from "@/modules/database-management/panel";
-import { InstallationPresentationPanel } from "@/modules/database-management/installation-presentation-panel";
-import { ConfigurationReviewPanel } from "@/modules/database-management/configuration-review-panel";
 
 import { ManagementVisitGuard } from "@/modules/database-management/visit-guard";
 import { ActivationStatus } from "@/modules/database-management/activation-status";
@@ -47,19 +44,15 @@ export default async function ManagementWorkspace({
         <h1 className="mt-2 text-3xl font-semibold">Database Management</h1>
         <div className="mt-4 flex flex-wrap items-start gap-3">
           {state.active && <Form op="exit"><input type="hidden" name="destination" value="settings" /><Button className="min-h-10" type="submit" variant="secondary">Back to Settings</Button></Form>}
-          <Form op="logout"><Button className="min-h-10" type="submit" variant="secondary">Sign out of Database Management</Button></Form>
+          <Form op="logout"><Button className="min-h-10" type="submit" variant="secondary">Sign out</Button></Form>
         </div>
         <p className="mt-2">
-          Configure connections independently of your inventory. Leaving this
-          area ends your management visit.
+          Manage connections and shared settings, even when inventory is offline.
         </p>
       </PageHero>
       {message && !activation && <p role="status">{message}</p>}
       {activation && <ActivationStatus {...activation} />}
-      <InstallationPresentationPanel />
-      <InstallationEntraPanel />
-      <InstallationMailTimezonePanel />
-      <ConfigurationReviewPanel />
+      <InstallationSettings />
       <DatabasePanel
         {...state}
         profiles={profiles}
