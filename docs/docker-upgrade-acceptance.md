@@ -251,13 +251,14 @@ other difference privately instead of expanding the exception list casually.
 ### Diagnose an adoption-verification failure safely
 
 After updating the acceptance checkout to the diagnostic fix, both
-`scripts/acceptance/snapshot.mjs` and `scripts/acceptance/snapshot-validation.mjs` must be
+`scripts/acceptance/snapshot.mjs`, `scripts/acceptance/snapshot-validation.mjs` and
+`scripts/acceptance/snapshot-differences.mjs` must be
 present on the Docker host. The acceptance scripts are bind-mounted, so this change
 does not require rebuilding or repinning the application image. Make only these
 nonsecret scripts readable if the checkout has restrictive modes:
 
 ```bash
-chmod 644 scripts/acceptance/snapshot.mjs scripts/acceptance/snapshot-validation.mjs
+chmod 644 scripts/acceptance/snapshot.mjs scripts/acceptance/snapshot-validation.mjs scripts/acceptance/snapshot-differences.mjs
 ```
 
 For the **existing disposable acceptance project**, use its existing private env file.
@@ -270,7 +271,7 @@ dc() { docker compose --env-file "$RUN/compose.env" -p it-assets-v060-upgrade-ac
   -f docker/compose.acceptance.yml "$@"; }
 dc stop ingress app
 dc run --rm --no-deps -e IT_ASSETS_ACCEPTANCE_DIAGNOSTICS=1 maintenance \
-  snapshot adoption record adopted-globals-diagnostic-01
+  snapshot adoption record adopted-globals-fields-01
 ```
 
 Use a new evidence label for each retry; never remove or overwrite an existing baseline.
@@ -281,6 +282,18 @@ identifying the first failing stage and a fixed reason code, for example:
 ```text
 DIAGNOSTIC: stage=configuration-comparison reason=CONFIGURATION_MISMATCH
 ```
+
+For CONFIGURATION_MISMATCH only, allowlisted field/category detail lines now follow, e.g.:
+
+```text
+DIAGNOSTIC_DETAIL: category=settings field=settings.authentication.entra.tenantId reason=MISSING_EXPECTED_EMPTY_ACTUAL
+```
+
+No values are included. Expected is the re-inspected legacy configuration; actual is the
+stored installation configuration. Credential differences use only fixed aliases and
+presence/state codes. Runtime-category activation remains a separate guard; activation
+markers are not part of the canonical payload. See [static findings, diagnostic vocabulary
+and the proposed fix](adoption-configuration-mismatch.md). No functional fix is included.
 
 | Stage | Reason codes | Meaning |
 | --- | --- | --- |
@@ -294,8 +307,9 @@ DIAGNOSTIC: stage=configuration-comparison reason=CONFIGURATION_MISMATCH
 | environment | INVALID_ARGUMENTS, DIGEST_KEY_UNAVAILABLE, INVENTORY_READ_FAILED, SNAPSHOT_BUILD_FAILED, CLEANUP_FAILED, UNEXPECTED_ERROR | Other command/input, inventory snapshot, fingerprint construction or resource cleanup failure. |
 
 Only the exact value `1` enables diagnostics, only for this invocation; successful output
-and fingerprint contents are unchanged. No exception messages, stack traces, field names,
-values, credentials, URLs, rows or decrypted settings are printed by the diagnostic mode.
+and fingerprint contents are unchanged. Only allowlisted field paths and fixed codes are
+printed: never exception messages, stack traces, arbitrary input keys, values, credentials,
+hashes, URLs, rows or decrypted settings.
 If the runtime wrapper refuses its private inputs before starting snapshot.mjs, its existing
 generic wrapper message remains; snapshot diagnostics cannot classify a process that never
 started. Stop and investigate the reported stage; do not skip checks, reset the store,

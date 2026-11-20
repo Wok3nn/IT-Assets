@@ -80,6 +80,7 @@ try {
   failed = true;
   console.error(failure);
   if (diagnostic.line()) console.error(diagnostic.line());
+  for (const line of diagnostic.details()) console.error(line);
   process.exitCode = 1;
 } finally {
   // Cleanup errors must not leak raw provider or filesystem exception messages.

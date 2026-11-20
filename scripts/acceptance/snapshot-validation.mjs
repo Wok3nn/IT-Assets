@@ -1,4 +1,5 @@
-// Only allowlisted literals may reach diagnostic output. Never inspect an Error,
+import { configurationMismatchDetails } from "./snapshot-differences.mjs";
+// Only allowlisted literals may reach diagnostic output. Never print an Error,
 // its message/cause, configuration values, paths, URLs or database results.
 const stages = Object.freeze({
   UNEXPECTED_ERROR: "environment",
@@ -28,9 +29,16 @@ const stages = Object.freeze({
 
 export function snapshotDiagnostics(option) {
   let reason = "UNEXPECTED_ERROR";
+  let details = [];
   return {
     at(code) { reason = Object.hasOwn(stages, code) ? code : "UNEXPECTED_ERROR"; },
     line() { return option === "1" ? `DIAGNOSTIC: stage=${stages[reason]} reason=${reason}` : null; },
+    mismatch(expected, actual) {
+      if (option !== "1") return;
+      try { details = configurationMismatchDetails(JSON.parse(expected), JSON.parse(actual)); }
+      catch { details = ["DIAGNOSTIC_DETAIL: category=configuration reason=DETAILS_UNAVAILABLE"]; }
+    },
+    details() { return option === "1" && reason === "CONFIGURATION_MISMATCH" ? details : []; },
   };
 }
 
@@ -62,9 +70,13 @@ export async function verifyAdoption({ store, configuration, enabled, fingerprin
   if (store.mailRuntime()) expected = (await load("installation-mail")).persistMailCredential(expected);
   diagnostic.at("CANONICALIZATION_FAILED");
   const canonical = (await load("installation-configuration")).canonicalInstallationConfiguration;
-  const matches = fingerprint(canonical(expected)) === fingerprint(canonical(configuration));
+  const expectedCanonical = canonical(expected), actualCanonical = canonical(configuration);
+  const matches = fingerprint(expectedCanonical) === fingerprint(actualCanonical);
   diagnostic.at("CONFIGURATION_MISMATCH");
-  if (!matches) throw Error();
+  if (!matches) {
+    diagnostic.mismatch(expectedCanonical, actualCanonical);
+    throw Error();
+  }
   diagnostic.at("APPEARANCE_NOT_ENABLED");
   if (!enabled[0]) throw Error();
   diagnostic.at("EMAIL_NOT_ENABLED");
