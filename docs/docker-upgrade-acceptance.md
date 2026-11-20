@@ -248,6 +248,74 @@ markers and synchronized organization title. Run it before intentional configura
 all remaining rows, credentials, roles and policy values must match. Investigate every
 other difference privately instead of expanding the exception list casually.
 
+### Diagnose an adoption-verification failure safely
+
+After updating the acceptance checkout to the diagnostic fix, both
+`scripts/acceptance/snapshot.mjs` and `scripts/acceptance/snapshot-validation.mjs` must be
+present on the Docker host. The acceptance scripts are bind-mounted, so this change
+does not require rebuilding or repinning the application image. Make only these
+nonsecret scripts readable if the checkout has restrictive modes:
+
+```bash
+chmod 644 scripts/acceptance/snapshot.mjs scripts/acceptance/snapshot-validation.mjs
+```
+
+For the **existing disposable acceptance project**, use its existing private env file.
+Keep the restored inventory database running and stop the application before taking the
+control-store ownership lock, as with the ordinary snapshot command:
+
+```bash
+RUN=/absolute/path/TO_EXISTING_DISPOSABLE_ACCEPTANCE_RUN
+dc() { docker compose --env-file "$RUN/compose.env" -p it-assets-v060-upgrade-acceptance \
+  -f docker/compose.acceptance.yml "$@"; }
+dc stop ingress app
+dc run --rm --no-deps -e IT_ASSETS_ACCEPTANCE_DIAGNOSTICS=1 maintenance \
+  snapshot adoption record adopted-globals-diagnostic-01
+```
+
+Use a new evidence label for each retry; never remove or overwrite an existing baseline.
+`record` still creates a protected fingerprint file **only if all checks pass**. A failure
+still exits nonzero with the original generic message; diagnostics add exactly one line
+identifying the first failing stage and a fixed reason code, for example:
+
+```text
+DIAGNOSTIC: stage=configuration-comparison reason=CONFIGURATION_MISMATCH
+```
+
+| Stage | Reason codes | Meaning |
+| --- | --- | --- |
+| control-store | CONTROL_STORE_LOAD_FAILED, CONFIGURATION_MISSING | Lock, module/store read, runtime-marker read, or absent installation configuration. |
+| legacy-inspection | LEGACY_TARGET_REJECTED, LEGACY_INSPECTION_FAILED | Fixed disposable target check or restored-source inspection failed. |
+| credential-normalization | ENTRA_NORMALIZATION_FAILED, MAIL_NORMALIZATION_FAILED | Enabled credentials could not be normalized for comparison. |
+| configuration-comparison | CANONICALIZATION_FAILED, CONFIGURATION_MISMATCH | Invalid canonical input or unequal complete canonical configurations. |
+| runtime-categories | APPEARANCE_NOT_ENABLED, EMAIL_NOT_ENABLED, TIMEZONE_NOT_ENABLED, ENTRA_NOT_ENABLED | A required category is not enabled; Entra remains required only under the existing configured-reference rule. |
+| titles | TITLE_READ_FAILED, TITLE_MISMATCH | Organization/appearance read failed or their titles differ. |
+| evidence | EVIDENCE_READ_FAILED, EVIDENCE_COMPARISON_FAILED, EVIDENCE_WRITE_FAILED | Baseline read/compare or new protected evidence write failed (including an already-used label). |
+| environment | INVALID_ARGUMENTS, DIGEST_KEY_UNAVAILABLE, INVENTORY_READ_FAILED, SNAPSHOT_BUILD_FAILED, CLEANUP_FAILED, UNEXPECTED_ERROR | Other command/input, inventory snapshot, fingerprint construction or resource cleanup failure. |
+
+Only the exact value `1` enables diagnostics, only for this invocation; successful output
+and fingerprint contents are unchanged. No exception messages, stack traces, field names,
+values, credentials, URLs, rows or decrypted settings are printed by the diagnostic mode.
+If the runtime wrapper refuses its private inputs before starting snapshot.mjs, its existing
+generic wrapper message remains; snapshot diagnostics cannot classify a process that never
+started. Stop and investigate the reported stage; do not skip checks, reset the store,
+recapture or re-adopt merely to make verification pass.
+
+After investigation, resume the already-selected managed app using the normal procedure
+when appropriate (this does not initialize or migrate the database):
+
+```bash
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --no-deps app ingress
+```
+
+The earlier generic failure cannot be identified from source/tests alone. Inventory equality
+and a configuration snapshot do not establish equality with the re-inspected legacy
+configuration, required enablement, title agreement, or the ability to write a new evidence
+file. Run the diagnostic command on the existing rehearsal to identify its failing stage.
+Local regression tests use synthetic configurations and faults; Docker is unavailable on
+the implementation host, and no existing control store, database or volume was accessed.
+
 ## 3. Restart, recreation and offline persistence
 
 ```bash
