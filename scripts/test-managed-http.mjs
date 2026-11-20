@@ -59,7 +59,8 @@ async function post(op, values = {}, context = "setup") {
     if (input.includes('type="checkbox"') && !input.includes('checked=""')) continue;
     const name = input.match(/name="([^"]*)"/)?.[1],
       value = input.match(/value="([^"]*)"/)?.[1] ?? "";
-    if (name) f.set(decode(name), decode(value));
+    // Approval tests supply this explicitly, including omission to test rejection.
+    if (name && name !== "confirmation") f.set(decode(name), decode(value));
   }
   f.set("op", op);
   f.set("context", context);
@@ -250,7 +251,13 @@ try {
     if (!target.endsWith("step=1")) {
       assert.ok(content.includes(reviewId));
       assert.match(content, /Awaiting review/);
-      assert.match(content, /SQL Server: it_assets_offline_test/);
+      assert.match(content, /SQL Server \(it_assets_offline_test\)/);
+      assert.match(content, /Imported settings from:/);
+      assert.match(content, /Compare current vs imported settings/);
+      assert.match(content, /Application name/);
+      assert.doesNotMatch(content, /Current setup at capture:|Use existing database settings/);
+      assert.match(content, /<details[^>]*><summary[^>]*>[^<]*Technical details<\/summary>/);
+      assert.match(content, /Use imported settings\?/);
     }
   }
   assert.match(await post("configuration-resolve", { id: reviewId, decision: "profile" }), /Confirm that you want/);

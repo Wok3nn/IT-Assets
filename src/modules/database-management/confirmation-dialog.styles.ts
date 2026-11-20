@@ -1,0 +1,1 @@
+export const confirmationDialogClassName = "m-auto w-[calc(100%_-_2rem)] max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-300 bg-white p-6 text-slate-900 shadow-panel backdrop:bg-black/40 dark:border-slate-600 dark:bg-[#34393c] dark:text-slate-100";

@@ -30,14 +30,16 @@ not silently capture database settings or add a new database-reading action.
 | Installation timezone | Timezone |
 | Captured configuration reviews | Import existing settings |
 | Keep current installation configuration | Keep current settings |
-| Use captured profile configuration | Use existing database settings |
-| Type ENABLE / APPLY SNAPSHOT / RESTORE | Explicit unchecked approval and a named action |
+| Use captured profile configuration | Use imported settings |
+| Type APPLY SNAPSHOT | Use imported settings → Cancel / Confirm dialog |
+| Type ENABLE / RESTORE | Explicit unchecked approval and a named action |
 
 Panels show a title and enabled/review status; forms and longer explanations are
 collapsible. Native details/summary controls support click, keyboard and touch without
-hover. Reviews identify the current setup, captured database/provider/server, imported
-application name and capture time. The optional comparison explicitly labels values at
-capture time. Its scrollable region is keyboard-focusable and stays inside the panel on
+hover. Reviews show App name, Imported settings from, and Database. Host/port and capture
+time are in collapsed Technical details. The comparison uses friendly setting labels and
+Current setup / Imported settings columns; detailed help explains that values are saved
+at capture time. Its scrollable region is keyboard-focusable and stays inside the panel on
 mobile. Database activation and empty initialization retain database-name confirmation.
 
 ## Reused components
@@ -52,7 +54,9 @@ The permanent concise-interface guideline is recorded in `architecture.md`.
 ## Security and compatibility
 
 - Same origin checks, administrator session checks and action authorization.
-- Checkboxes submit the existing confirmation values only when selected. Server checks
+- Import confirmation submits the existing approval value only from the dialog's Confirm
+  button. Cancel/Escape do not submit; the dialog keeps errors visible and disables buttons
+  during submission. Other approval checkboxes submit only when selected. Server checks
   remain mandatory; previous clients using typed values remain compatible.
 - Same review IDs, encryption, baseline/version checks, rollback rules and storage schema.
   Public review data adds only nonsecret source/title labels; rendering does not write or
@@ -79,3 +83,12 @@ Remaining acceptance: compare against `Changes needed.pdf` pages 1–3 (not pres
 provided attachments), screen-reader/physical touch-device checks, and the full Docker
 upgrade rehearsal with real provider connections and approved Entra/Graph workflows.
 No push or deployment is part of this change.
+
+### Review wording follow-up
+
+Operator review refinements passed 81 application tests (one POSIX-only skip), typecheck,
+lint, managed build and isolated HTTP tests. Browser checks verified hidden technical
+details, two main actions, initial Cancel focus, Cancel/Escape without resolving the review,
+and Confirm successfully importing the synthetic fixture. The dialog form carries the
+existing approval token; its Confirm button submits it, avoiding React submitter-value
+loss. Server authorization, stale-review logic and encrypted storage are unchanged.
