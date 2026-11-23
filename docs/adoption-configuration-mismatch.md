@@ -4,8 +4,9 @@
 
 There is a reproducible representation mismatch between legacy inspection and managed
 capture. This is a verifier expectation inconsistency, not evidence of inventory loss.
-It is a candidate explanation for the reported rehearsal; its exact fields still require
-the opt-in diagnostic run against that environment.
+The operator diagnostic confirmed these absent-versus-materialized fields in the rehearsal.
+The codes do not disclose the actual title, timeout or credential contents; the corrected
+verifier must still check their exact values before accepting them.
 
 `prepareInstallationConfiguration` in `legacy-adoption.ts` includes only setting keys
 actually present in the legacy Setting table. `prepareLegacyAuthentication` supplies empty
@@ -24,7 +25,7 @@ equate absent with empty. The verifier re-inspects the legacy source, so its exp
 configuration lacks those fields and the strict equality check fails.
 
 The regression uses the real legacy/authentication/managed preparation functions, proves
-the four differences, and proves the unchanged verifier still rejects them. No database
+the four raw differences, and checks the comparison-only correction. No database
 or control volume is needed for the reproduction. If the legacy rows already contain all
 four empty fields, this particular mismatch does not occur.
 
@@ -53,20 +54,39 @@ four empty fields, this particular mismatch does not occur.
   configuration. They cannot directly cause CONFIGURATION_MISMATCH; their separate guards
   run only after equality succeeds. Runtime state does select credential normalization.
 
-## Proposed minimal fix — not implemented
+## Confirmed title/session source mapping and correction
 
-If diagnostics confirm only absent-versus-empty optional Entra defaults, agree on one
-explicit shared comparison normalization for those four fields in the Entra-disabled case,
-used on both expected and actual configurations. Retain strict checks for nonempty values,
-credentials, enabled Entra, source metadata and all other settings. Add tests that changed
-nonempty values still fail. Do not broadly ignore Entra settings or rewrite stored reviews.
-This would correct a verifier representation assumption; it needs separate approval before
-implementation. If diagnostics instead show unequal nonempty values or credential state,
-investigate that specific discrepancy before deciding whether any fix is justified.
+Legacy inspection selects only existing `Setting` rows; it does not materialize runtime
+fallbacks. Both `settings.service.ts` and `installation-presentation.ts` supply
+`IT-Asset-Tracker` and 15 minutes when those rows are absent. Consequently the wizard
+can display/import that effective presentation without either key in the captured payload.
+`ControlStore.savePresentation` writes both keys explicitly; enabling appearance alone
+preserves the candidate. The diagnostic proves source absence, but does not establish
+which past UI save materialized the actual keys.
 
-This change adds diagnostics only. No comparison is normalized, bypassed or relaxed; no
-settings are reconciled. Existing canonical fingerprints, storage and successful acceptance
-behavior remain unchanged.
+For disabled Entra, `prepareLegacyAuthentication` supplies empty optional strings, adoption
+saves that authentication object, and `prepareManagedConfiguration` overlays it onto the
+captured settings. An empty `secretReference` property is a representation state, not a
+created credential. The credential diagnostic alone cannot distinguish an empty from a
+nonempty actual reference; only exact empty strings qualify for this correction.
+
+This is a verifier bug comparing sparse storage with materialized effective defaults,
+not evidence of lost configuration. The acceptance verifier now projects expected values
+in memory only, after validating both original payloads:
+
+- Missing legacy title/timeout may match only the exact strings `IT-Asset-Tracker` / `15`.
+- Missing optional Entra tenant/client/redirect/reference may match only an empty string,
+  only with source Entra and SSO explicitly disabled and installation Entra runtime off.
+- Explicit source values are never replaced. Deleting source fields, changing nonempty
+  values/references/secrets, trimming, numeric reformatting, nulls, enabled Entra and
+  unknown authentication state do not receive this exception.
+
+No application runtime, database rows, encrypted review, control configuration, canonical
+serializer or evidence fingerprints change. The existing full comparison, category checks
+and organization/appearance title check still run. Other mismatches remain failures.
+Regression coverage reproduces all six reported fields, verifies input immutability,
+rejects changed values and credentials, and guards disabled/unknown/enabled Entra cases.
+The live rehearsal must be rerun to establish that its values meet these narrow rules.
 
 ## Diagnostic vocabulary
 
@@ -93,5 +113,6 @@ configuration; actual means the stored installation configuration.
   UNCLASSIFIED_DIFFERENCE or DETAILS_UNAVAILABLE codes; the original mismatch still fails.
 
 See [the operator command](docker-upgrade-acceptance.md#diagnose-an-adoption-verification-failure-safely).
-Local validation: synthetic mismatch tests and real preparation-function reproduction;
-no live Docker rehearsal, existing inventory or acceptance control volume accessed.
+Local validation: 91 tests passed (one POSIX-only skip), typecheck, lint, managed build,
+JavaScript syntax and diff checks passed. Docker is unavailable locally; no live rehearsal,
+existing inventory or acceptance control volume accessed.

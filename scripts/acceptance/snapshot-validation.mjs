@@ -52,6 +52,24 @@ export function readInstallationState(store, diagnostic) {
   return { configuration, enabled };
 }
 
+// Comparison-only projection of defaults materialized by appearance save and
+// managed authentication capture. Never mutate stored/captured configuration.
+export function adoptionComparisonExpected(expected, actual, authentication, entraEnabled) {
+  const settings = { ...expected.settings };
+  // These are the legacy settings.service and installation-presentation defaults.
+  // Only accept their exact strings when the source row was absent.
+  for (const [key, value] of [["app.title", "IT-Asset-Tracker"], ["session.timeoutMinutes", "15"]]) {
+    if (!Object.hasOwn(settings, key) && actual.settings[key] === value) settings[key] = value;
+  }
+  if (!entraEnabled && authentication?.entraEnabled === false && authentication?.entraSsoEnabled === false) {
+    for (const suffix of ["tenantId", "clientId", "redirectUri", "secretReference"]) {
+      const key = "authentication.entra." + suffix;
+      if (!Object.hasOwn(settings, key) && actual.settings[key] === "") settings[key] = "";
+    }
+  }
+  return { ...expected, settings };
+}
+
 // Same adoption checks and order as snapshot.mjs; dependencies are explicit so
 // failure classifications can be tested without Docker, secrets or databases.
 export async function verifyAdoption({ store, configuration, enabled, fingerprint, load, readLegacyUrl }, diagnostic) {
@@ -70,7 +88,10 @@ export async function verifyAdoption({ store, configuration, enabled, fingerprin
   if (store.mailRuntime()) expected = (await load("installation-mail")).persistMailCredential(expected);
   diagnostic.at("CANONICALIZATION_FAILED");
   const canonical = (await load("installation-configuration")).canonicalInstallationConfiguration;
-  const expectedCanonical = canonical(expected), actualCanonical = canonical(configuration);
+  // Validate original payloads before projecting only known materialized defaults.
+  canonical(expected);
+  const actualCanonical = canonical(configuration);
+  const expectedCanonical = canonical(adoptionComparisonExpected(expected, configuration, inspected.authentication, enabled[1]));
   const matches = fingerprint(expectedCanonical) === fingerprint(actualCanonical);
   diagnostic.at("CONFIGURATION_MISMATCH");
   if (!matches) {

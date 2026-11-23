@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { prepareInstallationConfiguration, prepareLegacyAuthentication, parseLegacyConnection } from "../src/modules/database-management/legacy-adoption";
 import { prepareManagedConfiguration } from "../src/modules/database-management/managed-configuration-capture";
 import { canonicalInstallationConfiguration } from "../src/modules/database-management/installation-configuration";
+import { presentationValues } from "../src/modules/database-management/installation-presentation";
 const modulePath = "../scripts/acceptance/snapshot-differences.mjs";
 const diagnosticPath = "../scripts/acceptance/snapshot-validation.mjs";
 
@@ -19,17 +20,58 @@ test("real legacy and managed capture differ on absent Entra fields even with En
     "DIAGNOSTIC_DETAIL: category=settings field=settings.authentication.entra.redirectUri reason=MISSING_EXPECTED_EMPTY_ACTUAL",
     "DIAGNOSTIC_DETAIL: category=settings credential=entra-reference reason=CREDENTIAL_MISSING_EXPECTED",
   ]);
-  // Prove the strict verifier still rejects this expected representation difference.
+  // The comparison projection accepts only the proven disabled defaults.
   const { snapshotDiagnostics, verifyAdoption } = await import(diagnosticPath);
   const diagnostic = snapshotDiagnostics("1");
-  await assert.rejects(verifyAdoption({
-    store: { entraRuntime: () => null, mailRuntime: () => null }, configuration: managed,
+  await verifyAdoption({
+    store: { entraRuntime: () => null, mailRuntime: () => null, organization: () => ({ appTitle: "Fixture" }), presentation: () => ({ appTitle: "Fixture" }) }, configuration: managed,
     enabled: [true, false, true, true], fingerprint: (value: string) => value,
-    load: async (name: string) => name === "legacy-adoption" ? { inspectLegacyAdoption: async () => ({ installation: legacy }) } : { canonicalInstallationConfiguration },
+    load: async (name: string) => name === "legacy-adoption" ? { inspectLegacyAdoption: async () => ({ installation: legacy, authentication: prepareLegacyAuthentication(settings) }) } : { canonicalInstallationConfiguration },
     readLegacyUrl: () => "mysql://acceptance:fixture@inventory:3306/it_assets",
-  }, diagnostic));
-  assert.equal(diagnostic.line(), "DIAGNOSTIC: stage=configuration-comparison reason=CONFIGURATION_MISMATCH");
-  assert.equal(diagnostic.details().length, 4);
+  }, diagnostic);
+  assert.equal(diagnostic.details().length, 0);
+});
+
+test("six reported differences are materialized defaults; explicit changes and credential states still fail", async () => {
+  const { snapshotDiagnostics, verifyAdoption, adoptionComparisonExpected } = await import(diagnosticPath);
+  const settings = new Map<string, string>();
+  const profile = parseLegacyConnection("mysql://acceptance:fixture@inventory:3306/it_assets");
+  const legacy = prepareInstallationConfiguration(settings, profile, []);
+  const authentication = prepareLegacyAuthentication(settings);
+  const managed = prepareManagedConfiguration(settings, authentication, profile, () => { throw Error(); }, legacy.timeZone);
+  const defaults = presentationValues(legacy);
+  managed.settings["app.title"] = defaults.appTitle;
+  managed.settings["session.timeoutMinutes"] = String(defaults.sessionTimeoutMinutes);
+  const originals = JSON.stringify({ legacy, managed });
+  const input = {
+    store: { entraRuntime: () => null, mailRuntime: () => null, organization: () => ({ appTitle: defaults.appTitle }), presentation: () => defaults },
+    configuration: managed, enabled: [true, false, true, true], fingerprint: (value: string) => value,
+    load: async (name: string) => name === "legacy-adoption" ? { inspectLegacyAdoption: async () => ({ installation: legacy, authentication }) } : { canonicalInstallationConfiguration },
+    readLegacyUrl: () => "mysql://acceptance:fixture@inventory:3306/it_assets",
+  };
+  for (const option of [undefined, "1"]) await verifyAdoption(input, snapshotDiagnostics(option));
+  assert.equal(JSON.stringify({ legacy, managed }), originals);
+  for (const [key, value] of [
+    ["app.title", "Changed"], ["session.timeoutMinutes", "20"], ["session.timeoutMinutes", "015"],
+    ["app.title", ""], ["authentication.entra.tenantId", "changed"], ["authentication.entra.clientId", "changed"],
+    ["authentication.entra.redirectUri", "changed"], ["authentication.entra.secretReference", "IT_ASSETS_ENTRA_SECRET_FIXTURE"],
+    ["authentication.entra.clientSecret", "private-fixture"], ["mail.clientSecret", "private-fixture"],
+  ] as const) {
+    const changed = structuredClone(managed); changed.settings[key] = value;
+    const diagnostic = snapshotDiagnostics("1");
+    await assert.rejects(verifyAdoption({ ...input, configuration: changed }, diagnostic));
+    assert.equal(diagnostic.line(), "DIAGNOSTIC: stage=configuration-comparison reason=CONFIGURATION_MISMATCH");
+  }
+  for (const auth of [undefined, { ...authentication, entraEnabled: true }, { ...authentication, entraSsoEnabled: true }]) {
+    const projected = adoptionComparisonExpected(legacy, managed, auth, false);
+    assert.notEqual(canonicalInstallationConfiguration(projected), canonicalInstallationConfiguration(managed));
+  }
+  assert.notEqual(canonicalInstallationConfiguration(adoptionComparisonExpected(legacy, managed, authentication, true)), canonicalInstallationConfiguration(managed));
+  // No reverse normalization: deleting explicit source rows must remain visible.
+  const projected = adoptionComparisonExpected(managed, legacy, authentication, false);
+  assert.notEqual(canonicalInstallationConfiguration(projected), canonicalInstallationConfiguration(legacy));
+  const explicit = structuredClone(legacy); explicit.settings["app.title"] = "Other";
+  assert.equal(adoptionComparisonExpected(explicit, managed, authentication, false).settings["app.title"], "Other");
 });
 
 test("difference details distinguish missing, null/empty, known normalization and unequal fields without values", async () => {

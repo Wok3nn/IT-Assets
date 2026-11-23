@@ -250,7 +250,7 @@ other difference privately instead of expanding the exception list casually.
 
 ### Diagnose an adoption-verification failure safely
 
-After updating the acceptance checkout to the diagnostic fix, both
+After updating the acceptance checkout to the comparison fix, all three files
 `scripts/acceptance/snapshot.mjs`, `scripts/acceptance/snapshot-validation.mjs` and
 `scripts/acceptance/snapshot-differences.mjs` must be
 present on the Docker host. The acceptance scripts are bind-mounted, so this change
@@ -271,10 +271,21 @@ dc() { docker compose --env-file "$RUN/compose.env" -p it-assets-v060-upgrade-ac
   -f docker/compose.acceptance.yml "$@"; }
 dc stop ingress app
 dc run --rm --no-deps -e IT_ASSETS_ACCEPTANCE_DIAGNOSTICS=1 maintenance \
-  snapshot adoption record adopted-globals-fields-01
+  snapshot adoption record adopted-globals-normalized-01
 ```
 
+Run from the updated repository root. Keep the existing `compose.env`, image IDs, private
+files and volumes unchanged; do not rerun adoption, migrations or restore commands.
 Use a new evidence label for each retry; never remove or overwrite an existing baseline.
+A successful command prints the usual PASS line and writes the new evidence file. If it
+fails, retain the safe diagnostic codes and investigate; do not resave settings to force a
+pass. To resume the same disposable app after verification (optional):
+
+```bash
+export ACCEPTANCE_INGRESS_TARGET=app
+dc up -d --no-deps app ingress
+```
+
 `record` still creates a protected fingerprint file **only if all checks pass**. A failure
 still exits nonzero with the original generic message; diagnostics add exactly one line
 identifying the first failing stage and a fixed reason code, for example:
@@ -293,7 +304,10 @@ No values are included. Expected is the re-inspected legacy configuration; actua
 stored installation configuration. Credential differences use only fixed aliases and
 presence/state codes. Runtime-category activation remains a separate guard; activation
 markers are not part of the canonical payload. See [static findings, diagnostic vocabulary
-and the proposed fix](adoption-configuration-mismatch.md). No functional fix is included.
+and the narrow comparison correction](adoption-configuration-mismatch.md). The verifier
+accepts only absent source title/timeout matching exact legacy defaults, and absent source
+Entra fields matching empty strings with source Entra/SSO and installation Entra disabled.
+Explicit differences remain failures. No stored configuration or baseline is rewritten.
 
 | Stage | Reason codes | Meaning |
 | --- | --- | --- |
